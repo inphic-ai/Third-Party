@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { MOCK_VENDORS } from '../constants';
 import { TransactionStatus } from '../types';
-import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 
@@ -13,6 +13,7 @@ export const Payments: React.FC = () => {
   const [filter, setFilter] = useState<PaymentFilter>('ALL');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Helper for Month Navigation
   const handlePrevMonth = () => {
@@ -35,27 +36,40 @@ export const Payments: React.FC = () => {
     ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, []);
 
-  // Filter Logic: 1. By Date (Month), 2. By Status (Filter Toggle)
+  // Filter Logic: 1. By Date (Month), 2. By Status (Filter Toggle), 3. By Search Term
   const filteredTransactions = useMemo(() => {
     return allTransactions.filter(t => {
-      // Date Filter (using string prefix 'YYYY-MM')
-      const matchesMonth = t.date.startsWith(currentMonthStr);
-      if (!matchesMonth) return false;
+      // Search Filter (Highest priority for visibility)
+      if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        const matchesSearch = 
+          t.id.toLowerCase().includes(lowerTerm) || 
+          t.vendorName.toLowerCase().includes(lowerTerm) ||
+          t.description.toLowerCase().includes(lowerTerm);
+        if (!matchesSearch) return false;
+      } else {
+        // Date Filter only applies if not searching (or strict month view)
+        // Usually payment records strictly follow month views, but search might span across.
+        // For this design, let's keep Month view strict even with search, to filter within month.
+        const matchesMonth = t.date.startsWith(currentMonthStr);
+        if (!matchesMonth) return false;
+      }
 
       // Status Filter
       if (filter === 'PENDING') return t.status === TransactionStatus.APPROVED;
       return true;
     });
-  }, [allTransactions, currentMonthStr, filter]);
+  }, [allTransactions, currentMonthStr, filter, searchTerm]);
 
-  // Statistics for Current Month (based on visible list or full month data?)
-  // Let's calculate stats based on the *filtered* view for consistency, or the *month* view.
-  // Requirement says: "Card showing number of paid cooperating vendors".
-  // This usually implies distinct count of vendors in the list.
-  
-  const uniqueVendorsCount = new Set(filteredTransactions.map(t => t.vendorId)).size;
-  
-  const totalAmount = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Statistics for Current Month (filtered by month only, not search)
+  const monthlyStats = useMemo(() => {
+     const monthlyData = allTransactions.filter(t => t.date.startsWith(currentMonthStr));
+     const totalAmount = monthlyData.reduce((sum, t) => sum + t.amount, 0);
+     const pendingAmount = monthlyData.filter(t => t.status === TransactionStatus.APPROVED).reduce((sum, t) => sum + t.amount, 0);
+     const uniqueVendors = new Set(monthlyData.map(t => t.vendorId)).size;
+     const pendingCount = monthlyData.filter(t => t.status === TransactionStatus.APPROVED).length;
+     return { totalAmount, pendingAmount, uniqueVendors, pendingCount, totalCount: monthlyData.length };
+  }, [allTransactions, currentMonthStr]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
@@ -91,7 +105,7 @@ export const Payments: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards (Always show month stats regardless of search to provide context) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div 
           onClick={() => { setFilter(filter === 'PENDING' ? 'ALL' : 'PENDING'); setCurrentPage(1); }}
@@ -105,11 +119,13 @@ export const Payments: React.FC = () => {
            <div className="flex justify-between items-start">
              <div>
                <p className="text-sm font-medium text-slate-500">本月總金額 ({filter === 'PENDING' ? '待撥' : '全部'})</p>
-               <h3 className="text-3xl font-bold text-slate-800 mt-2">${totalAmount.toLocaleString()}</h3>
+               <h3 className="text-3xl font-bold text-slate-800 mt-2">
+                 ${(filter === 'PENDING' ? monthlyStats.pendingAmount : monthlyStats.totalAmount).toLocaleString()}
+               </h3>
              </div>
              {filter === 'PENDING' ? <CheckCircle className="text-green-600" size={24} /> : <DollarSign className="text-green-600" size={24} />}
            </div>
-           <p className="text-xs text-slate-400 mt-2">共 {filteredTransactions.length} 筆款項</p>
+           <p className="text-xs text-slate-400 mt-2">共 {filter === 'PENDING' ? monthlyStats.pendingCount : monthlyStats.totalCount} 筆款項</p>
            {filter === 'PENDING' && <p className="text-xs text-green-700 font-bold mt-2">已套用篩選: 僅顯示待撥款</p>}
         </div>
 
@@ -117,7 +133,7 @@ export const Payments: React.FC = () => {
            <div className="flex justify-between items-start">
              <div>
                <p className="text-sm font-medium text-slate-500">合作廠商數</p>
-               <h3 className="text-3xl font-bold text-slate-800 mt-2">{uniqueVendorsCount} 家</h3>
+               <h3 className="text-3xl font-bold text-slate-800 mt-2">{monthlyStats.uniqueVendors} 家</h3>
              </div>
              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                 <Users size={24} />
@@ -130,7 +146,7 @@ export const Payments: React.FC = () => {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
-             <h3 className="font-bold text-slate-800">款項列表 ({currentDate.getMonth() + 1}月)</h3>
+             <h3 className="font-bold text-slate-800 whitespace-nowrap">款項列表 ({currentDate.getMonth() + 1}月)</h3>
              {filter !== 'ALL' && (
                <button 
                  onClick={() => { setFilter('ALL'); setCurrentPage(1); }}
@@ -140,11 +156,26 @@ export const Payments: React.FC = () => {
                </button>
              )}
           </div>
-          <div className="flex gap-2 text-sm">
-             <span className={clsx("flex items-center gap-1 px-2 py-1 rounded transition", filter === 'PENDING' ? "bg-green-100 text-green-800 font-bold" : "bg-green-50 text-green-700")}>
-               <CheckCircle size={14}/> 待撥款 (已驗收)
-             </span>
-             <span className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-600 rounded"><Clock size={14}/> 已結案</span>
+
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+             {/* Search Input */}
+             <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="搜尋工單號、廠商..." 
+                  className="pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 w-full sm:w-64"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                />
+             </div>
+
+             <div className="flex gap-2 text-sm">
+                <span className={clsx("flex items-center gap-1 px-2 py-1 rounded transition", filter === 'PENDING' ? "bg-green-100 text-green-800 font-bold" : "bg-green-50 text-green-700")}>
+                  <CheckCircle size={14}/> 待撥款
+                </span>
+                <span className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-600 rounded"><Clock size={14}/> 已結案</span>
+             </div>
           </div>
         </div>
         <div className="overflow-x-auto">

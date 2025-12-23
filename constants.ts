@@ -14,6 +14,14 @@ export const CHINA_REGIONS = [
   '重慶市', '天津市', '廣西', '江西省', '陝西省', '雲南省', '香港', '澳門'
 ];
 
+// Grouping Categories for better UX in Dropdowns
+export const CATEGORY_GROUPS: Record<string, string[]> = {
+  '工程與維修': ['水電', '玻璃', '冷凍空調', '鐵工修復', '木工修復', '油壓設備', '機車維修', '家電維修', '裝修工程', '燈具'],
+  '物流與供應鏈': ['國際運輸', '國內運輸', 'LALA司機', '包裝耗材', '電池', '五金零件'],
+  '專業服務': ['平面設計', '軟硬體工程師', '法律', '檢驗單位', '銀行＆金流', '通路平台', '辦公文具'],
+  '其他': ['其它']
+};
+
 export const MOCK_ANNOUNCEMENTS: Announcement[] = [
   { id: '1', title: '2024 年度廠商評鑑開始', content: '請各部門於月底前完成主要合作廠商的年度評分。', date: '2024-05-20', priority: 'High' },
   { id: '2', title: '大陸物流規定更新', content: '針對華南地區的進出口報關流程有新規定，請參閱知識庫。', date: '2024-05-18', priority: 'Normal' },
@@ -46,9 +54,9 @@ export const MOCK_KNOWLEDGE_BASE: KnowledgeBaseItem[] = [
   }
 ];
 
-// Default System Tags
+// Default System Tags - Updated based on user request
 export const MOCK_SYSTEM_TAGS: SystemTags = {
-  contactTags: ['電話無人接', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘'],
+  contactTags: ['報價中', '已預約', '無人接聽', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘'],
   serviceTags: ['夜間施工', '急件處理', '含廢棄物清運', '需支付訂金', '可配合輪班', '自有工班'],
   websiteTags: ['優良廠商', '配合度高', '價格實惠', 'CP值高', '老字號', '新創團隊']
 };
@@ -102,7 +110,7 @@ export const MOCK_VENDORS: Vendor[] = [
     ratingCount: 15,
     createdBy: 'u1', // Alex Created this
     priceRange: '$$',
-    tags: ['夜間施工', '配合度高', '含廢棄物清運'],
+    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '台北市, 新北市',
     address: '台北市信義區忠孝東路五段100號',
@@ -247,7 +255,7 @@ export const MOCK_VENDORS: Vendor[] = [
     ratingCount: 8,
     createdBy: 'u4', // Emily Created
     priceRange: '$$',
-    tags: ['風格清新', '好溝通', '準時交件', '優良廠商'],
+    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '全部',
     address: '新北市板橋區文化路一段',
@@ -310,13 +318,106 @@ export const MOCK_VENDORS: Vendor[] = [
 
 export const CATEGORY_OPTIONS = Object.values(VendorCategory);
 
-// --- Admin Mock Data ---
+// --- Admin Mock Data (Updated with Permissions) ---
 
 export const MOCK_USERS: AdminUser[] = [
-  { id: 'u1', name: 'Alex Chen', email: 'alex@company.com', department: '研發部', role: 'System Admin', status: 'Active', avatarUrl: 'https://picsum.photos/id/55/100/100', accumulatedBonus: 300 },
-  { id: 'u2', name: 'Sarah Lin', email: 'sarah@company.com', department: '設計部', role: 'Editor', status: 'Active', avatarUrl: 'https://picsum.photos/id/66/100/100', accumulatedBonus: 0 },
-  { id: 'u3', name: 'Mike Wang', email: 'mike@company.com', department: '業務部', role: 'Viewer', status: 'Inactive', avatarUrl: 'https://picsum.photos/id/77/100/100', accumulatedBonus: 0 },
-  { id: 'u4', name: 'Emily Wu', email: 'emily@company.com', department: '產品部', role: 'Editor', status: 'Active', avatarUrl: 'https://picsum.photos/id/88/100/100', accumulatedBonus: 100 },
+  { 
+    id: 'u1', 
+    name: 'Alex Chen', 
+    email: 'alex@company.com', 
+    department: '研發部', 
+    role: 'System Admin', 
+    status: 'Active', 
+    avatarUrl: 'https://picsum.photos/id/55/100/100', 
+    accumulatedBonus: 300,
+    googleLinked: true,
+    googleEmail: 'alex.c@gmail.com',
+    permissions: {
+      viewWarRoom: true,
+      viewVendors: true,
+      viewTasks: true,
+      viewCommunication: true,
+      viewPayments: true,
+      viewKnowledge: true,
+      viewAnnouncements: true,
+      accessAdminPanel: true,
+      canManageCategories: true,
+      canManageUsers: true,
+      canDeleteVendors: true
+    }
+  },
+  { 
+    id: 'u2', 
+    name: 'Sarah Lin', 
+    email: 'sarah@company.com', 
+    department: '設計部', 
+    role: 'Editor', 
+    status: 'Active', 
+    avatarUrl: 'https://picsum.photos/id/66/100/100', 
+    accumulatedBonus: 0,
+    googleLinked: false,
+    permissions: {
+      viewWarRoom: true,
+      viewVendors: true,
+      viewTasks: true,
+      viewCommunication: true,
+      viewPayments: false, // Restricted
+      viewKnowledge: true,
+      viewAnnouncements: true,
+      accessAdminPanel: false, // Restricted
+      canManageCategories: false,
+      canManageUsers: false,
+      canDeleteVendors: false
+    }
+  },
+  { 
+    id: 'u3', 
+    name: 'Mike Wang', 
+    email: 'mike@company.com', 
+    department: '業務部', 
+    role: 'Viewer', 
+    status: 'Inactive', 
+    avatarUrl: 'https://picsum.photos/id/77/100/100', 
+    accumulatedBonus: 0,
+    googleLinked: true,
+    permissions: {
+      viewWarRoom: false,
+      viewVendors: true,
+      viewTasks: true,
+      viewCommunication: false,
+      viewPayments: false,
+      viewKnowledge: true,
+      viewAnnouncements: true,
+      accessAdminPanel: false,
+      canManageCategories: false,
+      canManageUsers: false,
+      canDeleteVendors: false
+    }
+  },
+  { 
+    id: 'u4', 
+    name: 'Emily Wu', 
+    email: 'emily@company.com', 
+    department: '產品部', 
+    role: 'Editor', 
+    status: 'Active', 
+    avatarUrl: 'https://picsum.photos/id/88/100/100', 
+    accumulatedBonus: 100,
+    googleLinked: false,
+    permissions: {
+      viewWarRoom: true,
+      viewVendors: true,
+      viewTasks: true,
+      viewCommunication: true,
+      viewPayments: false,
+      viewKnowledge: true,
+      viewAnnouncements: true,
+      accessAdminPanel: false,
+      canManageCategories: false,
+      canManageUsers: false,
+      canDeleteVendors: false
+    }
+  },
 ];
 
 export const MOCK_LOGS: SystemLog[] = [

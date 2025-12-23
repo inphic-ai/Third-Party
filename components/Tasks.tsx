@@ -17,13 +17,16 @@ import {
   Hammer,
   Circle,
   CheckCircle2,
-  HelpCircle
+  HelpCircle,
+  CalendarCheck,
+  MapPin,
+  DollarSign
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 
 // Local Type for Unified Task View
-type TaskType = 'transaction' | 'follow_up' | 'manual';
+type TaskType = 'transaction' | 'follow_up' | 'manual' | 'reservation';
 
 interface UnifiedTask {
   id: string;
@@ -34,8 +37,11 @@ interface UnifiedTask {
   time?: string;
   status?: string;
   vendorId?: string;
+  vendorName?: string;
   vendorAvatar?: string;
   isCompleted?: boolean;
+  quoteAmount?: number;
+  location?: string;
 }
 
 export const Tasks: React.FC = () => {
@@ -68,36 +74,48 @@ export const Tasks: React.FC = () => {
         subtitle: v.name,
         status: t.status,
         vendorId: v.id,
+        vendorName: v.name,
         vendorAvatar: v.avatarUrl,
         isCompleted: t.status === TransactionStatus.PAID || t.status === TransactionStatus.APPROVED
       }))
     );
   }, []);
 
-  // 2. Gather Follow-ups (Contact Logs with nextFollowUp)
-  const followUpTasks: UnifiedTask[] = useMemo(() => {
+  // 2. Gather Follow-ups & Reservations (From Contact Logs)
+  const contactTasks: UnifiedTask[] = useMemo(() => {
     return MOCK_VENDORS.flatMap(v => 
       v.contactLogs
-        .filter(log => log.nextFollowUp)
+        .filter(log => log.nextFollowUp || log.isReservation)
         .map(log => ({
-          id: `follow-${log.id}`,
-          type: 'follow_up' as TaskType,
-          date: log.nextFollowUp!,
-          title: `跟進: ${v.name}`,
+          id: `log-${log.id}`,
+          type: log.isReservation ? 'reservation' : 'follow_up' as TaskType,
+          date: log.nextFollowUp || log.date, // Use nextFollowUp date for both, or reservation date
+          time: log.reservationTime,
+          title: log.isReservation ? `預約: ${v.name}` : `跟進: ${v.name}`,
           subtitle: log.note,
           vendorId: v.id,
+          vendorName: v.name,
           vendorAvatar: v.avatarUrl,
+          quoteAmount: log.quoteAmount,
+          location: v.address,
           isCompleted: false
         }))
     );
   }, []);
 
   // Combine All Tasks
-  const allTasks = [...transactionTasks, ...followUpTasks, ...manualTasks];
+  const allTasks = [...transactionTasks, ...contactTasks, ...manualTasks];
 
   // Get tasks for selected date
   const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
   const todaysTasks = allTasks.filter(t => t.date === selectedDateStr);
+  
+  // Sort tasks: Reservations first
+  todaysTasks.sort((a, b) => {
+    if (a.type === 'reservation' && b.type !== 'reservation') return -1;
+    if (a.type !== 'reservation' && b.type === 'reservation') return 1;
+    return 0;
+  });
 
   // Month Navigation
   const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -130,16 +148,15 @@ export const Tasks: React.FC = () => {
     showTutorial('TASKS_GUIDE');
   };
 
-  // Trigger tutorial on mount (optional, or just rely on button)
-  // useEffect(() => { showTutorial('TASKS_GUIDE'); }, []);
-
   const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
   const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
 
-  // Helper to count tasks per day for dots
-  const getTaskCountForDay = (day: number) => {
+  // Helper to check data per day
+  const getDataForDay = (day: number) => {
     const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return allTasks.filter(t => t.date === dateStr).length;
+    const dayTasks = allTasks.filter(t => t.date === dateStr);
+    const hasReservation = dayTasks.some(t => t.type === 'reservation');
+    return { count: dayTasks.length, hasReservation };
   };
 
   return (
@@ -190,7 +207,7 @@ export const Tasks: React.FC = () => {
                    const day = i + 1;
                    const isSelected = selectedDate.getDate() === day && selectedDate.getMonth() === currentDate.getMonth();
                    const isToday = new Date().getDate() === day && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
-                   const taskCount = getTaskCountForDay(day);
+                   const { count, hasReservation } = getDataForDay(day);
 
                    return (
                      <button 
@@ -203,12 +220,17 @@ export const Tasks: React.FC = () => {
                        )}
                      >
                        {day}
-                       {taskCount > 0 && !isSelected && (
-                         <span className="absolute -bottom-1 w-1 h-1 bg-indigo-400 rounded-full"></span>
+                       {/* Red dot for reservations */}
+                       {count > 0 && !isSelected && (
+                         <span className={clsx("absolute -bottom-1 w-1.5 h-1.5 rounded-full", hasReservation ? "bg-red-500 ring-2 ring-white" : "bg-indigo-300")}></span>
                        )}
                      </button>
                    );
                 })}
+             </div>
+             <div className="mt-4 flex gap-4 justify-center text-xs text-slate-400">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> 預約行程</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-300"></span> 一般待辦</span>
              </div>
           </div>
 
@@ -221,8 +243,8 @@ export const Tasks: React.FC = () => {
                    <div className="text-xs text-indigo-200 mt-1">總任務數</div>
                 </div>
                 <div className="text-right">
-                   <div className="text-xl font-bold">{transactionTasks.length}</div>
-                   <div className="text-xs text-indigo-200 mt-1">工單行程</div>
+                   <div className="text-xl font-bold">{contactTasks.filter(t => t.type === 'reservation').length}</div>
+                   <div className="text-xs text-indigo-200 mt-1">預約拜訪</div>
                 </div>
              </div>
           </div>
@@ -230,19 +252,27 @@ export const Tasks: React.FC = () => {
 
         {/* Right: Daily Agenda List */}
         <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-           {/* Agenda Header */}
+           {/* Agenda Header (Dynamic Date) */}
            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div>
                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    {selectedDateStr === new Date().toISOString().split('T')[0] ? '今日待辦' : `${selectedDate.getMonth() + 1}/${selectedDate.getDate()} 的待辦事項`}
+                    {selectedDate.getDate()}日 行程卡片
+                    <span className="text-sm font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 ml-2">
+                        {selectedDate.getFullYear()}/{selectedDate.getMonth() + 1}
+                    </span>
                  </h2>
-                 <p className="text-slate-500 text-sm mt-1">
-                    共 {todaysTasks.length} 個項目 • {todaysTasks.filter(t => t.isCompleted).length} 已完成
+                 <p className="text-slate-500 text-sm mt-1 flex items-center gap-1">
+                    {todaysTasks.some(t => t.type === 'reservation') ? (
+                        <>
+                            <CheckCircle2 size={14} className="text-green-500" />
+                            <span className="text-slate-700 font-bold">當日有預約行程</span>
+                        </>
+                    ) : '無重大預約行程'}
                  </p>
               </div>
               <button 
                  onClick={() => setSelectedDate(new Date())}
-                 className="text-sm font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition"
+                 className="text-sm font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition border border-transparent hover:border-indigo-100"
               >
                  回到今天
               </button>
@@ -263,61 +293,116 @@ export const Tasks: React.FC = () => {
               </div>
            </div>
 
-           {/* Task List */}
-           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-              {todaysTasks.length > 0 ? todaysTasks.map(task => (
-                 <div key={task.id} className={clsx(
-                    "flex items-center gap-4 p-4 rounded-xl border transition group",
-                    task.isCompleted ? "bg-slate-50 border-slate-100" : "bg-white border-slate-200 hover:shadow-md hover:border-indigo-200"
-                 )}>
-                    {/* Status Checkbox */}
-                    <button 
-                       onClick={() => task.type === 'manual' && toggleManualTask(task.id)}
-                       className={clsx(
-                          "shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition",
-                          task.type === 'manual' ? "cursor-pointer" : "cursor-default",
-                          task.isCompleted 
-                            ? "bg-green-500 text-white" 
-                            : task.type === 'manual' ? "border-2 border-slate-300 hover:border-indigo-500" : "bg-slate-100 text-slate-400"
-                       )}
-                    >
-                       {task.isCompleted ? <CheckCircle2 size={16} /> : task.type === 'transaction' ? <Hammer size={14} /> : task.type === 'follow_up' ? <Phone size={14} /> : null}
-                    </button>
+           {/* Task List - Prioritizing Reservation Cards */}
+           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-slate-50/30">
+              {todaysTasks.length > 0 ? todaysTasks.map(task => {
+                 // Enhanced Reservation Card Style
+                 if (task.type === 'reservation') {
+                    return (
+                       <div key={task.id} className="bg-white rounded-2xl border-l-4 border-l-orange-500 border border-slate-200 shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                          {/* Top Banner */}
+                          <div className="bg-gradient-to-r from-orange-50 to-white px-5 py-2 border-b border-orange-100 flex justify-between items-center">
+                              <span className="text-xs font-bold text-orange-700 flex items-center gap-1 uppercase tracking-wide">
+                                <CalendarCheck size={12} /> Reservation Card
+                              </span>
+                              {task.time && <span className="text-sm font-black text-slate-800 bg-white px-2 py-0.5 rounded shadow-sm">{task.time}</span>}
+                          </div>
+                          
+                          <div className="p-5 flex flex-col sm:flex-row gap-5">
+                             {/* Vendor Info */}
+                             <div className="flex-1 flex gap-4">
+                                <div className="shrink-0">
+                                   {task.vendorAvatar ? (
+                                     <img src={task.vendorAvatar} className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
+                                   ) : (
+                                     <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-400"><User size={20}/></div>
+                                   )}
+                                </div>
+                                <div>
+                                   <Link to={`/vendors/${task.vendorId}`} className="font-bold text-lg text-slate-800 hover:text-indigo-600 transition flex items-center gap-2">
+                                      {task.vendorName}
+                                      <ChevronRight size={16} className="text-slate-300" />
+                                   </Link>
+                                   <div className="text-sm text-slate-500 mt-1 flex items-center gap-1">
+                                      <MapPin size={14} className="text-slate-400"/>
+                                      {task.location || '廠商登記地址'}
+                                   </div>
+                                </div>
+                             </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                       <div className={clsx("font-bold text-base mb-1 truncate", task.isCompleted && "text-slate-400 line-through")}>
-                          {task.title}
+                             {/* Quote & Details */}
+                             <div className="sm:border-l sm:border-slate-100 sm:pl-5 min-w-[180px] flex flex-col justify-center">
+                                <div className="mb-2">
+                                   <div className="text-xs text-slate-400 mb-0.5">預估報價</div>
+                                   <div className="font-mono font-bold text-xl text-slate-700 flex items-center gap-1">
+                                      <DollarSign size={16} className="text-green-600"/>
+                                      {task.quoteAmount ? task.quoteAmount.toLocaleString() : <span className="text-sm text-slate-400 font-sans">未報價</span>}
+                                   </div>
+                                </div>
+                                {task.subtitle && (
+                                   <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                                      <span className="font-bold text-slate-400 mr-1">備註:</span>
+                                      {task.subtitle}
+                                   </div>
+                                )}
+                             </div>
+                          </div>
                        </div>
-                       <div className="flex items-center gap-2 text-sm text-slate-500">
-                          {task.vendorAvatar && <img src={task.vendorAvatar} className="w-5 h-5 rounded-full" alt="" />}
-                          <span className="truncate">{task.subtitle || '個人備忘'}</span>
-                          {task.status && (
-                             <span className={clsx("text-xs px-2 py-0.5 rounded ml-2", 
-                                task.status === TransactionStatus.PENDING_APPROVAL ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-600"
-                             )}>
-                                {task.status}
-                             </span>
+                    );
+                 }
+
+                 // Standard Task Item
+                 return (
+                    <div key={task.id} className={clsx(
+                       "flex items-center gap-4 p-4 rounded-xl border transition group bg-white",
+                       task.isCompleted ? "border-slate-100 opacity-60" : "border-slate-200 hover:shadow-sm hover:border-indigo-200"
+                    )}>
+                       <button 
+                          onClick={() => task.type === 'manual' && toggleManualTask(task.id)}
+                          className={clsx(
+                             "shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition",
+                             task.type === 'manual' ? "cursor-pointer" : "cursor-default",
+                             task.isCompleted 
+                               ? "bg-green-500 text-white" 
+                               : task.type === 'manual' ? "border-2 border-slate-300 hover:border-indigo-500" : "bg-slate-100 text-slate-400"
                           )}
-                       </div>
-                    </div>
-
-                    {/* Action */}
-                    {task.type !== 'manual' && (
-                       <Link 
-                          to={task.type === 'transaction' ? `/transactions/${task.id}` : `/vendors/${task.vendorId}`}
-                          className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition opacity-0 group-hover:opacity-100"
                        >
-                          <ChevronRight size={20} />
-                       </Link>
-                    )}
-                 </div>
-              )) : (
+                          {task.isCompleted ? <CheckCircle2 size={16} /> : task.type === 'transaction' ? <Hammer size={14} /> : <Phone size={14} />}
+                       </button>
+
+                       <div className="flex-1 min-w-0">
+                          <div className={clsx("font-bold text-base mb-1 truncate", task.isCompleted && "text-slate-400 line-through")}>
+                             {task.title}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                             {task.vendorAvatar && <img src={task.vendorAvatar} className="w-5 h-5 rounded-full" alt="" />}
+                             <span className="truncate">{task.subtitle || '個人備忘'}</span>
+                             {task.status && (
+                                <span className={clsx("text-xs px-2 py-0.5 rounded ml-2", 
+                                   task.status === TransactionStatus.PENDING_APPROVAL ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-600"
+                                )}>
+                                   {task.status}
+                                </span>
+                             )}
+                          </div>
+                       </div>
+
+                       {task.type !== 'manual' && (
+                          <Link 
+                             to={task.type === 'transaction' ? `/transactions/${task.id}` : `/vendors/${task.vendorId}`}
+                             className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition opacity-0 group-hover:opacity-100"
+                          >
+                             <ChevronRight size={20} />
+                          </Link>
+                       )}
+                    </div>
+                 );
+              }) : (
                  <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
                     <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                        <CheckCircle size={40} />
                     </div>
-                    <p>今天沒有安排行程</p>
+                    <p>本日沒有安排行程</p>
                  </div>
               )}
            </div>

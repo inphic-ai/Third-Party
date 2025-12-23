@@ -21,6 +21,7 @@ export enum ContactStatus {
   TOO_HIGH = '報價過高',
   NO_TIME = '最近沒空',
   BAD_ATTITUDE = '態度不好',
+  RESERVED = '已預約', // Added status
 }
 
 // Based on user request categories
@@ -53,11 +54,16 @@ export enum VendorCategory {
 
 export interface ContactLog {
   id: string;
-  date: string; // ISO date
+  date: string; // ISO date (YYYY-MM-DD)
   status: ContactStatus;
   note: string;
   aiSummary?: string; // AI Summarized content
   nextFollowUp?: string; // ISO date
+  
+  // Reservation Specifics
+  isReservation?: boolean; 
+  reservationTime?: string; // HH:mm
+  quoteAmount?: number;
 }
 
 export enum TransactionStatus {
@@ -189,6 +195,25 @@ export interface Announcement {
 
 export type UserRole = 'System Admin' | 'Manager' | 'Editor' | 'Viewer';
 
+export interface UserPermissions {
+  // Frontend Navigation
+  viewWarRoom: boolean;
+  viewVendors: boolean;
+  viewTasks: boolean;
+  viewCommunication: boolean;
+  
+  // Admin Center Navigation
+  viewPayments: boolean;
+  viewKnowledge: boolean;
+  viewAnnouncements: boolean;
+  accessAdminPanel: boolean;
+
+  // Specific Actions
+  canManageCategories: boolean; // Add/Delete Categories
+  canManageUsers: boolean;      // Add/Edit Users
+  canDeleteVendors: boolean;
+}
+
 export interface AdminUser {
   id: string;
   name: string;
@@ -198,6 +223,13 @@ export interface AdminUser {
   role: UserRole;
   status: 'Active' | 'Inactive';
   accumulatedBonus: number; // For vendor referrals
+  
+  // Authentication
+  googleLinked: boolean;
+  googleEmail?: string;
+  
+  // Permissions
+  permissions: UserPermissions;
 }
 
 export interface SystemLog {

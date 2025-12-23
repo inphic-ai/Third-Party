@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Settings, 
   Users, 
@@ -23,13 +23,26 @@ import {
   AlertTriangle,
   Clock,
   Maximize2,
-  Power
+  Power,
+  Layers,
+  FolderOpen,
+  Camera,
+  CheckCircle,
+  Shield,
+  Upload,
+  BarChart,
+  PieChart,
+  ArrowRight
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_USERS, MOCK_LOGS, MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, MOCK_TUTORIALS, MOCK_ANNOUNCEMENTS } from '../constants';
-import { AiModelRule, SystemTags, TutorialTip, Announcement } from '../types';
+import { MOCK_USERS, MOCK_LOGS, MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, MOCK_TUTORIALS, MOCK_ANNOUNCEMENTS, CATEGORY_OPTIONS, MOCK_VENDORS } from '../constants';
+import { AiModelRule, SystemTags, TutorialTip, Announcement, AdminUser, TransactionStatus } from '../types';
+import { ResponsiveContainer, BarChart as RechartsBar, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-type AdminTab = 'dashboard' | 'logs' | 'users' | 'ai' | 'tags' | 'tutorials' | 'settings';
+type AdminTab = 'dashboard' | 'logs' | 'users' | 'ai' | 'tags' | 'categories' | 'tutorials' | 'settings';
+
+// Mock current user for admin context
+const CURRENT_ADMIN_USER = MOCK_USERS[0]; // Alex Chen (System Admin)
 
 export const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -51,10 +64,11 @@ export const Admin: React.FC = () => {
         {[
           { id: 'dashboard', label: '統計儀表板', icon: <Activity size={18} /> },
           { id: 'settings', label: '系統設定', icon: <Settings size={18} /> }, 
-          { id: 'tutorials', label: '使用教學', icon: <BookOpen size={18} /> }, 
-          { id: 'users', label: '人員管理', icon: <Users size={18} /> },
-          { id: 'ai', label: 'AI 模型設定', icon: <Bot size={18} /> },
+          { id: 'categories', label: '類別管理', icon: <Layers size={18} /> },
           { id: 'tags', label: '標籤管理', icon: <Tags size={18} /> },
+          { id: 'tutorials', label: '使用教學', icon: <BookOpen size={18} /> }, 
+          { id: 'users', label: '人員權限管理', icon: <Users size={18} /> },
+          { id: 'ai', label: 'AI 模型設定', icon: <Bot size={18} /> },
           { id: 'logs', label: '日誌中心', icon: <FileText size={18} /> },
         ].map(tab => (
           <button
@@ -79,6 +93,7 @@ export const Admin: React.FC = () => {
         {activeTab === 'users' && <UserManagement />}
         {activeTab === 'ai' && <AiModelTraining />}
         {activeTab === 'tags' && <TagManagement />}
+        {activeTab === 'categories' && <CategoryManagement currentUser={CURRENT_ADMIN_USER} />}
         {activeTab === 'tutorials' && <TutorialManagement />}
         {activeTab === 'settings' && <SystemSettings />}
       </div>
@@ -86,7 +101,448 @@ export const Admin: React.FC = () => {
   );
 };
 
-/* --- Sub-Components --- */
+/* --- Data-Driven Dashboard --- */
+const AdminDashboard: React.FC = () => {
+  // 1. Calculate Statistics
+  const stats = useMemo(() => {
+    let pendingCount = 0;
+    let totalSpend = 0;
+    let totalLogs = 0;
+    let missedCount = 0;
+
+    MOCK_VENDORS.forEach(v => {
+      // Pending Approvals
+      pendingCount += v.transactions.filter(t => t.status === TransactionStatus.PENDING_APPROVAL).length;
+      
+      // Total Spend (Paid or Approved)
+      totalSpend += v.transactions
+        .filter(t => t.status === TransactionStatus.APPROVED || t.status === TransactionStatus.PAID)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Total Logs
+      totalLogs += v.contactLogs.length;
+
+      // Missed Contact Logs (Simulated metric)
+      if ((v.missedContactLogCount || 0) > 0) missedCount++;
+    });
+
+    return { pendingCount, totalSpend, totalLogs, missedCount, vendorCount: MOCK_VENDORS.length };
+  }, []);
+
+  // 2. Prepare Chart Data (Category Distribution)
+  const categoryData = useMemo(() => {
+    const data: Record<string, number> = {};
+    MOCK_VENDORS.forEach(v => {
+      v.categories.forEach(c => {
+        data[c] = (data[c] || 0) + 1;
+      });
+    });
+    return Object.entries(data).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+  }, []);
+
+  // 3. Prepare Pending Tasks List
+  const pendingTasks = useMemo(() => {
+    const tasks: any[] = [];
+    MOCK_VENDORS.forEach(v => {
+      v.transactions
+        .filter(t => t.status === TransactionStatus.PENDING_APPROVAL)
+        .forEach(t => tasks.push({ type: 'APPROVAL', title: `待驗收: ${t.description}`, vendor: v.name, date: t.date }));
+      
+      if (v.missedContactLogCount > 0) {
+        tasks.push({ type: 'MISSED', title: `未填寫聯繫紀錄 (${v.missedContactLogCount}次)`, vendor: v.name, date: '最近' });
+      }
+    });
+    return tasks;
+  }, []);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">總資源數</p>
+              <h3 className="text-3xl font-extrabold text-slate-800">{stats.vendorCount}</h3>
+            </div>
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><LayoutGrid size={24} /></div>
+         </div>
+         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">累計支出 (已核准)</p>
+              <h3 className="text-3xl font-extrabold text-slate-800">${(stats.totalSpend / 10000).toFixed(1)}萬</h3>
+            </div>
+            <div className="p-3 bg-green-50 text-green-600 rounded-lg"><Wallet size={24} /></div>
+         </div>
+         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">待辦事項 (驗收/紀錄)</p>
+              <h3 className="text-3xl font-extrabold text-slate-800 text-orange-600">{stats.pendingCount + stats.missedCount}</h3>
+            </div>
+            <div className="p-3 bg-orange-50 text-orange-600 rounded-lg"><AlertTriangle size={24} /></div>
+         </div>
+         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">總聯繫紀錄</p>
+              <h3 className="text-3xl font-extrabold text-slate-800">{stats.totalLogs}</h3>
+            </div>
+            <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><Activity size={24} /></div>
+         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chart Section */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <BarChart size={20} className="text-slate-400"/> 
+              廠商類別分佈 (Top 8)
+           </h3>
+           <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                 <RechartsBar data={categoryData} layout="horizontal">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" tick={{fontSize: 12, fill: '#64748b'}} interval={0} />
+                    <YAxis hide />
+                    <Tooltip 
+                      cursor={{fill: '#f8fafc'}} 
+                      contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}}
+                    />
+                    <Bar dataKey="value" fill="#475569" radius={[4, 4, 0, 0]} barSize={40} />
+                 </RechartsBar>
+              </ResponsiveContainer>
+           </div>
+        </div>
+
+        {/* Pending Actions List */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Clock size={20} className="text-slate-400"/> 
+              待處理項目
+           </h3>
+           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 max-h-[300px]">
+              {pendingTasks.length > 0 ? pendingTasks.map((task, i) => (
+                 <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-start gap-3">
+                    <div className={clsx("w-2 h-2 rounded-full mt-1.5 shrink-0", task.type === 'APPROVAL' ? "bg-orange-500" : "bg-red-500")}></div>
+                    <div className="flex-1 min-w-0">
+                       <p className="text-sm font-bold text-slate-700 truncate">{task.title}</p>
+                       <p className="text-xs text-slate-500">{task.vendor} • {task.date}</p>
+                    </div>
+                    <button className="text-xs text-blue-600 font-bold hover:underline shrink-0">處理</button>
+                 </div>
+              )) : (
+                 <div className="text-center py-10 text-slate-400">
+                    <CheckCircle size={32} className="mx-auto mb-2 opacity-20" />
+                    <p>目前沒有待辦事項</p>
+                 </div>
+              )}
+           </div>
+           <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+              <button className="text-sm text-slate-500 hover:text-slate-800 font-medium flex items-center justify-center gap-1 w-full">
+                 查看全部工單 <ArrowRight size={14} />
+              </button>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* --- Sub-Components (Unchanged mostly, ensuring exports) --- */
+const CategoryManagement: React.FC<{ currentUser: AdminUser }> = ({ currentUser }) => {
+  const [categories, setCategories] = useState<string[]>(CATEGORY_OPTIONS);
+  const [newCategory, setNewCategory] = useState('');
+
+  const handleAdd = () => {
+    if (!newCategory.trim()) return;
+    if (categories.includes(newCategory)) {
+      alert('此類別已存在');
+      return;
+    }
+    setCategories([...categories, newCategory.trim()]);
+    setNewCategory('');
+  };
+
+  const handleDelete = (cat: string) => {
+    // Permission Check: Only System Admin can delete categories
+    if (currentUser.role !== 'System Admin') {
+      alert('權限不足：僅系統管理員 (System Admin) 可執行刪除操作。');
+      return;
+    }
+
+    // Protection Warning
+    const confirmDelete = window.confirm(
+      `⚠️ 危險操作警告：\n\n確定要刪除「${cat}」嗎？\n\n1. 此操作將導致所有標記為此類別的廠商失去分類關聯。\n2. 相關的歷史工單分類也可能受到影響。\n\n如果您確定要繼續，請點擊「確定」。`
+    );
+
+    if (confirmDelete) {
+      setCategories(categories.filter(c => c !== cat));
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+       <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+             <div className="flex items-center gap-2 font-bold text-slate-800 text-lg mb-4">
+                <FolderOpen size={20} className="text-blue-600" />
+                <h3>新增服務類別</h3>
+             </div>
+             <div className="space-y-4">
+                <div>
+                   <label className="block text-sm font-bold text-slate-500 mb-1">類別名稱</label>
+                   <input 
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="例如：園藝造景"
+                      className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                   />
+                </div>
+                <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-xs leading-relaxed">
+                   <p className="font-bold mb-1">💡 說明：</p>
+                   新增類別後，所有使用者皆可在「廠商名錄」的篩選選單中看到此選項。
+                </div>
+                <button 
+                   onClick={handleAdd}
+                   disabled={!newCategory.trim()}
+                   className="w-full bg-slate-800 text-white py-2 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition"
+                >
+                   確認新增
+                </button>
+             </div>
+          </div>
+       </div>
+
+       <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+             <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-slate-800 text-lg">現有類別列表 ({categories.length})</h3>
+                {currentUser.role !== 'System Admin' && (
+                   <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                      僅檢視模式 (無刪除權限)
+                   </span>
+                )}
+             </div>
+             
+             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {categories.map(cat => (
+                   <div key={cat} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 group hover:border-blue-200 transition">
+                      <span className="text-sm font-medium text-slate-700">{cat}</span>
+                      {currentUser.role === 'System Admin' && (
+                        <button 
+                           onClick={() => handleDelete(cat)}
+                           className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                           title="刪除類別"
+                        >
+                           <Trash2 size={16} />
+                        </button>
+                      )}
+                   </div>
+                ))}
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+};
+
+const UserManagement: React.FC = () => {
+  const [users, setUsers] = useState<AdminUser[]>(MOCK_USERS);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+
+  const handleEdit = (user: AdminUser) => {
+    setEditingUser({ ...user }); // Clone to avoid direct mutation
+  };
+
+  const handleSave = () => {
+    if (editingUser) {
+      setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
+      setEditingUser(null);
+    }
+  };
+
+  const togglePermission = (key: keyof AdminUser['permissions']) => {
+    if (editingUser) {
+      setEditingUser({
+        ...editingUser,
+        permissions: {
+          ...editingUser.permissions,
+          [key]: !editingUser.permissions[key]
+        }
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+         <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-500">
+               <tr>
+                  <th className="px-6 py-4">人員</th>
+                  <th className="px-6 py-4">角色/部門</th>
+                  <th className="px-6 py-4">綁定帳號</th>
+                  <th className="px-6 py-4">狀態</th>
+                  <th className="px-6 py-4 text-right">操作</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+               {users.map(u => (
+                  <tr key={u.id} className="hover:bg-slate-50">
+                     <td className="px-6 py-4 flex items-center gap-3">
+                        <img src={u.avatarUrl} className="w-10 h-10 rounded-full border border-slate-200" />
+                        <div>
+                           <div className="font-bold text-slate-800">{u.name}</div>
+                           <div className="text-xs text-slate-500">{u.email}</div>
+                        </div>
+                     </td>
+                     <td className="px-6 py-4">
+                        <span className="block font-bold text-slate-700">{u.role}</span>
+                        <span className="text-xs text-slate-500">{u.department}</span>
+                     </td>
+                     <td className="px-6 py-4">
+                        {u.googleLinked ? (
+                           <div className="flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded w-fit text-xs font-bold border border-green-100">
+                              <Globe size={12} /> Google Linked
+                           </div>
+                        ) : (
+                           <div className="text-slate-400 text-xs">未綁定</div>
+                        )}
+                     </td>
+                     <td className="px-6 py-4">
+                        <span className={clsx("px-2 py-1 rounded text-xs font-bold", u.status === 'Active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500")}>
+                           {u.status}
+                        </span>
+                     </td>
+                     <td className="px-6 py-4 text-right">
+                        <button onClick={() => handleEdit(u)} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition font-bold text-xs">
+                           管理權限
+                        </button>
+                     </td>
+                  </tr>
+               ))}
+            </tbody>
+         </table>
+      </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+               <div className="bg-slate-800 px-6 py-4 flex justify-between items-center text-white shrink-0">
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                     <Users size={20} className="text-blue-400" /> 編輯人員權限
+                  </h3>
+                  <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white"><X size={24}/></button>
+               </div>
+               
+               <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+                  {/* Section 1: Profile & Google */}
+                  <div className="flex items-start gap-6 pb-6 border-b border-slate-100">
+                     <div className="relative group cursor-pointer">
+                        <img src={editingUser.avatarUrl} className="w-20 h-20 rounded-full border-4 border-slate-100" />
+                        <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                           <Camera size={24} className="text-white" />
+                        </div>
+                     </div>
+                     <div className="flex-1">
+                        <h4 className="text-xl font-bold text-slate-800">{editingUser.name}</h4>
+                        <p className="text-slate-500 text-sm mb-3">{editingUser.email}</p>
+                        
+                        <div className="flex items-center gap-3">
+                           {editingUser.googleLinked ? (
+                              <button className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold">
+                                 <CheckCircle size={14} /> 已連結 Google 帳號
+                              </button>
+                           ) : (
+                              <button className="flex items-center gap-2 px-3 py-1.5 bg-white text-slate-600 border border-slate-300 hover:bg-slate-50 rounded-lg text-xs font-bold transition">
+                                 <Globe size={14} /> 連結 Google 帳號
+                              </button>
+                           )}
+                           <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-bold transition">
+                              <Upload size={14} /> 上傳頭像
+                           </button>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Section 2: Role & Basic Info */}
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">系統角色 (Role)</label>
+                        <select 
+                           className="w-full border border-slate-200 rounded-lg p-2 text-sm bg-white"
+                           value={editingUser.role}
+                           onChange={(e) => setEditingUser({...editingUser, role: e.target.value as any})}
+                        >
+                           <option value="System Admin">System Admin (最高權限)</option>
+                           <option value="Manager">Manager (經理)</option>
+                           <option value="Editor">Editor (編輯者)</option>
+                           <option value="Viewer">Viewer (檢視者)</option>
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">所屬部門</label>
+                        <input 
+                           className="w-full border border-slate-200 rounded-lg p-2 text-sm"
+                           value={editingUser.department}
+                           onChange={(e) => setEditingUser({...editingUser, department: e.target.value})}
+                        />
+                     </div>
+                  </div>
+
+                  {/* Section 3: Granular Permissions */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                     <h4 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
+                        <Shield size={16} className="text-slate-500"/> 詳細權限設定
+                     </h4>
+                     
+                     <div className="grid grid-cols-2 gap-6">
+                        {/* Front-end Nav */}
+                        <div>
+                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">前台資源導覽</p>
+                           <div className="space-y-2">
+                              <PermissionToggle label="戰情室 (War Room)" checked={editingUser.permissions.viewWarRoom} onChange={() => togglePermission('viewWarRoom')} />
+                              <PermissionToggle label="廠商名錄 (Vendors)" checked={editingUser.permissions.viewVendors} onChange={() => togglePermission('viewVendors')} />
+                              <PermissionToggle label="日常任務 (Tasks)" checked={editingUser.permissions.viewTasks} onChange={() => togglePermission('viewTasks')} />
+                              <PermissionToggle label="通訊中心 (Comm Hub)" checked={editingUser.permissions.viewCommunication} onChange={() => togglePermission('viewCommunication')} />
+                           </div>
+                        </div>
+
+                        {/* Admin Nav & Actions */}
+                        <div>
+                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">管理中心與操作</p>
+                           <div className="space-y-2">
+                              <PermissionToggle label="支付紀錄 (Payments)" checked={editingUser.permissions.viewPayments} onChange={() => togglePermission('viewPayments')} />
+                              <PermissionToggle label="知識庫 (Knowledge)" checked={editingUser.permissions.viewKnowledge} onChange={() => togglePermission('viewKnowledge')} />
+                              <PermissionToggle label="系統公告 (Announcements)" checked={editingUser.permissions.viewAnnouncements} onChange={() => togglePermission('viewAnnouncements')} />
+                              <PermissionToggle label="進入系統管理 (Admin Panel)" checked={editingUser.permissions.accessAdminPanel} onChange={() => togglePermission('accessAdminPanel')} isDangerous />
+                              <hr className="border-slate-200 my-2"/>
+                              <PermissionToggle label="刪除廠商資料" checked={editingUser.permissions.canDeleteVendors} onChange={() => togglePermission('canDeleteVendors')} isDangerous />
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+                  <button onClick={() => setEditingUser(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm">取消</button>
+                  <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md">儲存設定</button>
+               </div>
+            </div>
+         </div>
+      )}
+    </div>
+  );
+};
+
+const PermissionToggle: React.FC<{ label: string; checked: boolean; onChange: () => void; isDangerous?: boolean }> = ({ label, checked, onChange, isDangerous }) => (
+   <label className="flex items-center justify-between cursor-pointer p-2 rounded hover:bg-white hover:shadow-sm transition">
+      <span className={clsx("text-sm font-medium", isDangerous ? "text-red-700" : "text-slate-700")}>{label}</span>
+      <div className="relative inline-flex items-center cursor-pointer" onClick={onChange}>
+         <div className={clsx("w-9 h-5 rounded-full transition-colors", checked ? (isDangerous ? "bg-red-500" : "bg-blue-600") : "bg-slate-300")}></div>
+         <div className={clsx("absolute top-1 left-1 bg-white border border-gray-300 w-3 h-3 rounded-full transition-transform", checked ? "translate-x-4" : "translate-x-0")}></div>
+      </div>
+   </label>
+);
 
 const SystemSettings: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
@@ -491,23 +947,8 @@ const AiModelTraining: React.FC = () => {
   );
 };
 
-const AdminDashboard: React.FC = () => (
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between"><div><p className="text-xs font-bold text-slate-500 mb-1">資源總數</p><h3 className="text-3xl font-bold text-slate-800">6</h3></div><div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><LayoutGrid size={24} /></div></div>
-     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between"><div><p className="text-xs font-bold text-slate-500 mb-1">預估支出</p><h3 className="text-2xl font-bold text-slate-800">$15.3萬</h3></div><div className="p-3 bg-red-50 text-red-600 rounded-lg"><Wallet size={24} /></div></div>
-     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between"><div><p className="text-xs font-bold text-slate-500 mb-1">總使用</p><h3 className="text-3xl font-bold text-slate-800">4210</h3></div><div className="p-3 bg-green-50 text-green-600 rounded-lg"><Activity size={24} /></div></div>
-     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between"><div><p className="text-xs font-bold text-slate-500 mb-1">待審核</p><h3 className="text-3xl font-bold text-slate-800">0</h3></div><div className="p-3 bg-yellow-50 text-yellow-600 rounded-lg"><Activity size={24} /></div></div>
-  </div>
-);
-
 const LogCenter: React.FC = () => (
   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
      <table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-6 py-4">時間</th><th className="px-6 py-4">動作</th><th className="px-6 py-4">詳情</th></tr></thead><tbody>{MOCK_LOGS.map(l => <tr key={l.id} className="hover:bg-slate-50"><td className="px-6 py-4">{l.timestamp}</td><td className="px-6 py-4 font-bold">{l.action}</td><td className="px-6 py-4">{l.details}</td></tr>)}</tbody></table>
-  </div>
-);
-
-const UserManagement: React.FC = () => (
-  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-     <table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-6 py-4">姓名</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">角色</th></tr></thead><tbody>{MOCK_USERS.map(u => <tr key={u.id} className="hover:bg-slate-50"><td className="px-6 py-4 font-bold">{u.name}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.role}</td></tr>)}</tbody></table>
   </div>
 );

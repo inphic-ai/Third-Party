@@ -11,99 +11,218 @@ import {
   X,
   CreditCard,
   Briefcase,
-  MessageCircle
+  MessageCircle,
+  Leaf,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
+import { clsx } from 'clsx';
+import { MOCK_USERS } from '../constants';
+import { AdminUser } from '../types';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Simulated Authentication Context
+  // In a real app, this would come from AuthProvider
+  const [currentUser, setCurrentUser] = useState<AdminUser>(MOCK_USERS[0]); // Default to Alex (Admin)
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+
   const location = useLocation();
 
+  // Navigation Config mapped to Permissions
   const navItems = [
-    { name: '營運戰情室', path: '/', icon: <LayoutDashboard size={20} /> },
-    { name: '廠商名錄', path: '/vendors', icon: <Users size={20} /> },
-    { name: '通訊軟體', path: '/communication', icon: <MessageCircle size={20} /> }, // New Entry
-    { name: '支付紀錄', path: '/payments', icon: <CreditCard size={20} /> },
-    { name: '日常任務', path: '/tasks', icon: <Briefcase size={20} /> },
-    { name: '知識庫', path: '/knowledge', icon: <BookOpen size={20} /> },
-    { name: '系統公告', path: '/announcements', icon: <Megaphone size={20} /> }, 
-    { name: '系統管理', path: '/admin', icon: <Settings size={20} /> }, 
+    { 
+      name: '統計儀表板', 
+      path: '/', 
+      icon: <LayoutDashboard size={18} />, 
+      permission: currentUser.permissions.viewWarRoom 
+    },
+    { 
+      name: '廠商名錄', 
+      path: '/vendors', 
+      icon: <Users size={18} />, 
+      permission: currentUser.permissions.viewVendors 
+    },
+    { 
+      name: '日常任務', 
+      path: '/tasks', 
+      icon: <Briefcase size={18} />, 
+      permission: currentUser.permissions.viewTasks 
+    },
+    { 
+      name: '通訊中心', 
+      path: '/communication', 
+      icon: <MessageCircle size={18} />, 
+      permission: currentUser.permissions.viewCommunication 
+    },
+    { 
+      name: '支付紀錄', 
+      path: '/payments', 
+      icon: <CreditCard size={18} />, 
+      permission: currentUser.permissions.viewPayments 
+    },
+    { 
+      name: '知識庫', 
+      path: '/knowledge', 
+      icon: <BookOpen size={18} />, 
+      permission: currentUser.permissions.viewKnowledge 
+    },
+    { 
+      name: '系統公告', 
+      path: '/announcements', 
+      icon: <Megaphone size={18} />, 
+      permission: currentUser.permissions.viewAnnouncements 
+    }, 
+    { 
+      name: '系統管理', 
+      path: '/admin', 
+      icon: <Settings size={18} />, 
+      permission: currentUser.permissions.accessAdminPanel 
+    }, 
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
+  const handleSwitchUser = (user: AdminUser) => {
+    setCurrentUser(user);
+    setShowRoleSwitcher(false);
+  };
+
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-[#f9fafb] overflow-hidden font-sans">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${
+        className={clsx(
+          "fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 flex flex-col",
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        )}
       >
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">P</div>
-            <span className="text-xl font-bold">PartnerLink</span>
+        {/* Logo Area */}
+        <div className="flex items-center gap-3 p-6 mb-2">
+          <div className="w-8 h-8 bg-brand-700 rounded-lg flex items-center justify-center text-white">
+            <Leaf size={18} fill="currentColor" />
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+          <span className="text-xl font-bold text-gray-800 tracking-tight">精英團隊</span>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden ml-auto text-gray-400">
             <X size={24} />
           </button>
         </div>
 
-        <nav className="p-4 space-y-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={() => setIsSidebarOpen(false)}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive(item.path) 
-                  ? 'bg-blue-600 text-white shadow-lg' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              {item.icon}
-              <span className="font-medium tracking-wide">{item.name}</span>
-            </Link>
-          ))}
-        </nav>
+        {/* Navigation */}
+        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-8">
+           {/* Section 1: Resource Nav (Front-end) */}
+           <div>
+              <p className="px-4 text-xs font-bold text-gray-400 mb-2 tracking-wider">資源導覽</p>
+              <nav className="space-y-1">
+                {navItems.slice(0, 4).map((item) => (
+                  item.permission && (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsSidebarOpen(false)}
+                      className={clsx(
+                        "flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 text-sm font-medium",
+                        isActive(item.path) 
+                          ? "bg-brand-700 text-white shadow-md shadow-brand-200" 
+                          : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                      )}
+                    >
+                      {item.icon}
+                      <span>{item.name}</span>
+                    </Link>
+                  )
+                ))}
+              </nav>
+           </div>
 
-        <div className="absolute bottom-0 w-full p-4 border-t border-slate-800">
-          <div className="flex items-center space-x-3">
+           {/* Section 2: Admin Nav (Back-end) */}
+           <div>
+              <p className="px-4 text-xs font-bold text-gray-400 mb-2 tracking-wider">管理中心</p>
+              <nav className="space-y-1">
+                {navItems.slice(4).map((item) => (
+                  item.permission && (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsSidebarOpen(false)}
+                      className={clsx(
+                        "flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 text-sm font-medium",
+                        isActive(item.path) 
+                          ? "bg-brand-700 text-white shadow-md shadow-brand-200" 
+                          : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                      )}
+                    >
+                      {item.icon}
+                      <span>{item.name}</span>
+                    </Link>
+                  )
+                ))}
+              </nav>
+           </div>
+        </div>
+
+        {/* User Profile & Role Switcher */}
+        <div className="p-4 border-t border-gray-100 relative">
+          {showRoleSwitcher && (
+             <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500">切換測試帳號</div>
+                {MOCK_USERS.map(u => (
+                   <button 
+                     key={u.id}
+                     onClick={() => handleSwitchUser(u)}
+                     className={clsx("w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition text-sm", currentUser.id === u.id && "bg-blue-50 text-blue-600 font-bold")}
+                   >
+                      <img src={u.avatarUrl} className="w-6 h-6 rounded-full" />
+                      <div>
+                         <div className="leading-tight">{u.name}</div>
+                         <div className="text-[10px] text-slate-400">{u.role}</div>
+                      </div>
+                   </button>
+                ))}
+             </div>
+          )}
+
+          <div 
+            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 cursor-pointer transition select-none group"
+            onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+          >
             <img 
-              src="https://picsum.photos/40/40?random=user" 
+              src={currentUser.avatarUrl} 
               alt="User" 
-              className="w-10 h-10 rounded-full border-2 border-slate-600"
+              className="w-9 h-9 rounded-full object-cover border border-gray-200 group-hover:border-slate-300"
             />
-            <div>
-              <p className="text-sm font-medium text-white">管理員</p>
-              <p className="text-xs text-slate-400">採購經理</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
+              <p className="text-xs text-gray-400 truncate">{currentUser.role}</p>
             </div>
+            <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600"/>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden bg-[#f9fafb]">
         {/* Header (Mobile) */}
-        <header className="bg-white shadow-sm md:hidden flex items-center justify-between p-4">
+        <header className="bg-white border-b border-gray-100 md:hidden flex items-center justify-between p-4 sticky top-0 z-10">
           <div className="flex items-center space-x-2">
-            <button onClick={() => setIsSidebarOpen(true)} className="text-slate-600">
+            <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600">
               <Menu size={24} />
             </button>
-            <span className="font-bold text-slate-800">PartnerLink Pro</span>
+            <span className="font-bold text-gray-800">PartnerLink Pro</span>
           </div>
         </header>
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
           {children}
         </div>
       </main>

@@ -1,4 +1,3 @@
-
 import React, { Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -26,7 +25,7 @@ const LoadingFallback = () => (
 );
 
 interface ErrorBoundaryProps {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface ErrorBoundaryState {
