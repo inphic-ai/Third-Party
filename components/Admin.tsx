@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Settings, 
   Users, 
@@ -32,14 +33,19 @@ import {
   Upload,
   BarChart,
   PieChart,
-  ArrowRight
+  ArrowRight,
+  Save,
+  AlertCircle,
+  Search,
+  LogIn,
+  Monitor
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_USERS, MOCK_LOGS, MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, MOCK_TUTORIALS, MOCK_ANNOUNCEMENTS, CATEGORY_OPTIONS, MOCK_VENDORS } from '../constants';
+import { MOCK_USERS, MOCK_LOGS, MOCK_LOGIN_LOGS, MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, MOCK_TUTORIALS, MOCK_ANNOUNCEMENTS, CATEGORY_OPTIONS, MOCK_VENDORS } from '../constants';
 import { AiModelRule, SystemTags, TutorialTip, Announcement, AdminUser, TransactionStatus } from '../types';
-import { ResponsiveContainer, BarChart as RechartsBar, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, BarChart as RechartsBar, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
 
-type AdminTab = 'dashboard' | 'logs' | 'users' | 'ai' | 'tags' | 'categories' | 'tutorials' | 'settings';
+type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'tutorials' | 'ai' | 'users' | 'settings';
 
 // Mock current user for admin context
 const CURRENT_ADMIN_USER = MOCK_USERS[0]; // Alex Chen (System Admin)
@@ -59,17 +65,17 @@ export const Admin: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation - Reordered based on importance */}
       <div className="flex border-b border-slate-200 gap-6 overflow-x-auto">
         {[
           { id: 'dashboard', label: '統計儀表板', icon: <Activity size={18} /> },
-          { id: 'settings', label: '系統設定', icon: <Settings size={18} /> }, 
+          { id: 'logs', label: '日誌中心', icon: <FileText size={18} /> },
           { id: 'categories', label: '類別管理', icon: <Layers size={18} /> },
           { id: 'tags', label: '標籤管理', icon: <Tags size={18} /> },
           { id: 'tutorials', label: '使用教學', icon: <BookOpen size={18} /> }, 
-          { id: 'users', label: '人員權限管理', icon: <Users size={18} /> },
           { id: 'ai', label: 'AI 模型設定', icon: <Bot size={18} /> },
-          { id: 'logs', label: '日誌中心', icon: <FileText size={18} /> },
+          { id: 'users', label: '人員權限管理', icon: <Users size={18} /> },
+          { id: 'settings', label: '系統設定', icon: <Settings size={18} /> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -101,14 +107,15 @@ export const Admin: React.FC = () => {
   );
 };
 
-/* --- Data-Driven Dashboard --- */
+/* --- Optimized Data-Driven Dashboard --- */
 const AdminDashboard: React.FC = () => {
-  // 1. Calculate Statistics
+  // Performance Optimization: Use useMemo for heavy calculations
   const stats = useMemo(() => {
     let pendingCount = 0;
     let totalSpend = 0;
     let totalLogs = 0;
     let missedCount = 0;
+    let activeVendors = 0;
 
     MOCK_VENDORS.forEach(v => {
       // Pending Approvals
@@ -122,14 +129,15 @@ const AdminDashboard: React.FC = () => {
       // Total Logs
       totalLogs += v.contactLogs.length;
 
-      // Missed Contact Logs (Simulated metric)
+      // Missed Contact Logs
       if ((v.missedContactLogCount || 0) > 0) missedCount++;
+      
+      if (!v.isBlacklisted) activeVendors++;
     });
 
-    return { pendingCount, totalSpend, totalLogs, missedCount, vendorCount: MOCK_VENDORS.length };
+    return { pendingCount, totalSpend, totalLogs, missedCount, vendorCount: MOCK_VENDORS.length, activeVendors };
   }, []);
 
-  // 2. Prepare Chart Data (Category Distribution)
   const categoryData = useMemo(() => {
     const data: Record<string, number> = {};
     MOCK_VENDORS.forEach(v => {
@@ -140,16 +148,27 @@ const AdminDashboard: React.FC = () => {
     return Object.entries(data).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, []);
 
-  // 3. Prepare Pending Tasks List
   const pendingTasks = useMemo(() => {
     const tasks: any[] = [];
     MOCK_VENDORS.forEach(v => {
       v.transactions
         .filter(t => t.status === TransactionStatus.PENDING_APPROVAL)
-        .forEach(t => tasks.push({ type: 'APPROVAL', title: `待驗收: ${t.description}`, vendor: v.name, date: t.date }));
+        .forEach(t => tasks.push({ 
+          type: 'APPROVAL', 
+          title: `待驗收: ${t.description}`, 
+          vendor: v.name, 
+          date: t.date,
+          link: `/transactions/${t.id}`
+        }));
       
       if (v.missedContactLogCount > 0) {
-        tasks.push({ type: 'MISSED', title: `未填寫聯繫紀錄 (${v.missedContactLogCount}次)`, vendor: v.name, date: '最近' });
+        tasks.push({ 
+          type: 'MISSED', 
+          title: `未填寫聯繫紀錄 (${v.missedContactLogCount}次)`, 
+          vendor: v.name, 
+          date: '最近',
+          link: `/vendors/${v.id}`
+        });
       }
     });
     return tasks;
@@ -157,29 +176,29 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* KPI Cards */}
+      {/* KPI Cards (Clickable Links) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+         <Link to="/vendors" className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition group">
             <div>
-              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">總資源數</p>
-              <h3 className="text-3xl font-extrabold text-slate-800">{stats.vendorCount}</h3>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">活躍/總資源數</p>
+              <h3 className="text-3xl font-extrabold text-slate-800 group-hover:text-blue-600 transition">{stats.activeVendors} <span className="text-sm text-slate-400 font-medium">/ {stats.vendorCount}</span></h3>
             </div>
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><LayoutGrid size={24} /></div>
-         </div>
-         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100 transition"><LayoutGrid size={24} /></div>
+         </Link>
+         <Link to="/payments" className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition group">
             <div>
-              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">累計支出 (已核准)</p>
-              <h3 className="text-3xl font-extrabold text-slate-800">${(stats.totalSpend / 10000).toFixed(1)}萬</h3>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">待撥款與已結算</p>
+              <h3 className="text-3xl font-extrabold text-slate-800 group-hover:text-green-600 transition">${(stats.totalSpend / 10000).toFixed(1)}萬</h3>
             </div>
-            <div className="p-3 bg-green-50 text-green-600 rounded-lg"><Wallet size={24} /></div>
-         </div>
-         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
+            <div className="p-3 bg-green-50 text-green-600 rounded-lg group-hover:bg-green-100 transition"><Wallet size={24} /></div>
+         </Link>
+         <Link to="#pending" className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition group">
             <div>
-              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">待辦事項 (驗收/紀錄)</p>
-              <h3 className="text-3xl font-extrabold text-slate-800 text-orange-600">{stats.pendingCount + stats.missedCount}</h3>
+              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">異常與待辦</p>
+              <h3 className="text-3xl font-extrabold text-orange-600">{stats.pendingCount + stats.missedCount}</h3>
             </div>
-            <div className="p-3 bg-orange-50 text-orange-600 rounded-lg"><AlertTriangle size={24} /></div>
-         </div>
+            <div className="p-3 bg-orange-50 text-orange-600 rounded-lg group-hover:bg-orange-100 transition"><AlertTriangle size={24} /></div>
+         </Link>
          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center hover:shadow-md transition">
             <div>
               <p className="text-xs font-bold text-slate-500 mb-1 uppercase">總聯繫紀錄</p>
@@ -192,10 +211,13 @@ const AdminDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Chart Section */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <BarChart size={20} className="text-slate-400"/> 
-              廠商類別分佈 (Top 8)
-           </h3>
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                 <BarChart size={20} className="text-slate-400"/> 
+                 廠商類別分佈 (Top 8)
+              </h3>
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">即時統計</span>
+           </div>
            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                  <RechartsBar data={categoryData} layout="horizontal">
@@ -213,20 +235,25 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Pending Actions List */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-slate-400"/> 
-              待處理項目
-           </h3>
+        <div id="pending" className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+           <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                 <Clock size={20} className="text-slate-400"/> 
+                 待處理項目
+              </h3>
+              <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{pendingTasks.length}</span>
+           </div>
            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 max-h-[300px]">
               {pendingTasks.length > 0 ? pendingTasks.map((task, i) => (
-                 <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-start gap-3">
+                 <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-start gap-3 hover:bg-slate-100 transition">
                     <div className={clsx("w-2 h-2 rounded-full mt-1.5 shrink-0", task.type === 'APPROVAL' ? "bg-orange-500" : "bg-red-500")}></div>
                     <div className="flex-1 min-w-0">
                        <p className="text-sm font-bold text-slate-700 truncate">{task.title}</p>
                        <p className="text-xs text-slate-500">{task.vendor} • {task.date}</p>
                     </div>
-                    <button className="text-xs text-blue-600 font-bold hover:underline shrink-0">處理</button>
+                    <Link to={task.link} className="text-xs text-blue-600 font-bold hover:underline shrink-0 bg-white px-2 py-1 rounded border border-blue-100 hover:bg-blue-50">
+                       處理
+                    </Link>
                  </div>
               )) : (
                  <div className="text-center py-10 text-slate-400">
@@ -236,8 +263,8 @@ const AdminDashboard: React.FC = () => {
               )}
            </div>
            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-              <button className="text-sm text-slate-500 hover:text-slate-800 font-medium flex items-center justify-center gap-1 w-full">
-                 查看全部工單 <ArrowRight size={14} />
+              <button className="text-sm text-slate-500 hover:text-slate-800 font-medium flex items-center justify-center gap-1 w-full transition">
+                 前往工單中心 <ArrowRight size={14} />
               </button>
            </div>
         </div>
@@ -246,14 +273,122 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-/* --- Sub-Components (Unchanged mostly, ensuring exports) --- */
+/* --- Updated Log Center with Tabs --- */
+const LogCenter: React.FC = () => {
+  const [logType, setLogType] = useState<'operation' | 'login'>('operation');
+
+  return (
+    <div className="space-y-4">
+       {/* Tab Switcher */}
+       <div className="flex gap-2">
+          <button 
+             onClick={() => setLogType('operation')}
+             className={clsx(
+                "px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition",
+                logType === 'operation' ? "bg-slate-800 text-white shadow" : "bg-white text-slate-500 hover:bg-slate-50"
+             )}
+          >
+             <History size={16} /> 操作日誌
+          </button>
+          <button 
+             onClick={() => setLogType('login')}
+             className={clsx(
+                "px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition",
+                logType === 'login' ? "bg-slate-800 text-white shadow" : "bg-white text-slate-500 hover:bg-slate-50"
+             )}
+          >
+             <LogIn size={16} /> 登入日誌
+          </button>
+       </div>
+
+       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
+          <div className="overflow-x-auto">
+            {logType === 'operation' ? (
+               <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                     <tr>
+                        <th className="px-6 py-4">時間</th>
+                        <th className="px-6 py-4">人員</th>
+                        <th className="px-6 py-4">動作</th>
+                        <th className="px-6 py-4">對象</th>
+                        <th className="px-6 py-4">詳情</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                     {MOCK_LOGS.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50 transition">
+                           <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{l.timestamp}</td>
+                           <td className="px-6 py-4 font-bold">{l.user}</td>
+                           <td className="px-6 py-4">
+                              <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold">{l.action}</span>
+                           </td>
+                           <td className="px-6 py-4 font-medium">{l.target}</td>
+                           <td className="px-6 py-4 text-slate-500">{l.details}</td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+            ) : (
+               <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                     <tr>
+                        <th className="px-6 py-4">登入時間</th>
+                        <th className="px-6 py-4">人員</th>
+                        <th className="px-6 py-4">IP 位址</th>
+                        <th className="px-6 py-4">裝置</th>
+                        <th className="px-6 py-4 text-center">狀態</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                     {MOCK_LOGIN_LOGS.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50 transition">
+                           <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{l.timestamp}</td>
+                           <td className="px-6 py-4 font-bold">{l.user}</td>
+                           <td className="px-6 py-4 font-mono text-slate-500 text-xs">{l.ip}</td>
+                           <td className="px-6 py-4 text-slate-500 flex items-center gap-2">
+                              <Monitor size={14}/> {l.device}
+                           </td>
+                           <td className="px-6 py-4 text-center">
+                              <span className={clsx(
+                                 "px-3 py-1 rounded-full text-xs font-bold capitalize",
+                                 l.status === 'success' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                              )}>
+                                 {l.status}
+                              </span>
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+            )}
+          </div>
+       </div>
+    </div>
+  );
+};
+
+/* --- Robust Category Management --- */
 const CategoryManagement: React.FC<{ currentUser: AdminUser }> = ({ currentUser }) => {
   const [categories, setCategories] = useState<string[]>(CATEGORY_OPTIONS);
   const [newCategory, setNewCategory] = useState('');
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [tempEditValue, setTempEditValue] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+
+  // Performance Optimization: Calculate usage only when vendors or categories change
+  const categoryUsage = useMemo(() => {
+    const counts: Record<string, number> = {};
+    MOCK_VENDORS.forEach(v => {
+      v.categories.forEach(c => {
+        counts[c] = (counts[c] || 0) + 1;
+      });
+    });
+    return counts;
+  }, []);
 
   const handleAdd = () => {
     if (!newCategory.trim()) return;
-    if (categories.includes(newCategory)) {
+    if (categories.includes(newCategory.trim())) {
       alert('此類別已存在');
       return;
     }
@@ -261,27 +396,78 @@ const CategoryManagement: React.FC<{ currentUser: AdminUser }> = ({ currentUser 
     setNewCategory('');
   };
 
+  const startEditing = (cat: string) => {
+    setEditingCategory(cat);
+    setTempEditValue(cat);
+  };
+
+  const cancelEditing = () => {
+    setEditingCategory(null);
+    setTempEditValue('');
+  };
+
+  // Safe Rename Logic: Cascading Update
+  const saveRename = (oldName: string) => {
+    const newName = tempEditValue.trim();
+    if (!newName || newName === oldName) {
+      cancelEditing();
+      return;
+    }
+    
+    if (categories.includes(newName)) {
+      alert('名稱與現有類別重複，請使用其他名稱。');
+      return;
+    }
+
+    const affectedCount = categoryUsage[oldName] || 0;
+    
+    // Simulate DB Transaction
+    // 1. Update List
+    setCategories(categories.map(c => c === oldName ? newName : c));
+    
+    // 2. Simulate updating all vendors (In real app, backend handles this)
+    if (affectedCount > 0) {
+       alert(`✅ 系統資料更新成功\n\n已將類別「${oldName}」更名為「${newName}」。\n系統已自動同步更新 ${affectedCount} 筆相關的廠商資料，無需手動調整。`);
+    }
+
+    cancelEditing();
+  };
+
+  // Safe Delete Logic: Reference Check
   const handleDelete = (cat: string) => {
-    // Permission Check: Only System Admin can delete categories
+    // Permission Check
     if (currentUser.role !== 'System Admin') {
       alert('權限不足：僅系統管理員 (System Admin) 可執行刪除操作。');
       return;
     }
 
-    // Protection Warning
-    const confirmDelete = window.confirm(
-      `⚠️ 危險操作警告：\n\n確定要刪除「${cat}」嗎？\n\n1. 此操作將導致所有標記為此類別的廠商失去分類關聯。\n2. 相關的歷史工單分類也可能受到影響。\n\n如果您確定要繼續，請點擊「確定」。`
-    );
+    const usageCount = categoryUsage[cat] || 0;
 
-    if (confirmDelete) {
+    // Strict Data Integrity Check
+    if (usageCount > 0) {
+      alert(
+        `⛔ 無法刪除：資料保護機制啟動\n\n` +
+        `目前尚有 ${usageCount} 家廠商屬於「${cat}」類別。\n` +
+        `直接刪除將導致這些廠商的分類資料異常 (Data Inconsistency)。\n\n` +
+        `解決方案：\n` +
+        `1. 請先搜尋該類別廠商，將其移除或轉移至其他類別。\n` +
+        `2. 當使用數降為 0 時，系統將允許刪除。`
+      );
+      return;
+    }
+
+    // Double Confirmation for empty categories
+    if (window.confirm(`確定要刪除「${cat}」嗎？此操作無法復原。`)) {
       setCategories(categories.filter(c => c !== cat));
     }
   };
 
+  const displayedCategories = categories.filter(c => c.includes(searchFilter));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
        <div className="lg:col-span-1 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sticky top-6">
              <div className="flex items-center gap-2 font-bold text-slate-800 text-lg mb-4">
                 <FolderOpen size={20} className="text-blue-600" />
                 <h3>新增服務類別</h3>
@@ -296,14 +482,14 @@ const CategoryManagement: React.FC<{ currentUser: AdminUser }> = ({ currentUser 
                       className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                    />
                 </div>
-                <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-xs leading-relaxed">
-                   <p className="font-bold mb-1">💡 說明：</p>
+                <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-xs leading-relaxed border border-blue-100">
+                   <p className="font-bold mb-1 flex items-center gap-1"><AlertCircle size={12}/> 系統說明：</p>
                    新增類別後，所有使用者皆可在「廠商名錄」的篩選選單中看到此選項。
                 </div>
                 <button 
                    onClick={handleAdd}
                    disabled={!newCategory.trim()}
-                   className="w-full bg-slate-800 text-white py-2 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition"
+                   className="w-full bg-slate-800 text-white py-2 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition shadow-sm"
                 >
                    確認新增
                 </button>
@@ -313,30 +499,73 @@ const CategoryManagement: React.FC<{ currentUser: AdminUser }> = ({ currentUser 
 
        <div className="lg:col-span-2">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-             <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-slate-800 text-lg">現有類別列表 ({categories.length})</h3>
-                {currentUser.role !== 'System Admin' && (
-                   <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                      僅檢視模式 (無刪除權限)
-                   </span>
-                )}
+             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <div>
+                   <h3 className="font-bold text-slate-800 text-lg">現有類別列表 ({categories.length})</h3>
+                   <p className="text-xs text-slate-400 mt-1">包含每個類別的使用頻率統計</p>
+                </div>
+                <div className="relative w-full sm:w-auto">
+                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                   <input 
+                     className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full sm:w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                     placeholder="搜尋類別..."
+                     value={searchFilter}
+                     onChange={e => setSearchFilter(e.target.value)}
+                   />
+                </div>
              </div>
              
-             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {categories.map(cat => (
-                   <div key={cat} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 group hover:border-blue-200 transition">
-                      <span className="text-sm font-medium text-slate-700">{cat}</span>
-                      {currentUser.role === 'System Admin' && (
-                        <button 
-                           onClick={() => handleDelete(cat)}
-                           className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
-                           title="刪除類別"
-                        >
-                           <Trash2 size={16} />
-                        </button>
-                      )}
-                   </div>
-                ))}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                {displayedCategories.map(cat => {
+                   const usage = categoryUsage[cat] || 0;
+                   const isEditing = editingCategory === cat;
+
+                   return (
+                     <div key={cat} className={clsx("flex items-center justify-between p-3 rounded-lg border transition", isEditing ? "bg-blue-50 border-blue-300 ring-1 ring-blue-200" : "bg-white border-slate-100 hover:border-blue-200")}>
+                        
+                        {isEditing ? (
+                           <div className="flex-1 flex gap-2 mr-2">
+                              <input 
+                                 autoFocus
+                                 className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded bg-white focus:outline-none"
+                                 value={tempEditValue}
+                                 onChange={e => setTempEditValue(e.target.value)}
+                              />
+                              <button onClick={() => saveRename(cat)} className="text-green-600 hover:bg-green-100 p-1 rounded"><CheckCircle size={18}/></button>
+                              <button onClick={cancelEditing} className="text-slate-400 hover:bg-slate-100 p-1 rounded"><X size={18}/></button>
+                           </div>
+                        ) : (
+                           <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-slate-700">{cat}</span>
+                              <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full font-mono", usage > 0 ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400")}>
+                                 {usage}
+                              </span>
+                           </div>
+                        )}
+
+                        {!isEditing && (
+                           <div className="flex items-center gap-1 opacity-60 hover:opacity-100 transition">
+                              <button 
+                                 onClick={() => startEditing(cat)}
+                                 className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition"
+                                 title="修改名稱 (自動更新關聯資料)"
+                              >
+                                 <Edit2 size={14} />
+                              </button>
+                              {currentUser.role === 'System Admin' && (
+                                 <button 
+                                    onClick={() => handleDelete(cat)}
+                                    className={clsx("p-1.5 rounded transition", usage > 0 ? "text-slate-300 cursor-not-allowed" : "text-slate-400 hover:text-red-500 hover:bg-red-50")}
+                                    title={usage > 0 ? `無法刪除：尚有 ${usage} 筆關聯資料` : "刪除類別"}
+                                 >
+                                    <Trash2 size={14} />
+                                 </button>
+                              )}
+                           </div>
+                        )}
+                     </div>
+                   );
+                })}
              </div>
           </div>
        </div>
@@ -946,9 +1175,3 @@ const AiModelTraining: React.FC = () => {
     </div>
   );
 };
-
-const LogCenter: React.FC = () => (
-  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-     <table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-6 py-4">時間</th><th className="px-6 py-4">動作</th><th className="px-6 py-4">詳情</th></tr></thead><tbody>{MOCK_LOGS.map(l => <tr key={l.id} className="hover:bg-slate-50"><td className="px-6 py-4">{l.timestamp}</td><td className="px-6 py-4 font-bold">{l.action}</td><td className="px-6 py-4">{l.details}</td></tr>)}</tbody></table>
-  </div>
-);

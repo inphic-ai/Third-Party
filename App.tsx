@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, ReactNode } from 'react';
+import React, { Component, Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { TutorialProvider } from './components/TutorialSystem';
@@ -33,10 +33,11 @@ interface ErrorBoundaryState {
 }
 
 // Simple Error Boundary Component
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false
-  };
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true };

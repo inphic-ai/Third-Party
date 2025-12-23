@@ -32,7 +32,8 @@ import {
   Check,
   ChevronDown,
   Layers,
-  AlertCircle
+  AlertCircle,
+  GripVertical
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
@@ -63,6 +64,10 @@ export const VendorDirectory: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAiSearch, setShowAiSearch] = useState(false);
   const [showLegendModal, setShowLegendModal] = useState(false);
+  
+  // Drag and drop state for favorites
+  const [customFavoritesOrder, setCustomFavoritesOrder] = useState<string[]>([]);
+  const [draggedVendorId, setDraggedVendorId] = useState<string | null>(null);
   
   // Booking Modal State
   const [bookingVendor, setBookingVendor] = useState<Vendor | null>(null);
@@ -139,7 +144,23 @@ export const VendorDirectory: React.FC = () => {
       return matchesSearch && matchesCategory && matchesRegion && matchesServiceArea && matchesRating && blacklistCheck && matchesSpecial && matchesFavorite && matchesEntityType;
     });
 
-    // Sorting
+    // Custom Sorting for Favorites
+    if (showFavoritesOnly && customFavoritesOrder.length > 0) {
+      return result.sort((a, b) => {
+        const indexA = customFavoritesOrder.indexOf(a.id);
+        const indexB = customFavoritesOrder.indexOf(b.id);
+        // If both are in custom order, sort by index
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        // If only A is in order, A comes first
+        if (indexA !== -1) return -1;
+        // If only B is in order, B comes first
+        if (indexB !== -1) return 1;
+        // Default fallback
+        return 0;
+      });
+    }
+
+    // Standard Sorting
     return result.sort((a, b) => {
       if (sortBy === 'rating_desc') return b.rating - a.rating;
       if (sortBy === 'txn_count') return b.transactions.length - a.transactions.length;
@@ -151,7 +172,44 @@ export const VendorDirectory: React.FC = () => {
       return 0; // Default order
     });
 
-  }, [searchTerm, selectedCategory, selectedRegion, selectedServiceArea, minRating, showBlacklisted, sortBy, specialFilter, showFavoritesOnly, selectedEntityType]);
+  }, [searchTerm, selectedCategory, selectedRegion, selectedServiceArea, minRating, showBlacklisted, sortBy, specialFilter, showFavoritesOnly, selectedEntityType, customFavoritesOrder]);
+
+  // Drag Handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedVendorId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedVendorId || draggedVendorId === targetId) return;
+
+    // Initialize custom order if empty using current filtered list
+    let currentOrder = customFavoritesOrder.length > 0 
+      ? [...customFavoritesOrder] 
+      : filteredVendors.map(v => v.id);
+    
+    // Ensure all visible vendors are in the order list if specific ones were missing
+    filteredVendors.forEach(v => {
+       if(!currentOrder.includes(v.id)) currentOrder.push(v.id);
+    });
+
+    const fromIndex = currentOrder.indexOf(draggedVendorId);
+    const toIndex = currentOrder.indexOf(targetId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    // Move item
+    const [movedItem] = currentOrder.splice(fromIndex, 1);
+    currentOrder.splice(toIndex, 0, movedItem);
+
+    setCustomFavoritesOrder(currentOrder);
+    setDraggedVendorId(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -239,9 +297,17 @@ export const VendorDirectory: React.FC = () => {
               <label className={clsx("flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition select-none border", 
                  showFavoritesOnly ? "bg-red-50 border-red-100 text-red-600 font-bold" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
               )}>
-                 <input type="checkbox" className="hidden" checked={showFavoritesOnly} onChange={() => setShowFavoritesOnly(!showFavoritesOnly)} />
+                 <input 
+                   type="checkbox" 
+                   className="hidden" 
+                   checked={showFavoritesOnly} 
+                   onChange={() => {
+                     setShowFavoritesOnly(!showFavoritesOnly);
+                     if (!showFavoritesOnly) setViewMode('list'); // Switch to list for better DnD UX
+                   }} 
+                 />
                  <Heart size={16} className={clsx(showFavoritesOnly ? "fill-current" : "")} />
-                 <span>我的最愛</span>
+                 <span>我的最愛 (自訂排序)</span>
               </label>
 
               <label className={clsx("flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition select-none border", 
@@ -254,16 +320,24 @@ export const VendorDirectory: React.FC = () => {
            </div>
 
            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-sm text-gray-500 whitespace-nowrap">排序：</span>
-              <select 
-                className="px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full font-medium text-gray-700"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-              >
-                <option value="default">預設 (ID)</option>
-                <option value="rating_desc">評分 (高 &rarr; 低)</option>
-                <option value="txn_count">合作次數 (多 &rarr; 少)</option>
-              </select>
+              {showFavoritesOnly ? (
+                 <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded">
+                   提示: 在列表模式下可拖曳調整順序
+                 </span>
+              ) : (
+                <>
+                  <span className="text-sm text-gray-500 whitespace-nowrap">排序：</span>
+                  <select 
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full font-medium text-gray-700"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                  >
+                    <option value="default">預設 (ID)</option>
+                    <option value="rating_desc">評分 (高 &rarr; 低)</option>
+                    <option value="txn_count">合作次數 (多 &rarr; 少)</option>
+                  </select>
+                </>
+              )}
            </div>
         </div>
       </div>
@@ -284,7 +358,17 @@ export const VendorDirectory: React.FC = () => {
           <>
             {viewMode === 'card' && <CardView vendors={filteredVendors} onBook={handleBook} onToggleFavorite={handleToggleFavorite} />}
             {viewMode === 'grid' && <GridView vendors={filteredVendors} onBook={handleBook} />}
-            {viewMode === 'list' && <ListView vendors={filteredVendors} onBook={handleBook} />}
+            {viewMode === 'list' && (
+              <ListView 
+                vendors={filteredVendors} 
+                onBook={handleBook} 
+                enableDrag={showFavoritesOnly} 
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                draggedId={draggedVendorId}
+              />
+            )}
             {viewMode === 'group' && <GroupView vendors={filteredVendors} onBook={handleBook} />}
           </>
         )}
@@ -802,11 +886,22 @@ const GridView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = (
   </div>
 );
 
-const ListView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = ({ vendors, onBook }) => (
+interface ListViewProps {
+  vendors: Vendor[];
+  onBook: (v: Vendor) => void;
+  enableDrag: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, id: string) => void;
+  draggedId: string | null;
+}
+
+const ListView: React.FC<ListViewProps> = ({ vendors, onBook, enableDrag, onDragStart, onDragOver, onDrop, draggedId }) => (
   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
      <table className="w-full text-sm text-left">
         <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold">
            <tr>
+              {enableDrag && <th className="w-10 pl-4 py-4"></th>}
               <th className="px-6 py-4">廠商</th>
               <th className="px-6 py-4">類別</th>
               <th className="px-6 py-4 text-center">狀態</th>
@@ -815,7 +910,24 @@ const ListView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = (
         </thead>
         <tbody className="divide-y divide-gray-100">
            {vendors.map(v => (
-              <tr key={v.id} className="hover:bg-gray-50 transition">
+              <tr 
+                key={v.id} 
+                className={clsx(
+                  "hover:bg-gray-50 transition",
+                  draggedId === v.id && "bg-blue-50 opacity-50 border-2 border-blue-300"
+                )}
+                draggable={enableDrag}
+                onDragStart={(e) => onDragStart(e, v.id)}
+                onDragOver={onDragOver}
+                onDrop={(e) => onDrop(e, v.id)}
+              >
+                 {enableDrag && (
+                    <td className="pl-4">
+                       <div className="cursor-grab text-gray-300 hover:text-gray-600 p-2">
+                          <GripVertical size={16} />
+                       </div>
+                    </td>
+                 )}
                  <td className="px-6 py-4 font-bold text-gray-800 flex items-center gap-3">
                     <img src={v.avatarUrl} className="w-8 h-8 rounded-full" />
                     {v.name}

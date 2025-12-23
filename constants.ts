@@ -428,10 +428,10 @@ export const MOCK_LOGS: SystemLog[] = [
 ];
 
 export const MOCK_LOGIN_LOGS: LoginLog[] = [
-  { id: 'li1', timestamp: '2024-03-15 09:00', user: 'Alex Chen', ip: '192.168.1.101', device: 'Chrome / Mac', status: 'Success' },
-  { id: 'li2', timestamp: '2024-03-15 09:05', user: 'Sarah Lin', ip: '192.168.1.102', device: 'Safari / iPhone', status: 'Success' },
-  { id: 'li3', timestamp: '2024-03-14 18:30', user: 'Unknown', ip: '203.145.2.11', device: 'Firefox / Windows', status: 'Failed' },
-  { id: 'li4', timestamp: '2024-03-14 09:00', user: 'Mike Wang', ip: '192.168.1.103', device: 'Edge / Windows', status: 'Success' },
+  { id: 'li1', timestamp: '2024-03-15 09:00', user: 'Alex Chen', ip: '192.168.1.101', device: 'Chrome / Mac', status: 'success' },
+  { id: 'li2', timestamp: '2024-03-15 09:05', user: 'Sarah Lin', ip: '192.168.1.102', device: 'Safari / iPhone', status: 'success' },
+  { id: 'li3', timestamp: '2024-03-14 18:30', user: 'Unknown', ip: '203.145.2.11', device: 'Firefox / Windows', status: 'failed' },
+  { id: 'li4', timestamp: '2024-03-14 09:00', user: 'Mike Wang', ip: '192.168.1.103', device: 'Edge / Windows', status: 'success' },
 ];
 
 export const MOCK_SUBSCRIPTIONS: Subscription[] = [

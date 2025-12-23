@@ -247,7 +247,7 @@ export interface LoginLog {
   user: string;
   ip: string;
   device: string;
-  status: 'Success' | 'Failed';
+  status: 'success' | 'failed';
 }
 
 export interface Subscription {

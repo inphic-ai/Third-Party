@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { MOCK_VENDORS } from '../constants';
 import { TransactionStatus } from '../types';
-import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search } from 'lucide-react';
+import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search, FileText, Upload, Paperclip } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 
@@ -14,6 +14,10 @@ export const Payments: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Local state to simulate labor form uploads
+  const [laborFormStatuses, setLaborFormStatuses] = useState<Record<string, 'N/A' | 'Pending' | 'Submitted' | 'Paid'>>({});
+  const [showUploadModal, setShowUploadModal] = useState<string | null>(null); // Transaction ID
 
   // Helper for Month Navigation
   const handlePrevMonth = () => {
@@ -32,9 +36,15 @@ export const Payments: React.FC = () => {
     return MOCK_VENDORS.flatMap(v => 
       v.transactions
         .filter(t => t.status === TransactionStatus.APPROVED || t.status === TransactionStatus.PAID)
-        .map(t => ({ ...t, vendorName: v.name, vendorId: v.id }))
+        .map(t => ({ 
+          ...t, 
+          vendorName: v.name, 
+          vendorId: v.id,
+          // Use local state if updated, otherwise default
+          laborFormStatus: laborFormStatuses[t.id] || t.laborFormStatus 
+        }))
     ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, []);
+  }, [laborFormStatuses]);
 
   // Filter Logic: 1. By Date (Month), 2. By Status (Filter Toggle), 3. By Search Term
   const filteredTransactions = useMemo(() => {
@@ -49,8 +59,6 @@ export const Payments: React.FC = () => {
         if (!matchesSearch) return false;
       } else {
         // Date Filter only applies if not searching (or strict month view)
-        // Usually payment records strictly follow month views, but search might span across.
-        // For this design, let's keep Month view strict even with search, to filter within month.
         const matchesMonth = t.date.startsWith(currentMonthStr);
         if (!matchesMonth) return false;
       }
@@ -77,6 +85,16 @@ export const Payments: React.FC = () => {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  const handleUploadSubmit = () => {
+    if (showUploadModal) {
+      setLaborFormStatuses(prev => ({
+        ...prev,
+        [showUploadModal]: 'Submitted'
+      }));
+      setShowUploadModal(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -186,6 +204,7 @@ export const Payments: React.FC = () => {
                 <th className="px-6 py-3">描述</th>
                 <th className="px-6 py-3">驗收日期</th>
                 <th className="px-6 py-3 text-right">金額</th>
+                <th className="px-6 py-3 text-center">勞報單</th>
                 <th className="px-6 py-3 text-center">狀態</th>
                 <th className="px-6 py-3 text-center">操作</th>
               </tr>
@@ -209,6 +228,23 @@ export const Payments: React.FC = () => {
                   <td className="px-6 py-4 text-right font-mono font-medium text-slate-800">
                     ${t.amount.toLocaleString()}
                   </td>
+                  
+                  {/* Labor Form Status Column */}
+                  <td className="px-6 py-4 text-center">
+                    {t.laborFormStatus === 'Submitted' || t.laborFormStatus === 'Paid' ? (
+                       <span className="text-xs text-green-600 font-bold flex items-center justify-center gap-1">
+                         <FileText size={14} /> 已繳交
+                       </span>
+                    ) : (
+                       <button 
+                         onClick={() => setShowUploadModal(t.id)}
+                         className="text-xs text-orange-600 font-bold hover:bg-orange-50 px-2 py-1 rounded border border-dashed border-orange-300 flex items-center justify-center gap-1 mx-auto"
+                       >
+                         <Upload size={14} /> 待上傳
+                       </button>
+                    )}
+                  </td>
+
                   <td className="px-6 py-4 text-center">
                     <span className={clsx(
                       "px-2 py-1 rounded-full text-xs font-bold",
@@ -228,7 +264,7 @@ export const Payments: React.FC = () => {
                 </tr>
               ))}
               {paginatedTransactions.length === 0 && (
-                 <tr><td colSpan={6} className="text-center py-8 text-slate-400">本月沒有符合條件的項目</td></tr>
+                 <tr><td colSpan={7} className="text-center py-8 text-slate-400">本月沒有符合條件的項目</td></tr>
               )}
             </tbody>
           </table>
@@ -271,6 +307,34 @@ export const Payments: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Labor Form Upload Modal */}
+      {showUploadModal && (
+         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+                 <h3 className="text-lg font-bold flex items-center gap-2">
+                    <FileText size={20} className="text-orange-400" /> 上傳勞務報酬單
+                 </h3>
+                 <button onClick={() => setShowUploadModal(null)} className="text-slate-400 hover:text-white"><X size={24}/></button>
+              </div>
+              <div className="p-6">
+                 <p className="text-sm text-slate-600 mb-4">請確認您已收到廠商簽署完畢的勞務報酬單（含身分證影本），並掃描成 PDF 上傳。</p>
+                 
+                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-slate-400 transition cursor-pointer mb-6">
+                    <Paperclip size={32} className="mb-2" />
+                    <span className="text-sm font-bold">點擊選擇檔案 或 拖曳至此</span>
+                    <span className="text-xs mt-1">支援 PDF, JPG, PNG (Max 5MB)</span>
+                 </div>
+
+                 <div className="flex gap-3">
+                    <button onClick={() => setShowUploadModal(null)} className="flex-1 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg">取消</button>
+                    <button onClick={handleUploadSubmit} className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg shadow-sm">確認上傳</button>
+                 </div>
+              </div>
+           </div>
+         </div>
+      )}
     </div>
   );
 };
