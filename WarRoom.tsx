@@ -1,8 +1,8 @@
 
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { MOCK_VENDORS, MOCK_KNOWLEDGE_BASE } from '../constants';
-import { TransactionStatus } from '../types';
+import { MOCK_VENDORS, MOCK_KNOWLEDGE_BASE } from './constants';
+import { TransactionStatus } from './types';
 import { 
   Trophy, 
   Phone, 

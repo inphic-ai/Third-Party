@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { MOCK_VENDORS, CATEGORY_GROUPS, TAIWAN_REGIONS, CHINA_REGIONS } from '../constants';
+import { MOCK_VENDORS, CATEGORY_GROUPS, TAIWAN_REGIONS, CHINA_REGIONS, MOCK_USERS } from '../constants';
 import { Region, EntityType, Vendor, VendorCategory, ServiceType } from '../types';
 import { 
   Search, 
@@ -69,6 +69,9 @@ export const VendorDirectory: React.FC = () => {
   // Drag and drop state for favorites
   const [customFavoritesOrder, setCustomFavoritesOrder] = useState<string[]>([]);
   const [draggedVendorId, setDraggedVendorId] = useState<string | null>(null);
+
+  // Permission Check
+  const canAddVendors = MOCK_USERS[0].permissions.canAddVendors;
   
   // Handle URL Params on Mount
   useEffect(() => {
@@ -231,12 +234,14 @@ export const VendorDirectory: React.FC = () => {
              <Sparkles size={18} /> AI 推薦
            </button>
 
-           <button 
-             onClick={() => setShowAddModal(true)}
-             className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition shadow-sm font-medium flex items-center gap-2"
-           >
-             <Plus size={18} /> 新增廠商
-           </button>
+           {canAddVendors && (
+             <button 
+               onClick={() => setShowAddModal(true)}
+               className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition shadow-sm font-medium flex items-center gap-2"
+             >
+               <Plus size={18} /> 新增廠商
+             </button>
+           )}
         </div>
       </div>
 

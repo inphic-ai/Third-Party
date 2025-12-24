@@ -214,7 +214,9 @@ export interface UserPermissions {
   // Specific Actions
   canManageCategories: boolean; // Add/Delete Categories
   canManageUsers: boolean;      // Add/Edit Users
-  canDeleteVendors: boolean;
+  canAddVendors: boolean;       // Add New Vendors
+  canEditVendors: boolean;      // Edit Vendor Details
+  canDeleteVendors: boolean;    // Delete Vendors
 }
 
 export interface SecuritySettings {
@@ -231,7 +233,7 @@ export interface AdminUser {
   avatarUrl?: string;
   department: string; // ID or Name
   role: UserRole;
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Pending'; // Added 'Pending'
   accumulatedBonus: number; // For vendor referrals
   
   // Authentication
@@ -249,8 +251,8 @@ export interface Department {
   id: string;
   name: string;
   description: string;
-  managerName?: string;
   memberCount: number;
+  managerName?: string;
 }
 
 export interface SystemLog {

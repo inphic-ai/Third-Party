@@ -1,4 +1,5 @@
-import React, { Component, Suspense, lazy, ReactNode } from 'react';
+
+import React, { Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { TutorialProvider } from './components/TutorialSystem';
@@ -11,7 +12,8 @@ const VendorDetail = lazy(() => import('./components/VendorDetail').then(module 
 const Announcements = lazy(() => import('./components/Announcements').then(module => ({ default: module.Announcements })));
 const TransactionDetail = lazy(() => import('./components/TransactionDetail').then(module => ({ default: module.TransactionDetail })));
 const Payments = lazy(() => import('./components/Payments').then(module => ({ default: module.Payments })));
-const Admin = lazy(() => import('./components/Admin').then(module => ({ default: module.Admin })));
+// Fixed: Use default import for Admin component
+const Admin = lazy(() => import('./components/Admin'));
 const Tasks = lazy(() => import('./components/Tasks').then(module => ({ default: module.Tasks })));
 const CommunicationHub = lazy(() => import('./components/CommunicationHub').then(module => ({ default: module.CommunicationHub })));
 const KnowledgeBase = lazy(() => import('./components/KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
@@ -34,7 +36,13 @@ interface ErrorBoundaryState {
 
 // Simple Error Boundary Component
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false };
+  public state: ErrorBoundaryState = { hasError: false };
+  props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true };

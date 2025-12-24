@@ -1,20 +1,21 @@
-import React, { Component, Suspense, lazy, ReactNode } from 'react';
+
+import React, { Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Layout } from './components/Layout';
-import { TutorialProvider } from './components/TutorialSystem';
+import { Layout } from './Layout';
+import { TutorialProvider } from './TutorialSystem';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 
-// Lazy Load Components for Performance
-const WarRoom = lazy(() => import('./components/WarRoom').then(module => ({ default: module.WarRoom })));
-const VendorDirectory = lazy(() => import('./components/VendorDirectory').then(module => ({ default: module.VendorDirectory })));
-const VendorDetail = lazy(() => import('./components/VendorDetail').then(module => ({ default: module.VendorDetail })));
-const Announcements = lazy(() => import('./components/Announcements').then(module => ({ default: module.Announcements })));
-const TransactionDetail = lazy(() => import('./components/TransactionDetail').then(module => ({ default: module.TransactionDetail })));
-const Payments = lazy(() => import('./components/Payments').then(module => ({ default: module.Payments })));
-const Admin = lazy(() => import('./components/Admin').then(module => ({ default: module.Admin })));
-const Tasks = lazy(() => import('./components/Tasks').then(module => ({ default: module.Tasks })));
-const CommunicationHub = lazy(() => import('./components/CommunicationHub').then(module => ({ default: module.CommunicationHub })));
-const KnowledgeBase = lazy(() => import('./components/KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
+// Lazy Load Components from Root
+const WarRoom = lazy(() => import('./WarRoom').then(module => ({ default: module.WarRoom })));
+const VendorDirectory = lazy(() => import('./VendorDirectory').then(module => ({ default: module.VendorDirectory })));
+const VendorDetail = lazy(() => import('./VendorDetail').then(module => ({ default: module.VendorDetail })));
+const Announcements = lazy(() => import('./Announcements').then(module => ({ default: module.Announcements })));
+const TransactionDetail = lazy(() => import('./TransactionDetail').then(module => ({ default: module.TransactionDetail })));
+const Payments = lazy(() => import('./Payments').then(module => ({ default: module.Payments })));
+const Admin = lazy(() => import('./Admin').then(module => ({ default: module.Admin })));
+const Tasks = lazy(() => import('./Tasks').then(module => ({ default: module.Tasks })));
+const CommunicationHub = lazy(() => import('./CommunicationHub').then(module => ({ default: module.CommunicationHub })));
+const KnowledgeBase = lazy(() => import('./KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
 
 // Loading Component
 const LoadingFallback = () => (
@@ -35,6 +36,12 @@ interface ErrorBoundaryState {
 // Simple Error Boundary Component
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false };
+  props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true };

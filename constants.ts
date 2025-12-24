@@ -54,7 +54,7 @@ export const MOCK_KNOWLEDGE_BASE: KnowledgeBaseItem[] = [
   }
 ];
 
-// Default System Tags
+// Default System Tags - Updated based on user request
 export const MOCK_SYSTEM_TAGS: SystemTags = {
   contactTags: ['報價中', '已預約', '無人接聽', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘'],
   serviceTags: ['夜間施工', '急件處理', '含廢棄物清運', '需支付訂金', '可配合輪班', '自有工班'],
@@ -97,7 +97,7 @@ export const MOCK_TUTORIALS: TutorialTip[] = [
 
 export const MOCK_VENDORS: Vendor[] = [
   {
-    id: 'C2024001',
+    id: 'C2024001', // C = Company
     name: '大發水電工程行',
     taxId: '23456789',
     mainPhone: '02-2788-1234',
@@ -108,17 +108,17 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.PLUMBING, VendorCategory.RENOVATION],
     rating: 4.8,
     ratingCount: 15,
-    createdBy: 'u1',
+    createdBy: 'u1', // Alex Created this
     priceRange: '$$',
-    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'],
+    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '台北市, 新北市',
     address: '台北市信義區忠孝東路五段100號',
     internalNotes: '配合度高，但在忙時很難約，建議提前兩週。',
-    lineId: '@dafa_official',
+    lineId: '@dafa_official', // Corporate ID
     isFavorite: true,
     missedContactLogCount: 2,
-    phoneViewCount: 45,
+    phoneViewCount: 45, // High view count
     bookingClickCount: 12,
     contacts: [
         { id: 'c1', name: '張大發', role: '負責人', mobile: '0912-345-678', isMainContact: true, lineId: 'dafa888' },
@@ -158,7 +158,7 @@ export const MOCK_VENDORS: Vendor[] = [
     ]
   },
   {
-    id: 'I2024001',
+    id: 'I2024001', // I = Individual
     name: '陳志豪',
     mainPhone: '0988-777-666',
     avatarUrl: 'https://picsum.photos/id/32/200/200',
@@ -168,18 +168,18 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.WOODWORK, VendorCategory.RENOVATION],
     rating: 2.5,
     ratingCount: 4,
-    createdBy: 'u2',
+    createdBy: 'u2', // Sarah Created this
     priceRange: '$$$',
     tags: ['手藝精細', '情緒化'],
     isBlacklisted: true,
     serviceArea: '台中市, 南投縣, 彰化縣',
     address: '台中市西屯區台灣大道三段',
     internalNotes: '技術好但個性急，報價偏高，多次與現場人員起衝突，暫時列入黑名單。',
-    lineId: 'chen_wood_master',
+    lineId: 'chen_wood_master', // Personal Main ID
     isFavorite: false,
     missedContactLogCount: 5,
-    phoneViewCount: 20,
-    bookingClickCount: 1,
+    phoneViewCount: 20, // Many views
+    bookingClickCount: 1, // Low booking
     contacts: [
         { id: 'c3', name: '陳志豪', role: '木工師傅', mobile: '0988-777-666', isMainContact: true, lineId: 'chen_wood_master' }
     ],
@@ -218,7 +218,7 @@ export const MOCK_VENDORS: Vendor[] = [
     serviceArea: '廣東省, 福建省',
     address: '廣東省深圳市南山區科技園',
     internalNotes: '時效穩定，窗口回覆快。',
-    wechatId: 'suda_logistics_official',
+    wechatId: 'suda_logistics_official', // Corporate WeChat
     isFavorite: true,
     missedContactLogCount: 1,
     phoneViewCount: 30,
@@ -261,9 +261,9 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.DESIGN],
     rating: 5.0,
     ratingCount: 8,
-    createdBy: 'u4',
+    createdBy: 'u4', // Emily Created
     priceRange: '$$',
-    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'],
+    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '全部',
     address: '新北市板橋區文化路一段',
@@ -330,13 +330,13 @@ export const MOCK_VENDORS: Vendor[] = [
 
 export const CATEGORY_OPTIONS = Object.values(VendorCategory);
 
-// --- Admin Mock Data ---
+// --- Admin Mock Data (Updated with Permissions) ---
 
 export const MOCK_DEPARTMENTS: Department[] = [
-  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', managerName: 'Alex Chen', memberCount: 5 },
-  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', managerName: 'Sarah Lin', memberCount: 3 },
-  { id: 'D003', name: '業務部', description: '國內外市場開發', managerName: 'Mike Wang', memberCount: 8 },
-  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', managerName: 'Emily Wu', memberCount: 4 },
+  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', memberCount: 5 },
+  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', memberCount: 3 },
+  { id: 'D003', name: '業務部', description: '國內外市場開發', memberCount: 8 },
+  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', memberCount: 4 },
 ];
 
 export const MOCK_USERS: AdminUser[] = [
@@ -362,7 +362,9 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: true,
       canManageCategories: true,
       canManageUsers: true,
-      canDeleteVendors: true
+      canDeleteVendors: true,
+      canAddVendors: true,
+      canEditVendors: true
     },
     securitySettings: {
       allowedIps: [],
@@ -392,7 +394,9 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false, 
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false
+      canDeleteVendors: false,
+      canAddVendors: true,
+      canEditVendors: true
     },
     securitySettings: {
       allowedIps: ['192.168.1.50'],
@@ -422,7 +426,9 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false,
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false
+      canDeleteVendors: false,
+      canAddVendors: false,
+      canEditVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -452,7 +458,41 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false,
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false
+      canDeleteVendors: false,
+      canAddVendors: true,
+      canEditVendors: false
+    },
+    securitySettings: {
+      allowedIps: [],
+      accessTimeStart: '00:00',
+      accessTimeEnd: '23:59',
+      isTimeRestricted: false
+    }
+  },
+  { 
+    id: 'u5', 
+    name: 'Newbie Chen', 
+    email: 'newbie@company.com', 
+    department: '業務部', 
+    role: 'Viewer', 
+    status: 'Pending', 
+    avatarUrl: 'https://picsum.photos/id/99/100/100', 
+    accumulatedBonus: 0,
+    googleLinked: true,
+    permissions: {
+      viewWarRoom: true,
+      viewVendors: true,
+      viewTasks: false,
+      viewCommunication: false,
+      viewPayments: false,
+      viewKnowledge: true,
+      viewAnnouncements: true,
+      accessAdminPanel: false,
+      canManageCategories: false,
+      canManageUsers: false,
+      canDeleteVendors: false,
+      canAddVendors: false,
+      canEditVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -464,10 +504,15 @@ export const MOCK_USERS: AdminUser[] = [
 ];
 
 export const MOCK_LOGS: SystemLog[] = [
-  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '修改', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
   { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+  { id: 'l5', timestamp: '2024-03-13 10:05', user: 'Mike Wang', action: '點擊/檢視', target: '大發水電工程行', details: '查看了詳細資料與聯絡方式', ip: '192.168.1.103', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+  { id: 'l6', timestamp: '2024-03-13 14:20', user: 'Sarah Lin', action: '修改', target: '林小美', details: '更新了作品集連結', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+  { id: 'l7', timestamp: '2024-03-12 09:30', user: 'Alex Chen', action: '點擊/檢視', target: '深圳速達物流', details: '查詢了報關歷史紀錄', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+  { id: 'l8', timestamp: '2024-03-12 16:00', user: 'Emily Wu', action: '新增', target: '王大力', details: '建立了新的貨運司機資料', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' },
+  { id: 'l9', timestamp: '2024-03-11 11:45', user: 'Alex Chen', action: '刪除', target: '舊供應商A', details: '清理過期資料', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
 ];
 
 export const MOCK_LOGIN_LOGS: LoginLog[] = [
@@ -475,6 +520,9 @@ export const MOCK_LOGIN_LOGS: LoginLog[] = [
   { id: 'li2', timestamp: '2024-03-15 09:05', user: 'Sarah Lin', ip: '192.168.1.102', device: 'Safari / iPhone', status: 'success' },
   { id: 'li3', timestamp: '2024-03-14 18:30', user: 'Unknown', ip: '203.145.2.11', device: 'Firefox / Windows', status: 'failed' },
   { id: 'li4', timestamp: '2024-03-14 09:00', user: 'Mike Wang', ip: '192.168.1.103', device: 'Edge / Windows', status: 'success' },
+  { id: 'li5', timestamp: '2024-03-13 08:55', user: 'Emily Wu', ip: '192.168.1.105', device: 'Chrome / iPhone', status: 'success' },
+  { id: 'li6', timestamp: '2024-03-12 21:10', user: 'Alex Chen', ip: '192.168.1.101', device: 'Chrome / Mac', status: 'success' },
+  { id: 'li7', timestamp: '2024-03-11 10:20', user: 'Sarah Lin', ip: '114.34.22.11', device: 'Safari / Mac', status: 'failed' },
 ];
 
 export const MOCK_SUBSCRIPTIONS: Subscription[] = [
