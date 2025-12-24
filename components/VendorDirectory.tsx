@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { MOCK_VENDORS, TAIWAN_REGIONS, CHINA_REGIONS, CATEGORY_GROUPS } from '../constants';
+import { MOCK_VENDORS, CATEGORY_GROUPS, TAIWAN_REGIONS, CHINA_REGIONS } from '../constants';
 import { Region, EntityType, Vendor, VendorCategory, ServiceType } from '../types';
 import { 
   Search, 
@@ -11,33 +11,34 @@ import {
   LayoutGrid, 
   List, 
   LayoutList, 
-  FolderOpen,
-  Plus,
-  AlertTriangle,
-  RefreshCw,
-  Filter,
-  ArrowUpDown,
-  Crown,
-  Ban,
-  Sparkles,
-  Bot,
-  X,
-  Heart,
-  CalendarCheck,
-  User,
-  Building2,
-  Phone,
-  Info,
-  HelpCircle,
-  Check,
-  ChevronDown,
-  Layers,
-  AlertCircle,
-  GripVertical
+  FolderOpen, 
+  Plus, 
+  AlertTriangle, 
+  RefreshCw, 
+  Filter, 
+  ArrowUpDown, 
+  Crown, 
+  Ban, 
+  Sparkles, 
+  Bot, 
+  X, 
+  Heart, 
+  CalendarCheck, 
+  User, 
+  Building2, 
+  Phone, 
+  Info, 
+  HelpCircle, 
+  Check, 
+  ChevronDown, 
+  Layers, 
+  AlertCircle, 
+  GripVertical,
+  ArrowRight,
+  CheckCircle
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { useTutorial } from './TutorialSystem';
 
 type ViewMode = 'grid' | 'card' | 'list' | 'group';
 type SortOption = 'default' | 'rating_desc' | 'txn_count' | 'last_active';
@@ -58,7 +59,7 @@ export const VendorDirectory: React.FC = () => {
   const [showBlacklisted, setShowBlacklisted] = useState<boolean>(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<SortOption>('default');
-  const [specialFilter, setSpecialFilter] = useState<string | null>(null);
+  const [specialFilter, setSpecialFilter] = useState<string>('');
 
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -69,9 +70,6 @@ export const VendorDirectory: React.FC = () => {
   const [customFavoritesOrder, setCustomFavoritesOrder] = useState<string[]>([]);
   const [draggedVendorId, setDraggedVendorId] = useState<string | null>(null);
   
-  // Booking Modal State
-  const [bookingVendor, setBookingVendor] = useState<Vendor | null>(null);
-
   // Handle URL Params on Mount
   useEffect(() => {
     if (filterParam === 'missed') {
@@ -79,19 +77,17 @@ export const VendorDirectory: React.FC = () => {
     } else if (filterParam === 'contacting') {
       setSpecialFilter('contacting');
     } else {
-      setSpecialFilter(null);
+      setSpecialFilter('');
     }
     if (queryParam) setSearchTerm(queryParam);
   }, [filterParam, queryParam]);
 
   const clearSpecialFilter = () => {
-    setSpecialFilter(null);
+    setSpecialFilter('');
     setSearchTerm('');
     setSelectedCategory('');
     setSearchParams({});
   };
-
-  const handleBook = (vendor: Vendor) => setBookingVendor(vendor);
 
   const handleToggleFavorite = (vendorId: string) => {
     // In a real app, this would dispatch an API call
@@ -102,18 +98,6 @@ export const VendorDirectory: React.FC = () => {
         setSearchTerm(prev => prev + " ");
         setTimeout(() => setSearchTerm(prev => prev.trim()), 0);
     }
-  };
-
-  // Dynamic Service Area Options based on selected Region
-  const availableServiceAreas = useMemo(() => {
-    if (selectedRegion === Region.TAIWAN) return TAIWAN_REGIONS;
-    if (selectedRegion === Region.CHINA) return CHINA_REGIONS;
-    return [];
-  }, [selectedRegion]);
-
-  const handleRegionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedRegion(e.target.value);
-    setSelectedServiceArea(''); // Reset specific area when region changes
   };
 
   const filteredVendors = useMemo(() => {
@@ -356,12 +340,11 @@ export const VendorDirectory: React.FC = () => {
           </div>
         ) : (
           <>
-            {viewMode === 'card' && <CardView vendors={filteredVendors} onBook={handleBook} onToggleFavorite={handleToggleFavorite} />}
-            {viewMode === 'grid' && <GridView vendors={filteredVendors} onBook={handleBook} />}
+            {viewMode === 'card' && <CardView vendors={filteredVendors} onToggleFavorite={handleToggleFavorite} />}
+            {viewMode === 'grid' && <GridView vendors={filteredVendors} />}
             {viewMode === 'list' && (
               <ListView 
                 vendors={filteredVendors} 
-                onBook={handleBook} 
                 enableDrag={showFavoritesOnly} 
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
@@ -369,7 +352,7 @@ export const VendorDirectory: React.FC = () => {
                 draggedId={draggedVendorId}
               />
             )}
-            {viewMode === 'group' && <GroupView vendors={filteredVendors} onBook={handleBook} />}
+            {viewMode === 'group' && <GroupView vendors={filteredVendors} />}
           </>
         )}
       </div>
@@ -380,7 +363,8 @@ export const VendorDirectory: React.FC = () => {
       {/* System Legend Modal */}
       {showLegendModal && <SystemLegendModal onClose={() => setShowLegendModal(false)} />}
       
-      {/* ... Other Modals ... */}
+      {/* AI Search Modal */}
+      {showAiSearch && <AiSearchModal onClose={() => setShowAiSearch(false)} />}
     </div>
   );
 };
@@ -566,7 +550,8 @@ const AdvancedCategoryFilter: React.FC<{ selectedCategory: string; onChange: (c:
   const filteredGroups = useMemo(() => {
     const result: Record<string, string[]> = {};
     Object.entries(CATEGORY_GROUPS).forEach(([groupName, items]) => {
-      const filteredItems = items.filter(item => item.toLowerCase().includes(filterText.toLowerCase()));
+      // Use type assertion to avoid unknown[] inference if necessary
+      const filteredItems = (items as string[]).filter(item => item.toLowerCase().includes(filterText.toLowerCase()));
       if (filteredItems.length > 0) {
         result[groupName] = filteredItems;
       }
@@ -719,9 +704,17 @@ const SystemLegendModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 };
 
-// ... (Rest of components: CardView, GridView etc. remain the same)
-// --- Updated Card Component matching the new style ---
-const VendorCardItem: React.FC<{ vendor: Vendor; onBook: (v: Vendor) => void; onToggleFavorite: (id: string) => void }> = React.memo(({ vendor, onBook, onToggleFavorite }) => {
+/* --- Helpers --- */
+const getActiveReservation = (vendor: Vendor) => {
+  const today = new Date().toISOString().split('T')[0];
+  const reservation = vendor.contactLogs
+    .filter(log => log.isReservation && log.date >= today)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  return reservation;
+};
+
+/* --- Updated Card Component (Button Removed) --- */
+const VendorCardItem: React.FC<{ vendor: Vendor; onToggleFavorite: (id: string) => void }> = React.memo(({ vendor, onToggleFavorite }) => {
   const reservation = getActiveReservation(vendor);
   const isExcellent = vendor.tags.includes('優良廠商') || vendor.rating >= 4.8;
   
@@ -762,7 +755,7 @@ const VendorCardItem: React.FC<{ vendor: Vendor; onBook: (v: Vendor) => void; on
          </div>
       )}
 
-      {/* Main Info */}
+      {/* Main Info Link */}
       <Link to={`/vendors/${vendor.id}`} className="flex-1 pt-2">
         <div className="flex items-center gap-4 mb-4">
           <div className="relative">
@@ -824,7 +817,7 @@ const VendorCardItem: React.FC<{ vendor: Vendor; onBook: (v: Vendor) => void; on
         </div>
         
         {/* Tags */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        <div className="flex flex-wrap gap-1.5 mb-2">
           {vendor.tags.slice(0, 3).map(tag => (
             <span key={tag} className="text-[10px] bg-white text-gray-500 px-2 py-1 rounded-md border border-gray-200 shadow-sm">
               #{tag}
@@ -832,54 +825,27 @@ const VendorCardItem: React.FC<{ vendor: Vendor; onBook: (v: Vendor) => void; on
           ))}
         </div>
       </Link>
-
-      {/* Actions */}
-      <div className="mt-auto pt-4 border-t border-gray-100">
-        <button 
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onBook(vendor);
-          }}
-          className="w-full py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold hover:bg-gray-900 transition flex items-center justify-center gap-2 shadow-sm"
-        >
-           <CalendarCheck size={16} /> 立即預約
-        </button>
-      </div>
     </div>
   );
 });
 
-// Helpers (Same as before)
-const getLastServiceDate = (vendor: Vendor) => {
-  if (vendor.transactions.length === 0) return '無紀錄';
-  const sorted = [...vendor.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  return sorted[0].date;
-};
-
-const getActiveReservation = (vendor: Vendor) => {
-  const today = new Date().toISOString().split('T')[0];
-  const reservation = vendor.contactLogs
-    .filter(log => log.isReservation && log.date >= today)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
-  return reservation;
-};
-
-const CardView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void; onToggleFavorite: (id: string) => void }> = ({ vendors, onBook, onToggleFavorite }) => (
+/* --- Updated CardView (Removes onBook) --- */
+const CardView: React.FC<{ vendors: Vendor[]; onToggleFavorite: (id: string) => void }> = ({ vendors, onToggleFavorite }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
     {vendors.map(vendor => (
-      <VendorCardItem key={vendor.id} vendor={vendor} onBook={onBook} onToggleFavorite={onToggleFavorite} />
+      <VendorCardItem key={vendor.id} vendor={vendor} onToggleFavorite={onToggleFavorite} />
     ))}
   </div>
 );
 
-const GridView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = ({ vendors, onBook }) => (
+/* --- Updated GridView (Removes onBook) --- */
+const GridView: React.FC<{ vendors: Vendor[] }> = ({ vendors }) => (
   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
     {vendors.map(vendor => (
-      <Link to={`/vendors/${vendor.id}`} key={vendor.id} className="bg-white rounded-xl p-4 border border-gray-100 hover:border-gray-300 hover:shadow-md transition flex flex-col items-center text-center group relative">
+      <Link to={`/vendors/${vendor.id}`} key={vendor.id} className="bg-white rounded-xl p-4 border border-gray-100 hover:border-gray-300 hover:shadow-md transition flex flex-col items-center text-center group relative h-full">
          <img src={vendor.avatarUrl} className="w-14 h-14 rounded-full mb-3 object-cover grayscale group-hover:grayscale-0 transition duration-300" />
          <h3 className="font-bold text-gray-800 text-sm truncate w-full">{vendor.name}</h3>
-         <p className="text-[10px] text-gray-400">{vendor.categories[0]}</p>
+         <p className="text-xs text-gray-400 mt-1">{vendor.categories[0]}</p>
          {vendor.isFavorite && <Heart size={14} className="absolute top-2 right-2 text-red-500 fill-current" />}
       </Link>
     ))}
@@ -888,7 +854,6 @@ const GridView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = (
 
 interface ListViewProps {
   vendors: Vendor[];
-  onBook: (v: Vendor) => void;
   enableDrag: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -896,7 +861,8 @@ interface ListViewProps {
   draggedId: string | null;
 }
 
-const ListView: React.FC<ListViewProps> = ({ vendors, onBook, enableDrag, onDragStart, onDragOver, onDrop, draggedId }) => (
+/* --- Updated ListView (Removes Actions Column & onBook) --- */
+const ListView: React.FC<ListViewProps> = ({ vendors, enableDrag, onDragStart, onDragOver, onDrop, draggedId }) => (
   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
      <table className="w-full text-sm text-left">
         <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold">
@@ -905,7 +871,7 @@ const ListView: React.FC<ListViewProps> = ({ vendors, onBook, enableDrag, onDrag
               <th className="px-6 py-4">廠商</th>
               <th className="px-6 py-4">類別</th>
               <th className="px-6 py-4 text-center">狀態</th>
-              <th className="px-6 py-4 text-right">操作</th>
+              <th className="px-6 py-4 text-right"></th>
            </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -928,14 +894,18 @@ const ListView: React.FC<ListViewProps> = ({ vendors, onBook, enableDrag, onDrag
                        </div>
                     </td>
                  )}
-                 <td className="px-6 py-4 font-bold text-gray-800 flex items-center gap-3">
-                    <img src={v.avatarUrl} className="w-8 h-8 rounded-full" />
-                    {v.name}
+                 <td className="px-6 py-4 font-bold text-gray-800">
+                    <Link to={`/vendors/${v.id}`} className="flex items-center gap-3 hover:text-blue-600 group">
+                       <img src={v.avatarUrl} className="w-8 h-8 rounded-full" />
+                       {v.name}
+                    </Link>
                  </td>
                  <td className="px-6 py-4 text-gray-600">{v.categories[0]}</td>
                  <td className="px-6 py-4 text-center">{v.rating} ⭐</td>
                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => onBook(v)} className="text-brand-600 font-bold hover:underline">預約</button>
+                    <Link to={`/vendors/${v.id}`} className="text-gray-400 hover:text-blue-600">
+                       <ArrowRight size={18} />
+                    </Link>
                  </td>
               </tr>
            ))}
@@ -944,8 +914,162 @@ const ListView: React.FC<ListViewProps> = ({ vendors, onBook, enableDrag, onDrag
   </div>
 );
 
-const GroupView: React.FC<{ vendors: Vendor[]; onBook: (v: Vendor) => void }> = ({ vendors }) => (
+/* --- Updated GroupView (Removes onBook) --- */
+const GroupView: React.FC<{ vendors: Vendor[] }> = ({ vendors }) => (
     <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">
         群組視圖 (Group View) 樣式更新中...
     </div>
 );
+
+/* --- AI Search Modal for Vendors --- */
+const AiSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [query, setQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [results, setResults] = useState<{ vendor: Vendor; score: number; reasons: string[] }[]>([]);
+
+  const handleSearch = () => {
+    if (!query.trim()) return;
+    setIsSearching(true);
+    setResults([]);
+
+    setTimeout(() => {
+      const scoredVendors = MOCK_VENDORS.map(vendor => {
+        let score = 0;
+        const reasons: string[] = [];
+        const lowerQuery = query.toLowerCase();
+
+        vendor.categories.forEach(cat => {
+          if (lowerQuery.includes(cat)) { score += 30; reasons.push(`專長符合：${cat}`); }
+        });
+
+        if (lowerQuery.includes(vendor.region) || vendor.serviceArea.includes(query.substring(0, 2))) {
+          score += 20; reasons.push(`地區符合：${vendor.region}`);
+        }
+
+        vendor.tags.forEach(tag => {
+          if (lowerQuery.includes(tag)) { score += 15; reasons.push(`符合特質：${tag}`); }
+        });
+
+        if (vendor.rating >= 4.8) { score += 10; reasons.push('高評價優良廠商'); }
+
+        if (lowerQuery.includes('急') && (vendor.tags.includes('急件') || vendor.internalNotes.includes('配合度高'))) {
+           score += 25; reasons.push('可配合急件需求');
+        }
+        if (lowerQuery.includes('夜') && (vendor.tags.includes('夜間施工'))) {
+           score += 25; reasons.push('具備夜間施工能力');
+        }
+        if ((lowerQuery.includes('便宜') || lowerQuery.includes('預算')) && vendor.priceRange === '$') {
+           score += 15; reasons.push('價格具競爭力');
+        }
+
+        return { vendor, score, reasons };
+      });
+
+      const finalResults = scoredVendors
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
+      setResults(finalResults);
+      setIsSearching(false);
+    }, 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-5 flex justify-between items-center text-white shrink-0">
+           <div>
+             <h2 className="text-xl font-bold flex items-center gap-2">
+               <Sparkles className="text-yellow-300 animate-pulse" size={24} /> AI 智能廠商推薦
+             </h2>
+             <p className="text-indigo-100 text-xs mt-1">分析您的自然語言需求，精準媒合最佳廠商</p>
+           </div>
+           <button onClick={onClose} className="text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-full transition"><X size={24}/></button>
+        </div>
+        <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+           <div className="mb-8">
+              <label className="block text-sm font-bold text-slate-700 mb-2">您需要什麼樣的協助？</label>
+              <div className="relative">
+                 <textarea 
+                   className="w-full border-2 border-slate-200 rounded-xl p-4 h-32 focus:border-violet-500 focus:ring-4 focus:ring-violet-100 outline-none resize-none text-slate-700 text-base shadow-inner bg-slate-50 transition-all"
+                   placeholder="例如：我們信義區的辦公室需要緊急水電維修，希望能配合夜間施工..."
+                   value={query}
+                   onChange={e => setQuery(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSearch())}
+                 />
+                 <button 
+                   onClick={handleSearch}
+                   disabled={isSearching || !query.trim()}
+                   className="absolute bottom-4 right-4 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-violet-200 flex items-center gap-2 transition-all disabled:opacity-50 disabled:shadow-none hover:scale-105 active:scale-95"
+                 >
+                    {isSearching ? <RefreshCw className="animate-spin" size={18} /> : <Bot size={18} />}
+                    {isSearching ? 'AI 分析中...' : '開始媒合'}
+                 </button>
+              </div>
+              <div className="flex gap-2 mt-3 overflow-x-auto pb-2 custom-scrollbar">
+                 {['急件處理', '夜間施工', '台北市水電', '物流報關', '高評價設計'].map(tag => (
+                    <button key={tag} onClick={() => setQuery(tag)} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs hover:bg-violet-50 hover:text-violet-600 transition whitespace-nowrap border border-slate-200 font-medium">
+                       {tag}
+                    </button>
+                 ))}
+              </div>
+           </div>
+           {results.length > 0 && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                 <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                       <CheckCircle className="text-green-500" size={18} /> 最佳推薦結果
+                    </h3>
+                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-1 rounded-full font-bold">Top {results.length}</span>
+                 </div>
+                 {results.map(({ vendor, score, reasons }, idx) => (
+                    <div key={vendor.id} className="border border-slate-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-md transition group bg-white relative overflow-hidden">
+                       <div className="absolute top-0 right-0 bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded-bl-xl shadow-sm z-10">
+                          契合度 {score}%
+                       </div>
+                       <div className="flex gap-4">
+                          <img src={vendor.avatarUrl} className="w-16 h-16 rounded-xl object-cover border border-slate-100 bg-slate-50 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                             <div className="flex justify-between items-start mb-1">
+                                <h4 className="font-bold text-slate-800 text-lg group-hover:text-violet-700 transition truncate pr-20">
+                                   <Link to={`/vendors/${vendor.id}`}>{vendor.name}</Link>
+                                </h4>
+                             </div>
+                             <div className="flex flex-wrap gap-2 mb-3">
+                                {reasons.map((r, i) => (
+                                   <span key={i} className="text-[10px] bg-yellow-50 text-yellow-700 border border-yellow-100 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                                      <Sparkles size={8} /> {r}
+                                   </span>
+                                ))}
+                             </div>
+                             <div className="flex items-center gap-3 text-xs text-slate-500">
+                                <span className="flex items-center gap-1 font-bold text-slate-700"><Star size={12} className="text-yellow-400 fill-current"/> {vendor.rating}</span>
+                                <span className="w-px h-3 bg-slate-300"></span>
+                                <span>{vendor.categories[0]}</span>
+                                <span className="w-px h-3 bg-slate-300"></span>
+                                <span className="truncate">{vendor.region}</span>
+                             </div>
+                          </div>
+                          <div className="flex flex-col justify-end">
+                             <Link to={`/vendors/${vendor.id}`} className="p-2 bg-slate-100 text-slate-500 rounded-lg hover:bg-violet-600 hover:text-white transition">
+                                <ArrowRight size={20} />
+                             </Link>
+                          </div>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+           )}
+           {!isSearching && results.length === 0 && query && (
+              <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                 <Bot size={48} className="mx-auto mb-3 text-slate-300" />
+                 <p className="text-slate-500 font-medium">尚無符合的推薦結果</p>
+                 <p className="text-slate-400 text-sm mt-1">請嘗試描述得更具體，或使用不同的關鍵字。</p>
+              </div>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+};

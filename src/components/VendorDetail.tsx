@@ -67,6 +67,11 @@ export const VendorDetail: React.FC = () => {
   };
 
   const handleQuickReservation = () => {
+    // Tracking Logic: Increment booking click count
+    if (vendor) {
+        vendor.bookingClickCount = (vendor.bookingClickCount || 0) + 1;
+    }
+
     // Default to main contact or first available
     const mainContact = vendor.contacts.find(c => c.isMainContact) || vendor.contacts[0];
     if (mainContact) {
@@ -80,7 +85,13 @@ export const VendorDetail: React.FC = () => {
 
   const toggleRevealPhone = (contactId: string, contact?: ContactWindow) => {
     setRevealedPhones(prev => ({ ...prev, [contactId]: !prev[contactId] }));
+    
+    // Tracking Logic: Only track on first reveal (when turning true)
     if (!revealedPhones[contactId]) {
+      if (vendor) {
+         vendor.phoneViewCount = (vendor.phoneViewCount || 0) + 1;
+      }
+      
       // Intent Log logic: User clicked to view phone, system tracks this.
       // We automatically open the Contact Log Modal to encourage logging.
       if (contact) {
@@ -177,7 +188,7 @@ export const VendorDetail: React.FC = () => {
             {vendor.mainPhone && (
               <span 
                 className="flex items-center gap-1 cursor-pointer hover:text-blue-600 group" 
-                onClick={() => toggleRevealPhone('main', vendor.contacts[0])}
+                onClick={() => toggleRevealPhone('main', vendor.contacts[0])} // Assume main contact matches main phone roughly for this demo
                 title="點擊查看完整號碼 (將會開啟紀錄視窗)"
               >
                 <Phone size={16} /> 
@@ -228,10 +239,11 @@ export const VendorDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* Tabs */}
       <div className="flex border-b border-slate-200 overflow-x-auto">
         {[
           { id: 'info', label: '基本資料' },
-          { id: 'contacts', label: `聯繫窗口 & 群組 (${vendor.contacts.length + (vendor.socialGroups?.length || 0)})` },
+          { id: 'contacts', label: `聯繫窗口 & 群組 (${vendor.contacts.length + (vendor.socialGroups?.length || 0)})` }, // Updated Tab Name
           { id: 'logs', label: '聯繫紀錄' },
           { id: 'transactions', label: '合作/驗收' },
           { id: 'docs', label: '勞報/請款' },
@@ -250,10 +262,12 @@ export const VendorDetail: React.FC = () => {
         ))}
       </div>
 
+      {/* ... Content of Tabs (No changes needed below) ... */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 min-h-[400px]">
         {activeTab === 'info' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
+              {/* Tags Section with Click Interaction */}
               <div className="mb-6">
                 <h3 className="font-bold text-slate-800 mb-3 flex items-center justify-between">
                    <span>廠商標籤 (點擊查看規則)</span>
@@ -290,6 +304,7 @@ export const VendorDetail: React.FC = () => {
                 ))}
               </div>
 
+              {/* Enhanced Service Area Display */}
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
                    <h3 className="font-bold text-slate-800">服務範圍 (Service Area)</h3>
@@ -305,6 +320,7 @@ export const VendorDetail: React.FC = () => {
                 </div>
               </div>
 
+              {/* Address & Street View Section */}
               <div className="mb-6">
                  <h3 className="font-bold text-slate-800 mb-2">公司/聯絡地址</h3>
                  <div className="flex items-start gap-2 text-sm text-slate-600 mb-3">
@@ -367,6 +383,7 @@ export const VendorDetail: React.FC = () => {
                 </div>
               )}
 
+              {/* Corporate/Main Social IDs Display */}
               <div className="mt-6 border-t border-slate-100 pt-4">
                  <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
                     主要通訊 ID ({vendor.entityType === EntityType.COMPANY ? '企業' : '個人'})
@@ -378,7 +395,11 @@ export const VendorDetail: React.FC = () => {
                           <span className="font-bold">LINE:</span> 
                           <span className="font-mono">{getDisplayLineId(vendor.lineId)}</span>
                           {isAdminMode && <Copy size={10} className="cursor-pointer hover:scale-110 ml-1"/>}
-                          {!isAdminMode && <Lock size={10} className="ml-1 text-green-400" title="僅管理員可見完整 ID" />}
+                          {!isAdminMode && (
+                            <span title="僅管理員可見完整 ID">
+                              <Lock size={10} className="ml-1 text-green-400" />
+                            </span>
+                          )}
                        </div>
                     ) : (
                        <span className="text-sm text-slate-400">未設定 LINE</span>
@@ -389,7 +410,11 @@ export const VendorDetail: React.FC = () => {
                           <span className="font-bold">WeChat:</span> 
                           <span className="font-mono">{getDisplayLineId(vendor.wechatId)}</span>
                           {isAdminMode && <Copy size={10} className="cursor-pointer hover:scale-110 ml-1"/>}
-                          {!isAdminMode && <Lock size={10} className="ml-1 text-green-500" title="僅管理員可見完整 ID" />}
+                          {!isAdminMode && (
+                            <span title="僅管理員可見完整 ID">
+                              <Lock size={10} className="ml-1 text-green-500" />
+                            </span>
+                          )}
                        </div>
                     ) : (
                        <span className="text-sm text-slate-400">未設定 WeChat</span>
@@ -414,9 +439,10 @@ export const VendorDetail: React.FC = () => {
           </div>
         )}
 
-        {/* Other tabs content (contacts, logs, transactions, docs) */}
+        {/* ... (Rest of the tabs code unchanged) ... */}
         {activeTab === 'contacts' && (
           <div className="space-y-8">
+            {/* Section 1: Project Groups (The New Solution) */}
             <div>
                <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -426,6 +452,7 @@ export const VendorDetail: React.FC = () => {
                      <Plus size={16} /> 建立新群組
                   </button>
                </div>
+               
                {vendor.socialGroups && vendor.socialGroups.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      {vendor.socialGroups.map(group => (
@@ -435,6 +462,7 @@ export const VendorDetail: React.FC = () => {
                            )}>
                               {group.platform}
                            </div>
+                           
                            <div className="flex items-start gap-3">
                               <div className="bg-white p-2 rounded-lg border border-purple-100">
                                  <QrCode size={32} className="text-slate-700" />
@@ -448,6 +476,7 @@ export const VendorDetail: React.FC = () => {
                                  <p className="text-xs text-slate-500 mt-1">{group.note || '無備註'}</p>
                               </div>
                            </div>
+                           
                            <div className="mt-4 flex gap-2">
                               {group.inviteLink && (
                                  <a href={group.inviteLink} target="_blank" rel="noreferrer" className="flex-1 bg-white border border-slate-200 hover:border-purple-400 text-slate-700 py-1.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition">
@@ -469,6 +498,8 @@ export const VendorDetail: React.FC = () => {
                   </div>
                )}
             </div>
+
+            {/* Section 2: Contact Persons */}
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-slate-800">聯繫人列表</h3>
@@ -500,6 +531,7 @@ export const VendorDetail: React.FC = () => {
                         </div>
                       )}
                       
+                      {/* Personal Social IDs - Only Visible to Admin */}
                       <div className="pt-2 border-t border-slate-200/50 mt-2">
                         <div className="grid grid-cols-2 gap-2">
                            {contact.lineId ? (
@@ -583,6 +615,7 @@ export const VendorDetail: React.FC = () => {
           </div>
         )}
 
+        {/* ... (Rest remains same) */}
         {activeTab === 'transactions' && (
           <div>
             <div className="overflow-x-auto">
@@ -636,7 +669,7 @@ export const VendorDetail: React.FC = () => {
   );
 };
 
-/* --- Edit Vendor Modal --- */
+/* --- Edit Vendor Modal and TagInsightModal remain as they were --- */
 const EditVendorModal: React.FC<{ vendor: Vendor; onClose: () => void }> = ({ vendor, onClose }) => {
   const [formData, setFormData] = useState({
     name: vendor.name, entityType: vendor.entityType, region: vendor.region, taxId: vendor.taxId || '', mainPhone: vendor.mainPhone || '', address: vendor.address || '', serviceArea: vendor.serviceArea, internalNotes: vendor.internalNotes, website: vendor.website || '', tags: vendor.tags.join(', '), priceRange: vendor.priceRange || '$$', lineId: vendor.lineId || '', wechatId: vendor.wechatId || '', categories: vendor.categories

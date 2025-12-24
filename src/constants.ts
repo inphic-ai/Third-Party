@@ -54,7 +54,7 @@ export const MOCK_KNOWLEDGE_BASE: KnowledgeBaseItem[] = [
   }
 ];
 
-// Default System Tags
+// Default System Tags - Updated based on user request
 export const MOCK_SYSTEM_TAGS: SystemTags = {
   contactTags: ['報價中', '已預約', '無人接聽', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘'],
   serviceTags: ['夜間施工', '急件處理', '含廢棄物清運', '需支付訂金', '可配合輪班', '自有工班'],
@@ -97,7 +97,7 @@ export const MOCK_TUTORIALS: TutorialTip[] = [
 
 export const MOCK_VENDORS: Vendor[] = [
   {
-    id: 'C2024001',
+    id: 'C2024001', // C = Company
     name: '大發水電工程行',
     taxId: '23456789',
     mainPhone: '02-2788-1234',
@@ -108,17 +108,17 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.PLUMBING, VendorCategory.RENOVATION],
     rating: 4.8,
     ratingCount: 15,
-    createdBy: 'u1',
+    createdBy: 'u1', // Alex Created this
     priceRange: '$$',
-    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'],
+    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '台北市, 新北市',
     address: '台北市信義區忠孝東路五段100號',
     internalNotes: '配合度高，但在忙時很難約，建議提前兩週。',
-    lineId: '@dafa_official',
+    lineId: '@dafa_official', // Corporate ID
     isFavorite: true,
     missedContactLogCount: 2,
-    phoneViewCount: 45,
+    phoneViewCount: 45, // High view count
     bookingClickCount: 12,
     contacts: [
         { id: 'c1', name: '張大發', role: '負責人', mobile: '0912-345-678', isMainContact: true, lineId: 'dafa888' },
@@ -158,7 +158,7 @@ export const MOCK_VENDORS: Vendor[] = [
     ]
   },
   {
-    id: 'I2024001',
+    id: 'I2024001', // I = Individual
     name: '陳志豪',
     mainPhone: '0988-777-666',
     avatarUrl: 'https://picsum.photos/id/32/200/200',
@@ -168,18 +168,18 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.WOODWORK, VendorCategory.RENOVATION],
     rating: 2.5,
     ratingCount: 4,
-    createdBy: 'u2',
+    createdBy: 'u2', // Sarah Created this
     priceRange: '$$$',
     tags: ['手藝精細', '情緒化'],
     isBlacklisted: true,
     serviceArea: '台中市, 南投縣, 彰化縣',
     address: '台中市西屯區台灣大道三段',
     internalNotes: '技術好但個性急，報價偏高，多次與現場人員起衝突，暫時列入黑名單。',
-    lineId: 'chen_wood_master',
+    lineId: 'chen_wood_master', // Personal Main ID
     isFavorite: false,
     missedContactLogCount: 5,
-    phoneViewCount: 20,
-    bookingClickCount: 1,
+    phoneViewCount: 20, // Many views
+    bookingClickCount: 1, // Low booking
     contacts: [
         { id: 'c3', name: '陳志豪', role: '木工師傅', mobile: '0988-777-666', isMainContact: true, lineId: 'chen_wood_master' }
     ],
@@ -218,7 +218,7 @@ export const MOCK_VENDORS: Vendor[] = [
     serviceArea: '廣東省, 福建省',
     address: '廣東省深圳市南山區科技園',
     internalNotes: '時效穩定，窗口回覆快。',
-    wechatId: 'suda_logistics_official',
+    wechatId: 'suda_logistics_official', // Corporate WeChat
     isFavorite: true,
     missedContactLogCount: 1,
     phoneViewCount: 30,
@@ -261,9 +261,9 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.DESIGN],
     rating: 5.0,
     ratingCount: 8,
-    createdBy: 'u4',
+    createdBy: 'u4', // Emily Created
     priceRange: '$$',
-    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'],
+    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'], // Added Excellent tag
     isBlacklisted: false,
     serviceArea: '全部',
     address: '新北市板橋區文化路一段',
@@ -330,7 +330,7 @@ export const MOCK_VENDORS: Vendor[] = [
 
 export const CATEGORY_OPTIONS = Object.values(VendorCategory);
 
-// --- Admin Mock Data ---
+// --- Admin Mock Data (Updated with Permissions) ---
 
 export const MOCK_DEPARTMENTS: Department[] = [
   { id: 'D001', name: '研發部', description: '軟體開發與技術維護', managerName: 'Alex Chen', memberCount: 5 },
@@ -386,10 +386,10 @@ export const MOCK_USERS: AdminUser[] = [
       viewVendors: true,
       viewTasks: true,
       viewCommunication: true,
-      viewPayments: false, 
+      viewPayments: false, // Restricted
       viewKnowledge: true,
       viewAnnouncements: true,
-      accessAdminPanel: false, 
+      accessAdminPanel: false, // Restricted
       canManageCategories: false,
       canManageUsers: false,
       canDeleteVendors: false
@@ -464,10 +464,10 @@ export const MOCK_USERS: AdminUser[] = [
 ];
 
 export const MOCK_LOGS: SystemLog[] = [
-  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101' },
+  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102' },
+  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101' },
+  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105' },
 ];
 
 export const MOCK_LOGIN_LOGS: LoginLog[] = [

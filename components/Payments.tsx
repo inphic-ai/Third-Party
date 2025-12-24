@@ -2,11 +2,11 @@
 import React, { useState, useMemo } from 'react';
 import { MOCK_VENDORS } from '../constants';
 import { TransactionStatus } from '../types';
-import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search, FileText, Upload, Paperclip } from 'lucide-react';
+import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search, FileText, Upload, Paperclip, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 
-type PaymentFilter = 'ALL' | 'PENDING';
+type PaymentFilter = 'ALL' | 'PENDING' | 'PAID';
 const ITEMS_PER_PAGE = 10;
 
 export const Payments: React.FC = () => {
@@ -65,6 +65,7 @@ export const Payments: React.FC = () => {
 
       // Status Filter
       if (filter === 'PENDING') return t.status === TransactionStatus.APPROVED;
+      if (filter === 'PAID') return t.status === TransactionStatus.PAID;
       return true;
     });
   }, [allTransactions, currentMonthStr, filter, searchTerm]);
@@ -96,6 +97,23 @@ export const Payments: React.FC = () => {
     }
   };
 
+  const TabButton = ({ label, value, icon }: { label: string; value: PaymentFilter; icon: React.ReactNode }) => (
+    <button 
+      onClick={() => { setFilter(value); setCurrentPage(1); }}
+      className={clsx(
+        "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition",
+        filter === value 
+          ? (value === 'PENDING' ? "bg-green-100 text-green-800 ring-2 ring-green-500" : 
+             value === 'PAID' ? "bg-slate-200 text-slate-800 ring-2 ring-slate-400" :
+             "bg-blue-100 text-blue-800 ring-2 ring-blue-500")
+          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -123,7 +141,7 @@ export const Payments: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary Cards (Always show month stats regardless of search to provide context) */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div 
           onClick={() => { setFilter(filter === 'PENDING' ? 'ALL' : 'PENDING'); setCurrentPage(1); }}
@@ -188,11 +206,10 @@ export const Payments: React.FC = () => {
                 />
              </div>
 
-             <div className="flex gap-2 text-sm">
-                <span className={clsx("flex items-center gap-1 px-2 py-1 rounded transition", filter === 'PENDING' ? "bg-green-100 text-green-800 font-bold" : "bg-green-50 text-green-700")}>
-                  <CheckCircle size={14}/> 待撥款
-                </span>
-                <span className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-600 rounded"><Clock size={14}/> 已結案</span>
+             <div className="flex gap-2 p-1 bg-slate-50 rounded-lg border border-slate-100">
+                <TabButton label="全部" value="ALL" icon={<FileText size={14}/>} />
+                <TabButton label="待撥款" value="PENDING" icon={<CheckCircle size={14}/>} />
+                <TabButton label="已結案" value="PAID" icon={<CheckSquare size={14}/>} />
              </div>
           </div>
         </div>

@@ -64,6 +64,7 @@ export interface ContactLog {
   isReservation?: boolean; 
   reservationTime?: string; // HH:mm
   quoteAmount?: number;
+  relatedProductId?: string; // New field for Product ID
 }
 
 export enum TransactionStatus {
@@ -179,8 +180,10 @@ export interface Vendor {
   internalNotes: string; // "用人注意事項"
   isFavorite: boolean;
   
-  // Analytics
+  // Analytics - NEW FIELDS
   missedContactLogCount: number; // Count of times user opened contact modal but didn't save log
+  phoneViewCount: number; // Track how many times users clicked to view phone
+  bookingClickCount: number; // Track how many times users clicked to view phone
 }
 
 export interface Announcement {
@@ -214,12 +217,19 @@ export interface UserPermissions {
   canDeleteVendors: boolean;
 }
 
+export interface SecuritySettings {
+  allowedIps: string[]; // List of allowed IPs, empty means no restriction
+  accessTimeStart: string; // HH:mm (e.g., "09:00")
+  accessTimeEnd: string;   // HH:mm (e.g., "18:00")
+  isTimeRestricted: boolean;
+}
+
 export interface AdminUser {
   id: string;
   name: string;
   email: string;
   avatarUrl?: string;
-  department: string;
+  department: string; // ID or Name
   role: UserRole;
   status: 'Active' | 'Inactive';
   accumulatedBonus: number; // For vendor referrals
@@ -230,6 +240,17 @@ export interface AdminUser {
   
   // Permissions
   permissions: UserPermissions;
+  
+  // Security
+  securitySettings?: SecuritySettings;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description: string;
+  managerName?: string;
+  memberCount: number;
 }
 
 export interface SystemLog {
@@ -239,6 +260,8 @@ export interface SystemLog {
   action: string;
   target: string;
   details: string;
+  ip?: string; // Added IP field
+  userAgent?: string; // Added User Agent field
 }
 
 export interface LoginLog {

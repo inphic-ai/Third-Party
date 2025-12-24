@@ -205,3 +205,75 @@ export const WarRoom: React.FC = () => {
 
       {/* Bottom Row: Detailed Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+         {/* Anomalies List */}
+         <div id="anomalies" className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+               <AlertCircle size={20} className="text-red-500" /> 潛在異常關注
+            </h3>
+            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 max-h-[300px]">
+               {anomalies.length > 0 ? anomalies.map(item => (
+                  <div key={item.id} className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center justify-between">
+                     <div>
+                        <div className="font-bold text-slate-800">{item.name}</div>
+                        <div className="text-xs text-red-600 mt-1">查看電話 {item.views} 次 / 0 紀錄</div>
+                     </div>
+                     <Link to={`/vendors/${item.id}`} className="px-3 py-1.5 bg-white text-red-600 text-xs font-bold rounded-lg border border-red-200 hover:bg-red-100 transition">
+                        稽核
+                     </Link>
+                  </div>
+               )) : (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                     <CheckCircle size={32} className="mb-2 text-green-500 opacity-50" />
+                     <p>目前無異常資料</p>
+                  </div>
+               )}
+            </div>
+         </div>
+
+         {/* Top Rated Vendors (Retention) */}
+         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+               <Trophy size={20} className="text-yellow-500" /> 優質合作夥伴 (評分 Top 5)
+            </h3>
+            <div className="flex-1 overflow-x-auto">
+               <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold">
+                     <tr>
+                        <th className="px-4 py-3 rounded-l-lg">廠商名稱</th>
+                        <th className="px-4 py-3">累計工單</th>
+                        <th className="px-4 py-3">平均評分</th>
+                        <th className="px-4 py-3">預約/詢問比</th>
+                        <th className="px-4 py-3 rounded-r-lg text-right">操作</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                     {MOCK_VENDORS.sort((a, b) => b.rating - a.rating).slice(0, 5).map(v => {
+                        const ratio = v.bookingClickCount > 0 ? Math.round((v.contactLogs.filter(l => l.isReservation).length / v.bookingClickCount) * 100) : 0;
+                        return (
+                           <tr key={v.id} className="hover:bg-slate-50 transition">
+                              <td className="px-4 py-3 font-bold text-slate-700 flex items-center gap-2">
+                                 <img src={v.avatarUrl} className="w-6 h-6 rounded-full" />
+                                 {v.name}
+                              </td>
+                              <td className="px-4 py-3 text-slate-500">{v.transactions.length} 筆</td>
+                              <td className="px-4 py-3 font-bold text-yellow-600">{v.rating} ⭐</td>
+                              <td className="px-4 py-3">
+                                 <div className="w-full bg-slate-100 rounded-full h-1.5 w-24">
+                                    <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${Math.min(ratio, 100)}%` }}></div>
+                                 </div>
+                                 <span className="text-[10px] text-slate-400">{ratio}%</span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                 <Link to={`/vendors/${v.id}`} className="text-blue-600 hover:underline text-xs font-bold">詳情</Link>
+                              </td>
+                           </tr>
+                        );
+                     })}
+                  </tbody>
+               </table>
+            </div>
+         </div>
+      </div>
+    </div>
+  );
+};
