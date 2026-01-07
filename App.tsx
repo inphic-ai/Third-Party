@@ -1,21 +1,22 @@
 
-import React, { Suspense, lazy, ReactNode } from 'react';
+import React, { Component, Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Layout } from './Layout';
-import { TutorialProvider } from './TutorialSystem';
+import { Layout } from './components/Layout';
+import { TutorialProvider } from './components/TutorialSystem';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 
-// Lazy Load Components from Root
-const WarRoom = lazy(() => import('./WarRoom').then(module => ({ default: module.WarRoom })));
-const VendorDirectory = lazy(() => import('./VendorDirectory').then(module => ({ default: module.VendorDirectory })));
-const VendorDetail = lazy(() => import('./VendorDetail').then(module => ({ default: module.VendorDetail })));
-const Announcements = lazy(() => import('./Announcements').then(module => ({ default: module.Announcements })));
-const TransactionDetail = lazy(() => import('./TransactionDetail').then(module => ({ default: module.TransactionDetail })));
-const Payments = lazy(() => import('./Payments').then(module => ({ default: module.Payments })));
-const Admin = lazy(() => import('./Admin').then(module => ({ default: module.Admin })));
-const Tasks = lazy(() => import('./Tasks').then(module => ({ default: module.Tasks })));
-const CommunicationHub = lazy(() => import('./CommunicationHub').then(module => ({ default: module.CommunicationHub })));
-const KnowledgeBase = lazy(() => import('./KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
+// Lazy Load Components for Performance
+const WarRoom = lazy(() => import('./components/WarRoom').then(module => ({ default: module.WarRoom })));
+const VendorDirectory = lazy(() => import('./components/VendorDirectory').then(module => ({ default: module.VendorDirectory })));
+const VendorDetail = lazy(() => import('./components/VendorDetail').then(module => ({ default: module.VendorDetail })));
+const Announcements = lazy(() => import('./components/Announcements').then(module => ({ default: module.Announcements })));
+const TransactionDetail = lazy(() => import('./components/TransactionDetail').then(module => ({ default: module.TransactionDetail })));
+const Payments = lazy(() => import('./components/Payments').then(module => ({ default: module.Payments })));
+const Admin = lazy(() => import('./components/Admin').then(module => ({ default: module.Admin })));
+const Tasks = lazy(() => import('./components/Tasks').then(module => ({ default: module.Tasks })));
+const CommunicationHub = lazy(() => import('./components/CommunicationHub').then(module => ({ default: module.CommunicationHub })));
+const KnowledgeBase = lazy(() => import('./components/KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
+const MaintenanceRecords = lazy(() => import('./components/MaintenanceRecords').then(module => ({ default: module.MaintenanceRecords })));
 
 // Loading Component
 const LoadingFallback = () => (
@@ -34,12 +35,13 @@ interface ErrorBoundaryState {
 }
 
 // Simple Error Boundary Component
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false };
-  props: ErrorBoundaryProps;
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState;
+  public props: ErrorBoundaryProps;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    this.state = { hasError: false };
     this.props = props;
   }
 
@@ -91,6 +93,7 @@ const App: React.FC = () => {
                 <Route path="/communication" element={<CommunicationHub />} />
                 <Route path="/payments" element={<Payments />} />
                 <Route path="/announcements" element={<Announcements />} />
+                <Route path="/maintenance" element={<MaintenanceRecords />} />
                 
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/knowledge" element={<KnowledgeBase />} />

@@ -333,10 +333,10 @@ export const CATEGORY_OPTIONS = Object.values(VendorCategory);
 // --- Admin Mock Data (Updated with Permissions) ---
 
 export const MOCK_DEPARTMENTS: Department[] = [
-  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', memberCount: 5 },
-  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', memberCount: 3 },
-  { id: 'D003', name: '業務部', description: '國內外市場開發', memberCount: 8 },
-  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', memberCount: 4 },
+  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', managerName: 'Alex Chen', memberCount: 5 },
+  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', managerName: 'Sarah Lin', memberCount: 3 },
+  { id: 'D003', name: '業務部', description: '國內外市場開發', managerName: 'Mike Wang', memberCount: 8 },
+  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', managerName: 'Emily Wu', memberCount: 4 },
 ];
 
 export const MOCK_USERS: AdminUser[] = [
@@ -362,9 +362,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: true,
       canManageCategories: true,
       canManageUsers: true,
-      canDeleteVendors: true,
-      canAddVendors: true,
-      canEditVendors: true
+      canDeleteVendors: true
     },
     securitySettings: {
       allowedIps: [],
@@ -388,15 +386,13 @@ export const MOCK_USERS: AdminUser[] = [
       viewVendors: true,
       viewTasks: true,
       viewCommunication: true,
-      viewPayments: false, 
+      viewPayments: false, // Restricted
       viewKnowledge: true,
       viewAnnouncements: true,
-      accessAdminPanel: false, 
+      accessAdminPanel: false, // Restricted
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: true,
-      canEditVendors: true
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: ['192.168.1.50'],
@@ -426,9 +422,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false,
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: false,
-      canEditVendors: false
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -458,9 +452,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false,
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: true,
-      canEditVendors: false
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -471,11 +463,12 @@ export const MOCK_USERS: AdminUser[] = [
   },
 ];
 
+// Fix: Added required 'status' property to satisfy SystemLog interface
 export const MOCK_LOGS: SystemLog[] = [
-  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', status: 'Update' },
+  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', status: 'Create' },
+  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', status: 'System' },
+  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', status: 'Delete' },
 ];
 
 export const MOCK_LOGIN_LOGS: LoginLog[] = [

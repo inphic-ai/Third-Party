@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy, ReactNode } from 'react';
+import React, { Component, Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { TutorialProvider } from './components/TutorialSystem';
@@ -12,8 +12,7 @@ const VendorDetail = lazy(() => import('./components/VendorDetail').then(module 
 const Announcements = lazy(() => import('./components/Announcements').then(module => ({ default: module.Announcements })));
 const TransactionDetail = lazy(() => import('./components/TransactionDetail').then(module => ({ default: module.TransactionDetail })));
 const Payments = lazy(() => import('./components/Payments').then(module => ({ default: module.Payments })));
-// Fixed: Use default import for Admin component
-const Admin = lazy(() => import('./components/Admin'));
+const Admin = lazy(() => import('./components/Admin').then(module => ({ default: module.Admin })));
 const Tasks = lazy(() => import('./components/Tasks').then(module => ({ default: module.Tasks })));
 const CommunicationHub = lazy(() => import('./components/CommunicationHub').then(module => ({ default: module.CommunicationHub })));
 const KnowledgeBase = lazy(() => import('./components/KnowledgeBase').then(module => ({ default: module.KnowledgeBase })));
@@ -35,12 +34,16 @@ interface ErrorBoundaryState {
 }
 
 // Simple Error Boundary Component
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false };
-  props: ErrorBoundaryProps;
+// Fix: Use imported Component base class to correctly resolve generic props and state in TypeScript.
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Explicitly declare state and props properties to satisfy TypeScript compiler in strict environments
+  public state: ErrorBoundaryState;
+  public props: ErrorBoundaryProps;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    // Fix: Explicitly initialize state and props
+    this.state = { hasError: false };
     this.props = props;
   }
 
@@ -53,6 +56,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
+    // Fix: Inherited state from Component class.
     if (this.state.hasError) {
       return (
         <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600">
@@ -73,6 +77,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
+    // Fix: Inherited props from Component class.
     return this.props.children || null;
   }
 }

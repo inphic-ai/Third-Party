@@ -1,5 +1,5 @@
 
-import { Vendor, Region, EntityType, ServiceType, VendorCategory, ContactStatus, TransactionStatus, AdminUser, SystemLog, LoginLog, Subscription, AiModelRule, SystemTags, TutorialTip, Announcement, KnowledgeBaseItem, Department } from './types';
+import { Vendor, Region, EntityType, ServiceType, VendorCategory, ContactStatus, TransactionStatus, AdminUser, SystemLog, LoginLog, Subscription, AiModelRule, SystemTags, TutorialTip, Announcement, KnowledgeBaseItem, Department, InvoiceRecord, PaymentStatus, MaintenanceRecord, MaintenanceStatus } from './types';
 
 export const TAIWAN_REGIONS = [
   '全部', '台北市', '基隆市', '新北市', '宜蘭縣', '桃園市', '新竹市', '新竹縣', 
@@ -14,17 +14,83 @@ export const CHINA_REGIONS = [
   '重慶市', '天津市', '廣西', '江西省', '陝西省', '雲南省', '香港', '澳門'
 ];
 
-// Grouping Categories for better UX in Dropdowns
 export const CATEGORY_GROUPS: Record<string, string[]> = {
   '工程與維修': ['水電', '玻璃', '冷凍空調', '鐵工修復', '木工修復', '油壓設備', '機車維修', '家電維修', '裝修工程', '燈具'],
-  '物流與供應鏈': ['國際運輸', '國內運輸', 'LALA司機', '包裝耗材', '電池', '五金零件'],
+  '物流與供應鏈': ['國際運輸', '國內運輸', 'LALA司機', '包裝耗材', '電池', '五五金零件'],
   '專業服務': ['平面設計', '軟硬體工程師', '法律', '檢驗單位', '銀行＆金流', '通路平台', '辦公文具'],
   '其他': ['其它']
 };
 
+export const MOCK_INVOICES: InvoiceRecord[] = [
+  { id: 'inv-1', vendorName: '大發水電工程行', amount: 15000, date: '2024-05-10', invoiceNo: 'GU-88991234', status: PaymentStatus.PAID, attachmentUrl: 'https://images.unsplash.com/photo-1554224155-1696413575b9?auto=format&fit=crop&q=80&w=800' },
+  { id: 'inv-2', vendorName: '深圳速達物流', amount: 8500, date: '2024-05-12', invoiceNo: 'CN-20240501', status: PaymentStatus.BILLED, attachmentUrl: 'https://images.unsplash.com/photo-1554224154-26032fb68df8?auto=format&fit=crop&q=80&w=800' },
+  { id: 'inv-3', vendorName: '林小美設計工作室', amount: 12000, date: '2024-05-15', invoiceNo: 'TW-99882211', status: PaymentStatus.PENDING, attachmentUrl: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=800' },
+  { id: 'inv-4', vendorName: '王大力司機團隊', amount: 3200, date: '2024-05-18', invoiceNo: 'LA-55443322', status: PaymentStatus.PAID, attachmentUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&q=80&w=800' },
+  { id: 'inv-5', vendorName: '大發水電工程行', amount: 4500, date: '2024-05-20', invoiceNo: 'GU-88991255', status: PaymentStatus.BILLED, attachmentUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=800' },
+  { id: 'inv-6', vendorName: '陳志豪木工師傅', amount: 28000, date: '2024-05-22', invoiceNo: 'WOOD-1002', status: PaymentStatus.PENDING, attachmentUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=800' },
+];
+
+export const MOCK_MAINTENANCE: MaintenanceRecord[] = [
+  {
+    id: 'm-1',
+    caseId: 'CASE-202405-001',
+    date: '2024-05-10',
+    deviceName: '主會客室中央空調系統',
+    deviceNo: 'HVAC-A01-X99',
+    vendorName: '大發水電工程行',
+    vendorId: 'C2024001',
+    status: MaintenanceStatus.COMPLETED,
+    description: '空調壓縮機運轉音過大，經檢查為軸承磨損。已更換原廠軸承並重新充填冷媒。',
+    productTags: ['冷氣空調', '動力設備'],
+    beforePhotos: [
+      { id: 'b1', url: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '檢查內部軸承鏽蝕' },
+      { id: 'b1-2', url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '冷媒壓力異常讀數' }
+    ],
+    afterPhotos: [
+      { id: 'a1', url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '完工後運轉測試' }
+    ],
+    aiReport: '本次維修主要更換易損零件，預計可延長設備壽命約 24 個月。建議下次定期保養時加強潤滑。'
+  },
+  {
+    id: 'm-2',
+    caseId: 'CASE-202405-005',
+    date: '2024-05-15',
+    deviceName: '員工休息區落地窗玻璃',
+    deviceNo: 'GLS-B02-01',
+    vendorName: '大發水電工程行',
+    vendorId: 'C2024001',
+    status: MaintenanceStatus.ARCHIVED,
+    description: '玻璃出現裂痕，具安全性疑慮。已進行整片更換為強化玻璃。',
+    productTags: ['玻璃工程', '裝修'],
+    beforePhotos: [
+      { id: 'b2', url: 'https://images.unsplash.com/photo-1544006659-f0b21f04cb1d?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-15', description: '裂痕分佈情況' }
+    ],
+    afterPhotos: [
+      { id: 'a2', url: 'https://images.unsplash.com/photo-1527264835624-91337446e534?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-15', description: '安裝完成' },
+      { id: 'a2-2', url: 'https://images.unsplash.com/photo-1521133573832-34c1040e8101?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-15', description: '密封膠收邊檢查' }
+    ],
+    aiReport: '已由普通玻璃升級為 8mm 強化玻璃，耐衝擊係數提升 300%。'
+  }
+];
+
 export const MOCK_ANNOUNCEMENTS: Announcement[] = [
-  { id: '1', title: '2024 年度廠商評鑑開始', content: '請各部門於月底前完成主要合作廠商的年度評分。', date: '2024-05-20', priority: 'High' },
-  { id: '2', title: '大陸物流規定更新', content: '針對華南地區的進出口報關流程有新規定，請參閱知識庫。', date: '2024-05-18', priority: 'Normal' },
+  { 
+    id: '1', 
+    title: '2024 年度廠商評鑑開始', 
+    content: '請各部門於月底前完成主要合作廠商的年度評分，這將影響未來一年的採購權重。', 
+    date: '2024-05-20', 
+    priority: 'High',
+    targetIdentity: [ServiceType.LABOR, ServiceType.MANUFACTURING]
+  },
+  { 
+    id: '2', 
+    title: '華南地區報關流程更新', 
+    content: '針對電子零件類的出口報關有新格式要求，請大陸地區的廠商務必參閱知識庫最新教學。', 
+    date: '2024-05-18', 
+    priority: 'Normal',
+    targetRegion: Region.CHINA,
+    targetIdentity: [ServiceType.PRODUCT]
+  },
 ];
 
 export const MOCK_KNOWLEDGE_BASE: KnowledgeBaseItem[] = [
@@ -54,7 +120,6 @@ export const MOCK_KNOWLEDGE_BASE: KnowledgeBaseItem[] = [
   }
 ];
 
-// Default System Tags - Updated based on user request
 export const MOCK_SYSTEM_TAGS: SystemTags = {
   contactTags: ['報價中', '已預約', '無人接聽', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘'],
   serviceTags: ['夜間施工', '急件處理', '含廢棄物清運', '需支付訂金', '可配合輪班', '自有工班'],
@@ -97,7 +162,7 @@ export const MOCK_TUTORIALS: TutorialTip[] = [
 
 export const MOCK_VENDORS: Vendor[] = [
   {
-    id: 'C2024001', // C = Company
+    id: 'C2024001',
     name: '大發水電工程行',
     taxId: '23456789',
     mainPhone: '02-2788-1234',
@@ -108,17 +173,17 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.PLUMBING, VendorCategory.RENOVATION],
     rating: 4.8,
     ratingCount: 15,
-    createdBy: 'u1', // Alex Created this
+    createdBy: 'u1',
     priceRange: '$$',
-    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'], // Added Excellent tag
+    tags: ['優良廠商', '夜間施工', '配合度高', '含廢棄物清運'],
     isBlacklisted: false,
     serviceArea: '台北市, 新北市',
     address: '台北市信義區忠孝東路五段100號',
     internalNotes: '配合度高，但在忙時很難約，建議提前兩週。',
-    lineId: '@dafa_official', // Corporate ID
+    lineId: '@dafa_official',
     isFavorite: true,
     missedContactLogCount: 2,
-    phoneViewCount: 45, // High view count
+    phoneViewCount: 45,
     bookingClickCount: 12,
     contacts: [
         { id: 'c1', name: '張大發', role: '負責人', mobile: '0912-345-678', isMainContact: true, lineId: 'dafa888' },
@@ -158,7 +223,7 @@ export const MOCK_VENDORS: Vendor[] = [
     ]
   },
   {
-    id: 'I2024001', // I = Individual
+    id: 'I2024001',
     name: '陳志豪',
     mainPhone: '0988-777-666',
     avatarUrl: 'https://picsum.photos/id/32/200/200',
@@ -168,18 +233,18 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.WOODWORK, VendorCategory.RENOVATION],
     rating: 2.5,
     ratingCount: 4,
-    createdBy: 'u2', // Sarah Created this
+    createdBy: 'u2',
     priceRange: '$$$',
     tags: ['手藝精細', '情緒化'],
     isBlacklisted: true,
     serviceArea: '台中市, 南投縣, 彰化縣',
     address: '台中市西屯區台灣大道三段',
     internalNotes: '技術好但個性急，報價偏高，多次與現場人員起衝突，暫時列入黑名單。',
-    lineId: 'chen_wood_master', // Personal Main ID
+    lineId: 'chen_wood_master',
     isFavorite: false,
     missedContactLogCount: 5,
-    phoneViewCount: 20, // Many views
-    bookingClickCount: 1, // Low booking
+    phoneViewCount: 20,
+    bookingClickCount: 1,
     contacts: [
         { id: 'c3', name: '陳志豪', role: '木工師傅', mobile: '0988-777-666', isMainContact: true, lineId: 'chen_wood_master' }
     ],
@@ -207,7 +272,7 @@ export const MOCK_VENDORS: Vendor[] = [
     avatarUrl: 'https://picsum.photos/id/45/200/200',
     region: Region.CHINA,
     entityType: EntityType.COMPANY,
-    serviceTypes: [ServiceType.PRODUCT, ServiceType.LABOR],
+    serviceTypes: [ServiceType.PRODUCT, ServiceType.MANUFACTURING],
     categories: [VendorCategory.INTL_LOGISTICS],
     rating: 4.2,
     ratingCount: 50,
@@ -218,7 +283,7 @@ export const MOCK_VENDORS: Vendor[] = [
     serviceArea: '廣東省, 福建省',
     address: '廣東省深圳市南山區科技園',
     internalNotes: '時效穩定，窗口回覆快。',
-    wechatId: 'suda_logistics_official', // Corporate WeChat
+    wechatId: 'suda_logistics_official',
     isFavorite: true,
     missedContactLogCount: 1,
     phoneViewCount: 30,
@@ -261,9 +326,9 @@ export const MOCK_VENDORS: Vendor[] = [
     categories: [VendorCategory.DESIGN],
     rating: 5.0,
     ratingCount: 8,
-    createdBy: 'u4', // Emily Created
+    createdBy: 'u4',
     priceRange: '$$',
-    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'], // Added Excellent tag
+    tags: ['優良廠商', '風格清新', '好溝通', '準時交件'],
     isBlacklisted: false,
     serviceArea: '全部',
     address: '新北市板橋區文化路一段',
@@ -330,13 +395,11 @@ export const MOCK_VENDORS: Vendor[] = [
 
 export const CATEGORY_OPTIONS = Object.values(VendorCategory);
 
-// --- Admin Mock Data (Updated with Permissions) ---
-
 export const MOCK_DEPARTMENTS: Department[] = [
-  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', memberCount: 5 },
-  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', memberCount: 3 },
-  { id: 'D003', name: '業務部', description: '國內外市場開發', memberCount: 8 },
-  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', memberCount: 4 },
+  { id: 'D001', name: '研發部', description: '軟體開發與技術維護', managerName: 'Alex Chen', memberCount: 5 },
+  { id: 'D002', name: '設計部', description: 'UI/UX 設計與行銷素材', managerName: 'Sarah Lin', memberCount: 3 },
+  { id: 'D003', name: '業務部', description: '國內外市場開發', managerName: 'Mike Wang', memberCount: 8 },
+  { id: 'D004', name: '產品部', description: '產品規劃與時程控管', managerName: 'Emily Wu', memberCount: 4 },
 ];
 
 export const MOCK_USERS: AdminUser[] = [
@@ -362,9 +425,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: true,
       canManageCategories: true,
       canManageUsers: true,
-      canDeleteVendors: true,
-      canAddVendors: true,
-      canEditVendors: true
+      canDeleteVendors: true
     },
     securitySettings: {
       allowedIps: [],
@@ -394,9 +455,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false, 
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: true,
-      canEditVendors: true
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: ['192.168.1.50'],
@@ -426,9 +485,7 @@ export const MOCK_USERS: AdminUser[] = [
       accessAdminPanel: false,
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: false,
-      canEditVendors: false
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -452,47 +509,13 @@ export const MOCK_USERS: AdminUser[] = [
       viewVendors: true,
       viewTasks: true,
       viewCommunication: true,
-      viewPayments: false,
+      viewPayments: false, 
       viewKnowledge: true,
       viewAnnouncements: true,
-      accessAdminPanel: false,
+      accessAdminPanel: false, 
       canManageCategories: false,
       canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: true,
-      canEditVendors: false
-    },
-    securitySettings: {
-      allowedIps: [],
-      accessTimeStart: '00:00',
-      accessTimeEnd: '23:59',
-      isTimeRestricted: false
-    }
-  },
-  { 
-    id: 'u5', 
-    name: 'Newbie Chen', 
-    email: 'newbie@company.com', 
-    department: '業務部', 
-    role: 'Viewer', 
-    status: 'Pending', 
-    avatarUrl: 'https://picsum.photos/id/99/100/100', 
-    accumulatedBonus: 0,
-    googleLinked: true,
-    permissions: {
-      viewWarRoom: true,
-      viewVendors: true,
-      viewTasks: false,
-      viewCommunication: false,
-      viewPayments: false,
-      viewKnowledge: true,
-      viewAnnouncements: true,
-      accessAdminPanel: false,
-      canManageCategories: false,
-      canManageUsers: false,
-      canDeleteVendors: false,
-      canAddVendors: false,
-      canEditVendors: false
+      canDeleteVendors: false
     },
     securitySettings: {
       allowedIps: [],
@@ -504,15 +527,10 @@ export const MOCK_USERS: AdminUser[] = [
 ];
 
 export const MOCK_LOGS: SystemLog[] = [
-  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '修改', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
-  { id: 'l5', timestamp: '2024-03-13 10:05', user: 'Mike Wang', action: '點擊/檢視', target: '大發水電工程行', details: '查看了詳細資料與聯絡方式', ip: '192.168.1.103', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-  { id: 'l6', timestamp: '2024-03-13 14:20', user: 'Sarah Lin', action: '修改', target: '林小美', details: '更新了作品集連結', ip: '192.168.1.102', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-  { id: 'l7', timestamp: '2024-03-12 09:30', user: 'Alex Chen', action: '點擊/檢視', target: '深圳速達物流', details: '查詢了報關歷史紀錄', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
-  { id: 'l8', timestamp: '2024-03-12 16:00', user: 'Emily Wu', action: '新增', target: '王大力', details: '建立了新的貨運司機資料', ip: '192.168.1.105', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' },
-  { id: 'l9', timestamp: '2024-03-11 11:45', user: 'Alex Chen', action: '刪除', target: '舊供應商A', details: '清理過期資料', ip: '192.168.1.101', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+  { id: 'l1', timestamp: '2024-03-15 14:30', user: 'Alex Chen', action: '更新資源', target: 'Firebase Studio', details: '修改了描述與標籤', ip: '192.168.1.101', status: 'Update' },
+  { id: 'l2', timestamp: '2024-03-15 11:20', user: 'Sarah Lin', action: '新增資源', target: 'Midjourney', details: '建立新項目', ip: '192.168.1.102', status: 'Create' },
+  { id: 'l3', timestamp: '2024-03-14 16:45', user: 'Alex Chen', action: '系統設定', target: 'API Key', details: '更新了 Gemini API Key', ip: '192.168.1.101', status: 'System' },
+  { id: 'l4', timestamp: '2024-03-14 09:15', user: 'Emily Wu', action: '刪除資源', target: 'Old Tool', details: '移除非必要項目', ip: '192.168.1.105', status: 'Delete' },
 ];
 
 export const MOCK_LOGIN_LOGS: LoginLog[] = [
@@ -520,9 +538,6 @@ export const MOCK_LOGIN_LOGS: LoginLog[] = [
   { id: 'li2', timestamp: '2024-03-15 09:05', user: 'Sarah Lin', ip: '192.168.1.102', device: 'Safari / iPhone', status: 'success' },
   { id: 'li3', timestamp: '2024-03-14 18:30', user: 'Unknown', ip: '203.145.2.11', device: 'Firefox / Windows', status: 'failed' },
   { id: 'li4', timestamp: '2024-03-14 09:00', user: 'Mike Wang', ip: '192.168.1.103', device: 'Edge / Windows', status: 'success' },
-  { id: 'li5', timestamp: '2024-03-13 08:55', user: 'Emily Wu', ip: '192.168.1.105', device: 'Chrome / iPhone', status: 'success' },
-  { id: 'li6', timestamp: '2024-03-12 21:10', user: 'Alex Chen', ip: '192.168.1.101', device: 'Chrome / Mac', status: 'success' },
-  { id: 'li7', timestamp: '2024-03-11 10:20', user: 'Sarah Lin', ip: '114.34.22.11', device: 'Safari / Mac', status: 'failed' },
 ];
 
 export const MOCK_SUBSCRIPTIONS: Subscription[] = [

@@ -1,356 +1,557 @@
 
-import React, { useState, useMemo } from 'react';
-import { MOCK_VENDORS } from '../constants';
-import { TransactionStatus } from '../types';
-import { CreditCard, Calendar, ArrowRight, DollarSign, CheckCircle, Clock, Gift, X, ChevronLeft, ChevronRight, Users, Search, FileText, Upload, Paperclip, CheckSquare } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { 
+  Search, LayoutGrid, List, FilePlus, Tag, Calendar, 
+  DollarSign, ImageIcon, Download, Trash2, ChevronRight, 
+  X, Maximize2, Camera, ChevronLeft, MoreHorizontal, ChevronDown,
+  Edit3, FileSignature, RefreshCw, ImagePlus, FileText, Plus,
+  Layers, CheckCircle2, AlertCircle, Save, Coins, ArrowRightLeft,
+  Briefcase, Filter, TrendingUp, HandCoins, Activity, Clock
+} from 'lucide-react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { MOCK_INVOICES, MOCK_VENDORS } from '../constants';
+import { PaymentStatus, InvoiceRecord, ServiceType } from '../types';
 
-type PaymentFilter = 'ALL' | 'PENDING' | 'PAID';
-const ITEMS_PER_PAGE = 10;
+type ViewMode = 'GRID' | 'LIST';
+type DocType = 'INVOICE' | 'LABOR_FORM';
+type Currency = 'TWD' | 'CNY';
+
+interface AttachmentItem {
+  id: string;
+  url: string;
+  description: string;
+}
 
 export const Payments: React.FC = () => {
-  const [filter, setFilter] = useState<PaymentFilter>('ALL');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [isPageDropdownOpen, setIsPageDropdownOpen] = useState(false);
+  const [currency, setCurrency] = useState<Currency>('TWD');
+  const exchangeRate = 4.5; 
+
+  // --- 時間篩選狀態 ---
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Local state to simulate labor form uploads
-  const [laborFormStatuses, setLaborFormStatuses] = useState<Record<string, 'N/A' | 'Pending' | 'Submitted' | 'Paid'>>({});
-  const [showUploadModal, setShowUploadModal] = useState<string | null>(null); // Transaction ID
+  // Modal states
+  const [showModal, setShowModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRecord | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
-  // Helper for Month Navigation
-  const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-    setCurrentPage(1);
-  };
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-    setCurrentPage(1);
-  };
+  // Form states
+  const [editingDocType, setEditingDocType] = useState<DocType>('INVOICE');
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
 
-  const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-
-  // Aggregate approved and paid transactions
-  const allTransactions = useMemo(() => {
-    return MOCK_VENDORS.flatMap(v => 
-      v.transactions
-        .filter(t => t.status === TransactionStatus.APPROVED || t.status === TransactionStatus.PAID)
-        .map(t => ({ 
-          ...t, 
-          vendorName: v.name, 
-          vendorId: v.id,
-          // Use local state if updated, otherwise default
-          laborFormStatus: laborFormStatuses[t.id] || t.laborFormStatus 
-        }))
-    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [laborFormStatuses]);
-
-  // Filter Logic: 1. By Date (Month), 2. By Status (Filter Toggle), 3. By Search Term
-  const filteredTransactions = useMemo(() => {
-    return allTransactions.filter(t => {
-      // Search Filter (Highest priority for visibility)
-      if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        const matchesSearch = 
-          t.id.toLowerCase().includes(lowerTerm) || 
-          t.vendorName.toLowerCase().includes(lowerTerm) ||
-          t.description.toLowerCase().includes(lowerTerm);
-        if (!matchesSearch) return false;
-      } else {
-        // Date Filter only applies if not searching (or strict month view)
-        const matchesMonth = t.date.startsWith(currentMonthStr);
-        if (!matchesMonth) return false;
+  // 監聽外部點擊以關閉日期選擇器
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setIsDatePickerOpen(false);
       }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsPageDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-      // Status Filter
-      if (filter === 'PENDING') return t.status === TransactionStatus.APPROVED;
-      if (filter === 'PAID') return t.status === TransactionStatus.PAID;
-      return true;
+  // --- 核心過濾邏輯 (包含日期區間) ---
+  const filteredInvoices = useMemo(() => {
+    return MOCK_INVOICES.filter(inv => {
+      const matchesSearch = inv.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            inv.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
+      
+      // 日期區間判斷
+      const matchesStartDate = startDate ? inv.date >= startDate : true;
+      const matchesEndDate = endDate ? inv.date <= endDate : true;
+
+      return matchesSearch && matchesStatus && matchesStartDate && matchesEndDate;
     });
-  }, [allTransactions, currentMonthStr, filter, searchTerm]);
+  }, [searchTerm, statusFilter, startDate, endDate]);
 
-  // Statistics for Current Month (filtered by month only, not search)
-  const monthlyStats = useMemo(() => {
-     const monthlyData = allTransactions.filter(t => t.date.startsWith(currentMonthStr));
-     const totalAmount = monthlyData.reduce((sum, t) => sum + t.amount, 0);
-     const pendingAmount = monthlyData.filter(t => t.status === TransactionStatus.APPROVED).reduce((sum, t) => sum + t.amount, 0);
-     const uniqueVendors = new Set(monthlyData.map(t => t.vendorId)).size;
-     const pendingCount = monthlyData.filter(t => t.status === TransactionStatus.APPROVED).length;
-     return { totalAmount, pendingAmount, uniqueVendors, pendingCount, totalCount: monthlyData.length };
-  }, [allTransactions, currentMonthStr]);
+  // --- 數據統計 (與過濾後的資料聯動) ---
+  const statsSummary = useMemo(() => {
+    let total = 0;
+    let pending = 0;
+    let billed = 0;
+    let paid = 0;
 
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+    filteredInvoices.forEach(inv => {
+      total += inv.amount;
+      if (inv.status === PaymentStatus.PENDING) pending += inv.amount;
+      if (inv.status === PaymentStatus.BILLED) billed += inv.amount;
+      if (inv.status === PaymentStatus.PAID) paid += inv.amount;
+    });
 
-  const handleUploadSubmit = () => {
-    if (showUploadModal) {
-      setLaborFormStatuses(prev => ({
-        ...prev,
-        [showUploadModal]: 'Submitted'
-      }));
-      setShowUploadModal(null);
+    const pendingCount = filteredInvoices.filter(i => i.status === PaymentStatus.PENDING).length;
+    const billedCount = filteredInvoices.filter(i => i.status === PaymentStatus.BILLED).length;
+    const paidCount = filteredInvoices.filter(i => i.status === PaymentStatus.PAID).length;
+
+    return { total, pending, billed, paid, pendingCount, billedCount, paidCount };
+  }, [filteredInvoices]);
+
+  const paginatedInvoices = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredInvoices.slice(start, start + itemsPerPage);
+  }, [filteredInvoices, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
+
+  const formatAmount = (val: number) => {
+    if (currency === 'CNY') {
+      return (val / exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    return val.toLocaleString();
   };
 
-  const TabButton = ({ label, value, icon }: { label: string; value: PaymentFilter; icon: React.ReactNode }) => (
-    <button 
-      onClick={() => { setFilter(value); setCurrentPage(1); }}
-      className={clsx(
-        "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition",
-        filter === value 
-          ? (value === 'PENDING' ? "bg-green-100 text-green-800 ring-2 ring-green-500" : 
-             value === 'PAID' ? "bg-slate-200 text-slate-800 ring-2 ring-slate-400" :
-             "bg-blue-100 text-blue-800 ring-2 ring-blue-500")
-          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  const handleStatusToggle = (targetStatus: string) => {
+    const nextStatus = statusFilter === targetStatus ? 'ALL' : targetStatus;
+    setStatusFilter(nextStatus);
+    setCurrentPage(1);
+  };
+
+  const handleOpenEdit = (inv: InvoiceRecord) => {
+    setSelectedInvoice(inv);
+    setAttachments([{ id: '1', url: inv.attachmentUrl, description: '主要發票單據正本' }]);
+    setShowModal(true);
+  };
+
+  const handleOpenCreate = () => {
+    setSelectedInvoice(null);
+    setAttachments([]);
+    setShowModal(true);
+  };
+
+  // 快速日期選擇
+  const setQuickDate = (type: 'THIS_MONTH' | 'LAST_30' | 'THIS_YEAR' | 'CLEAR') => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    
+    if (type === 'CLEAR') {
+      setStartDate(''); setEndDate('');
+    } else if (type === 'THIS_MONTH') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      setStartDate(firstDay); setEndDate(todayStr);
+    } else if (type === 'LAST_30') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      setStartDate(thirtyDaysAgo); setEndDate(todayStr);
+    } else if (type === 'THIS_YEAR') {
+      const firstDay = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+      setStartDate(firstDay); setEndDate(todayStr);
+    }
+    setIsDatePickerOpen(false);
+    setCurrentPage(1);
+  };
+
+  const statusStyles: Record<PaymentStatus, { bg: string; text: string; label: string; ring: string }> = {
+    [PaymentStatus.PAID]: { bg: 'bg-emerald-500', text: 'text-emerald-600', label: '已付款', ring: 'ring-emerald-100' },
+    [PaymentStatus.BILLED]: { bg: 'bg-indigo-500', text: 'text-indigo-600', label: '已請款', ring: 'ring-indigo-100' },
+    [PaymentStatus.PENDING]: { bg: 'bg-amber-500', text: 'text-amber-600', label: '未請款', ring: 'ring-amber-100' },
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-green-100 text-green-600 rounded-xl">
-            <CreditCard size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">支付紀錄 & 撥款中心</h1>
-            <p className="text-slate-500 text-sm">管理已通過驗收的款項與歷史支付紀錄</p>
-          </div>
-        </div>
+    <div className="flex flex-col space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-[1600px] mx-auto">
+      
+      {/* 1. 頂部數據看板 (Pulse Dashboard) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+         <div 
+           onClick={() => handleStatusToggle('ALL')}
+           className={clsx(
+             "p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group cursor-pointer transition-all duration-300",
+             statusFilter === 'ALL' ? "bg-slate-900 scale-[1.02] ring-4 ring-slate-200" : "bg-slate-800 opacity-80 hover:opacity-100"
+           )}
+         >
+            <div className="relative z-10">
+               <div className="flex justify-between items-start mb-6">
+                  <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/20"><TrendingUp size={20} className="text-emerald-400" /></div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Flow</div>
+               </div>
+               <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">累積總額 ({currency})</p>
+               <h3 className="text-3xl font-black tracking-tighter">${formatAmount(statsSummary.total)}</h3>
+            </div>
+            <Activity className="absolute -bottom-10 -right-10 text-white opacity-[0.03] w-48 h-48" />
+         </div>
 
-        {/* Month Picker */}
-        <div className="flex items-center bg-white rounded-lg border border-slate-200 p-1 shadow-sm self-start md:self-auto">
-           <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition">
-             <ChevronLeft size={20} />
-           </button>
-           <span className="px-4 font-bold text-slate-800 min-w-[120px] text-center">
-             {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月
-           </span>
-           <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition">
-             <ChevronRight size={20} />
-           </button>
-        </div>
+         <div 
+           onClick={() => handleStatusToggle(PaymentStatus.PENDING)}
+           className={clsx(
+             "p-8 rounded-[2.5rem] border transition-all cursor-pointer group shadow-sm hover:shadow-xl",
+             statusFilter === PaymentStatus.PENDING ? "bg-amber-50 border-amber-200 ring-2 ring-amber-500 scale-[1.02]" : "bg-white border-slate-100 hover:border-amber-200"
+           )}
+         >
+            <div className="flex justify-between items-start mb-6">
+               <div className={clsx("p-3 rounded-2xl transition-colors duration-500", statusFilter === PaymentStatus.PENDING ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white")}><HandCoins size={20} /></div>
+               <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">未請款待補</span>
+            </div>
+            <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">應收單據水位</p>
+            <div className="flex items-end justify-between">
+               <h3 className="text-3xl font-black text-slate-800 tracking-tighter">${formatAmount(statsSummary.pending)}</h3>
+               <div className="text-sm font-black text-slate-400 mb-1">{statsSummary.pendingCount} 筆</div>
+            </div>
+         </div>
+
+         <div 
+           onClick={() => handleStatusToggle(PaymentStatus.BILLED)}
+           className={clsx(
+             "p-8 rounded-[2.5rem] border transition-all cursor-pointer group shadow-sm hover:shadow-xl",
+             statusFilter === PaymentStatus.BILLED ? "bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500 scale-[1.02]" : "bg-white border-slate-100 hover:border-indigo-200"
+           )}
+         >
+            <div className="flex justify-between items-start mb-6">
+               <div className={clsx("p-3 rounded-2xl transition-colors duration-500", statusFilter === PaymentStatus.BILLED ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white")}><FileSignature size={20} /></div>
+               <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">已核准待撥</span>
+            </div>
+            <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">處理中資金水位</p>
+            <div className="flex items-end justify-between">
+               <h3 className="text-3xl font-black text-slate-800 tracking-tighter">${formatAmount(statsSummary.billed)}</h3>
+               <div className="text-sm font-black text-slate-400 mb-1">{statsSummary.billedCount} 筆</div>
+            </div>
+         </div>
+
+         <div 
+           onClick={() => handleStatusToggle(PaymentStatus.PAID)}
+           className={clsx(
+             "p-8 rounded-[2.5rem] border transition-all cursor-pointer group shadow-sm hover:shadow-xl",
+             statusFilter === PaymentStatus.PAID ? "bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500 scale-[1.02]" : "bg-white border-slate-100 hover:border-emerald-200"
+           )}
+         >
+            <div className="flex justify-between items-start mb-6">
+               <div className={clsx("p-3 rounded-2xl transition-colors duration-500", statusFilter === PaymentStatus.PAID ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white")}><CheckCircle2 size={20} /></div>
+               <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">已結案支出</span>
+            </div>
+            <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest">實際完成支付額</p>
+            <div className="flex items-end justify-between">
+               <h3 className="text-3xl font-black text-slate-800 tracking-tighter">${formatAmount(statsSummary.paid)}</h3>
+               <div className="text-sm font-black text-slate-400 mb-1">{statsSummary.paidCount} 筆</div>
+            </div>
+         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div 
-          onClick={() => { setFilter(filter === 'PENDING' ? 'ALL' : 'PENDING'); setCurrentPage(1); }}
-          className={clsx(
-            "p-6 rounded-xl shadow-sm border border-l-4 cursor-pointer transition-all",
-            filter === 'PENDING' 
-              ? "bg-green-50 border-green-200 border-l-green-600 ring-2 ring-green-500 ring-offset-2" 
-              : "bg-white border-slate-100 border-l-green-500 hover:shadow-md"
-          )}
-        >
-           <div className="flex justify-between items-start">
-             <div>
-               <p className="text-sm font-medium text-slate-500">本月總金額 ({filter === 'PENDING' ? '待撥' : '全部'})</p>
-               <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                 ${(filter === 'PENDING' ? monthlyStats.pendingAmount : monthlyStats.totalAmount).toLocaleString()}
-               </h3>
-             </div>
-             {filter === 'PENDING' ? <CheckCircle className="text-green-600" size={24} /> : <DollarSign className="text-green-600" size={24} />}
-           </div>
-           <p className="text-xs text-slate-400 mt-2">共 {filter === 'PENDING' ? monthlyStats.pendingCount : monthlyStats.totalCount} 筆款項</p>
-           {filter === 'PENDING' && <p className="text-xs text-green-700 font-bold mt-2">已套用篩選: 僅顯示待撥款</p>}
-        </div>
-
-        <div className="p-6 rounded-xl shadow-sm border border-l-4 bg-white border-slate-100 border-l-blue-500">
-           <div className="flex justify-between items-start">
-             <div>
-               <p className="text-sm font-medium text-slate-500">合作廠商數</p>
-               <h3 className="text-3xl font-bold text-slate-800 mt-2">{monthlyStats.uniqueVendors} 家</h3>
-             </div>
-             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <Users size={24} />
-             </div>
-           </div>
-           <p className="text-xs text-slate-400 mt-2">本月有請款紀錄的廠商</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-             <h3 className="font-bold text-slate-800 whitespace-nowrap">款項列表 ({currentDate.getMonth() + 1}月)</h3>
-             {filter !== 'ALL' && (
-               <button 
-                 onClick={() => { setFilter('ALL'); setCurrentPage(1); }}
-                 className="text-xs flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-1 rounded-full hover:bg-slate-200 transition"
-               >
-                 清除篩選 <X size={12}/>
-               </button>
-             )}
+      {/* 2. 過濾與操作列 */}
+      <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+        <div className="flex flex-col md:flex-row items-center gap-4 w-full lg:w-auto">
+          <div className="relative flex-1 md:min-w-[18rem] group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
+            <input 
+              type="text" 
+              placeholder="搜尋廠商、單號..."
+              className="w-full pl-11 pr-4 py-3 bg-white/70 backdrop-blur rounded-[1.2rem] border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-700 shadow-sm text-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-             {/* Search Input */}
-             <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="搜尋工單號、廠商..." 
-                  className="pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 w-full sm:w-64"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
-             </div>
-
-             <div className="flex gap-2 p-1 bg-slate-50 rounded-lg border border-slate-100">
-                <TabButton label="全部" value="ALL" icon={<FileText size={14}/>} />
-                <TabButton label="待撥款" value="PENDING" icon={<CheckCircle size={14}/>} />
-                <TabButton label="已結案" value="PAID" icon={<CheckSquare size={14}/>} />
-             </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-6 py-3">工單/廠商</th>
-                <th className="px-6 py-3">描述</th>
-                <th className="px-6 py-3">驗收日期</th>
-                <th className="px-6 py-3 text-right">金額</th>
-                <th className="px-6 py-3 text-center">勞報單</th>
-                <th className="px-6 py-3 text-center">狀態</th>
-                <th className="px-6 py-3 text-center">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedTransactions.map(t => (
-                <tr key={t.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800">{t.id}</div>
-                    <Link to={`/vendors/${t.vendorId}`} className="text-blue-600 hover:underline text-xs">{t.vendorName}</Link>
-                  </td>
-                  <td className="px-6 py-4 max-w-xs truncate">
-                    {t.description}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">
-                    <div className="flex items-center gap-1">
-                      <Calendar size={14} />
-                      {t.approvalDate || '-'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono font-medium text-slate-800">
-                    ${t.amount.toLocaleString()}
-                  </td>
-                  
-                  {/* Labor Form Status Column */}
-                  <td className="px-6 py-4 text-center">
-                    {t.laborFormStatus === 'Submitted' || t.laborFormStatus === 'Paid' ? (
-                       <span className="text-xs text-green-600 font-bold flex items-center justify-center gap-1">
-                         <FileText size={14} /> 已繳交
-                       </span>
-                    ) : (
-                       <button 
-                         onClick={() => setShowUploadModal(t.id)}
-                         className="text-xs text-orange-600 font-bold hover:bg-orange-50 px-2 py-1 rounded border border-dashed border-orange-300 flex items-center justify-center gap-1 mx-auto"
-                       >
-                         <Upload size={14} /> 待上傳
-                       </button>
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4 text-center">
-                    <span className={clsx(
-                      "px-2 py-1 rounded-full text-xs font-bold",
-                      t.status === TransactionStatus.APPROVED ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"
-                    )}>
-                      {t.status === TransactionStatus.APPROVED ? '待撥款' : '已付款'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <Link 
-                      to={`/transactions/${t.id}`}
-                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      詳情 <ArrowRight size={14} />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {paginatedTransactions.length === 0 && (
-                 <tr><td colSpan={7} className="text-center py-8 text-slate-400">本月沒有符合條件的項目</td></tr>
+          {/* 時間篩選器 Popover */}
+          <div className="relative" ref={datePickerRef}>
+            <button 
+              onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+              className={clsx(
+                "flex items-center gap-3 px-6 py-3 rounded-[1.2rem] border transition-all font-bold text-sm shadow-sm whitespace-nowrap",
+                (startDate || endDate) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-100 hover:bg-slate-50"
               )}
-            </tbody>
-          </table>
+            >
+              <Calendar size={18} />
+              {startDate || endDate ? `${startDate || '開始'} 至 ${endDate || '現在'}` : '所有時間'}
+              <ChevronDown size={14} className={clsx("transition-transform", isDatePickerOpen && "rotate-180")} />
+            </button>
+
+            {isDatePickerOpen && (
+              <div className="absolute top-full left-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 z-[60] animate-in fade-in slide-in-from-top-2">
+                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">日期區間篩選</h4>
+                 <div className="space-y-4">
+                    <div>
+                       <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">開始日期</label>
+                       <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="w-full border border-slate-100 bg-slate-50 p-3 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10" />
+                    </div>
+                    <div>
+                       <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">結束日期</label>
+                       <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="w-full border border-slate-100 bg-slate-50 p-3 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10" />
+                    </div>
+                    <div className="pt-2 grid grid-cols-2 gap-2">
+                       <button onClick={() => setQuickDate('THIS_MONTH')} className="py-2 bg-slate-50 hover:bg-indigo-50 text-[10px] font-black text-slate-600 hover:text-indigo-600 rounded-lg transition-colors uppercase tracking-widest">本月</button>
+                       <button onClick={() => setQuickDate('LAST_30')} className="py-2 bg-slate-50 hover:bg-indigo-50 text-[10px] font-black text-slate-600 hover:text-indigo-600 rounded-lg transition-colors uppercase tracking-widest">近 30 天</button>
+                       <button onClick={() => setQuickDate('THIS_YEAR')} className="py-2 bg-slate-50 hover:bg-indigo-50 text-[10px] font-black text-slate-600 hover:text-indigo-600 rounded-lg transition-colors uppercase tracking-widest">今年</button>
+                       <button onClick={() => setQuickDate('CLEAR')} className="py-2 bg-rose-50 hover:bg-rose-100 text-[10px] font-black text-rose-600 rounded-lg transition-colors uppercase tracking-widest">清除</button>
+                    </div>
+                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="relative w-full md:w-auto">
+             <select 
+               className="w-full md:w-auto px-6 py-3 bg-white/70 backdrop-blur rounded-[1.2rem] border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer font-bold text-slate-600 text-sm appearance-none pr-12 shadow-sm" 
+               value={statusFilter} 
+               onChange={(e) => handleStatusToggle(e.target.value)}
+             >
+                <option value="ALL">所有狀態</option>
+                <option value={PaymentStatus.PENDING}>未請款</option>
+                <option value={PaymentStatus.BILLED}>已請款</option>
+                <option value={PaymentStatus.PAID}>已付款</option>
+             </select>
+             <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
         </div>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between">
-             <div className="text-sm text-slate-500">
-                顯示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} 到 {Math.min(currentPage * ITEMS_PER_PAGE, filteredTransactions.length)} 筆，共 {filteredTransactions.length} 筆
-             </div>
-             <div className="flex gap-1">
-                <button 
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentPage(i + 1)}
-                    className={clsx(
-                      "w-8 h-8 rounded border text-sm font-medium transition",
-                      currentPage === i + 1 ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 hover:bg-slate-50"
-                    )}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button 
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white"
-                >
-                  <ChevronRight size={16} />
-                </button>
-             </div>
+        <div className="flex gap-2 w-full lg:w-auto">
+           <div className="flex bg-white/70 backdrop-blur p-1.5 rounded-[1.2rem] border border-slate-100 shadow-sm">
+              <button onClick={() => setViewMode('LIST')} className={clsx("p-2.5 rounded-xl transition-all", viewMode === 'LIST' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-600")}><List size={20} /></button>
+              <button onClick={() => setViewMode('GRID')} className={clsx("p-2.5 rounded-xl transition-all", viewMode === 'GRID' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-600")}><LayoutGrid size={20} /></button>
+           </div>
+           <button onClick={handleOpenCreate} className="flex-1 lg:flex-none flex items-center justify-center gap-3 px-10 py-3 bg-slate-900 text-white rounded-[1.2rem] font-black uppercase tracking-widest text-[11px] shadow-xl hover:bg-indigo-600 transition-all active:scale-95">
+             <FilePlus size={16} /> 建立單據
+           </button>
+        </div>
+      </div>
+
+      {/* 3. 數據展示區 */}
+      <div className="flex-1 min-h-[400px]">
+        {filteredInvoices.length === 0 ? (
+          <div className="py-32 flex flex-col items-center justify-center border-4 border-dashed border-slate-100 rounded-[3rem] bg-white/40">
+             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6"><Search size={40} className="text-slate-200" /></div>
+             <p className="text-lg font-black text-slate-400 uppercase tracking-widest">查無對應請款單據</p>
+             <button onClick={() => { setQuickDate('CLEAR'); setStatusFilter('ALL'); setSearchTerm(''); }} className="mt-4 text-indigo-600 font-bold hover:underline">重置過濾條件</button>
           </div>
+        ) : (
+          <>
+            {viewMode === 'GRID' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {paginatedInvoices.map(inv => (
+                  <div 
+                    key={inv.id} 
+                    className="glass-card rounded-[3rem] p-10 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 group relative border border-white/60 cursor-pointer" 
+                    onClick={() => handleOpenEdit(inv)}
+                  >
+                    <div className="flex justify-between items-start mb-8">
+                       <span className={clsx(
+                         "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm border text-white border-white/20", 
+                         statusStyles[inv.status].bg
+                       )}>
+                         {statusStyles[inv.status].label}
+                       </span>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 group-hover:text-indigo-600 transition-colors line-clamp-1">{inv.vendorName}</h3>
+                    <div className="space-y-4 mb-10">
+                       <div className="flex items-center gap-3 text-slate-400 font-bold text-sm"><Tag size={18} className="text-indigo-400" /><span className="font-mono tracking-wider">{inv.invoiceNo}</span></div>
+                       <div className="flex items-center gap-3 text-slate-400 font-bold text-sm"><Calendar size={18} className="text-indigo-400" /><span>{inv.date}</span></div>
+                    </div>
+                    <div className="flex items-end justify-between pt-8 border-t border-slate-50">
+                       <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">請款金額 ({currency})</span>
+                          <div className="text-3xl font-black text-slate-800 tracking-tighter flex items-center gap-1">
+                             <span className="text-xs font-bold text-slate-300">{currency}</span>
+                             {formatAmount(inv.amount)}
+                          </div>
+                       </div>
+                       <div className="p-3.5 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-lg group-hover:scale-110">
+                          <ChevronRight size={20} />
+                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white/80 backdrop-blur rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                      <thead className="bg-slate-50/50 border-b border-slate-100">
+                         <tr className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">
+                            <th className="px-10 py-6">狀態</th>
+                            <th className="px-10 py-6">廠商名稱</th>
+                            <th className="px-10 py-6">發票編號</th>
+                            <th className="px-10 py-6">日期</th>
+                            <th className="px-10 py-6 text-right">請款總額 ({currency})</th>
+                            <th className="px-10 py-6 w-20"></th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                         {paginatedInvoices.map(inv => (
+                            <tr key={inv.id} className="group hover:bg-indigo-50/30 transition-colors cursor-pointer" onClick={() => handleOpenEdit(inv)}>
+                               <td className="px-10 py-8">
+                                 <span className={clsx("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-sm", statusStyles[inv.status].bg)}>
+                                   {statusStyles[inv.status].label}
+                                 </span>
+                               </td>
+                               <td className="px-10 py-8 font-black text-slate-800 text-lg tracking-tight group-hover:text-indigo-600 transition-colors">{inv.vendorName}</td>
+                               <td className="px-10 py-8 font-mono text-slate-400 text-xs font-bold">{inv.invoiceNo}</td>
+                               <td className="px-10 py-8 font-bold text-slate-400 text-sm">{inv.date}</td>
+                               <td className="px-10 py-8 text-right font-black text-slate-800 text-xl tracking-tighter">${formatAmount(inv.amount)}</td>
+                               <td className="px-10 py-8 text-right">
+                                 <div className="p-2.5 bg-slate-50 text-slate-300 rounded-xl group-hover:text-indigo-600 group-hover:bg-white transition-all shadow-sm">
+                                   <ChevronRight size={20} />
+                                 </div>
+                               </td>
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Labor Form Upload Modal */}
-      {showUploadModal && (
-         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
-                 <h3 className="text-lg font-bold flex items-center gap-2">
-                    <FileText size={20} className="text-orange-400" /> 上傳勞務報酬單
-                 </h3>
-                 <button onClick={() => setShowUploadModal(null)} className="text-slate-400 hover:text-white"><X size={24}/></button>
+      {/* 4. 分頁控制 */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-8 px-6 py-4 bg-white/30 backdrop-blur rounded-[2.5rem] border border-white/50">
+         <div className="flex items-center gap-8">
+            <div className="relative" ref={dropdownRef}>
+               <button onClick={() => setIsPageDropdownOpen(!isPageDropdownOpen)} className="flex items-center gap-4 bg-white px-6 py-3 rounded-[1.2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                  <span className="text-sm font-bold text-slate-400">每頁</span>
+                  <span className="text-sm font-black text-indigo-600">{itemsPerPage}</span>
+                  <ChevronDown size={16} className={clsx("text-slate-300 transition-transform", isPageDropdownOpen && "rotate-180")} />
+               </button>
+               {isPageDropdownOpen && (
+                  <div className="absolute bottom-full left-0 mb-3 w-full bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+                     {[15, 30, 50].map(num => (
+                        <button key={num} onClick={() => {setItemsPerPage(num); setCurrentPage(1); setIsPageDropdownOpen(false);}} className="w-full text-left px-6 py-3 text-sm font-black hover:bg-indigo-50 transition-colors">
+                           {num}
+                        </button>
+                     ))}
+                  </div>
+               )}
+            </div>
+            <div className="text-sm font-bold text-slate-400">
+               共 {filteredInvoices.length} 筆
+            </div>
+         </div>
+
+         <div className="flex items-center gap-3">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-3 rounded-2xl border border-slate-100 bg-white text-slate-400 disabled:opacity-30 hover:text-indigo-600 transition-all shadow-sm">
+               <ChevronLeft size={20} />
+            </button>
+            <div className="flex items-center gap-1.5">
+               {Array.from({ length: totalPages }).map((_, i) => (
+                 <button key={i} onClick={() => setCurrentPage(i + 1)} className={clsx("w-10 h-10 rounded-2xl text-xs font-black transition-all border shadow-sm", currentPage === i + 1 ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-50 hover:bg-slate-50")}>
+                    {i + 1}
+                 </button>
+               ))}
+            </div>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-3 rounded-2xl border border-slate-100 bg-white text-slate-400 disabled:opacity-30 hover:text-indigo-600 transition-all shadow-sm">
+               <ChevronRight size={20} />
+            </button>
+         </div>
+      </div>
+
+      {/* 5. 單據建立/編輯 Modal (與先前一致) */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white">
+                 <div className="flex items-center gap-4">
+                    <div className="p-4 bg-slate-900 text-white rounded-3xl shadow-lg">
+                       {selectedInvoice ? <Edit3 size={28} /> : <FilePlus size={28} />}
+                    </div>
+                    <div>
+                       <h3 className="text-3xl font-black text-slate-800 tracking-tighter">
+                         {selectedInvoice ? `編輯單據 - ${selectedInvoice.vendorName}` : '建立請款單據'}
+                       </h3>
+                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Invoice & Labor Remuneration System</p>
+                    </div>
+                 </div>
+                 <button onClick={() => setShowModal(false)} className="p-4 text-slate-300 hover:text-slate-800 transition-all">
+                    <X size={32} />
+                 </button>
               </div>
-              <div className="p-6">
-                 <p className="text-sm text-slate-600 mb-4">請確認您已收到廠商簽署完畢的勞務報酬單（含身分證影本），並掃描成 PDF 上傳。</p>
-                 
-                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-slate-400 transition cursor-pointer mb-6">
-                    <Paperclip size={32} className="mb-2" />
-                    <span className="text-sm font-bold">點擊選擇檔案 或 拖曳至此</span>
-                    <span className="text-xs mt-1">支援 PDF, JPG, PNG (Max 5MB)</span>
+
+              <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+                 <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50 custom-scrollbar border-r border-slate-100">
+                    <div className="mb-8 flex justify-between items-end">
+                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={18} className="text-indigo-500" /> 附件影像管理</h4>
+                       <label className="flex items-center gap-2 px-6 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest cursor-pointer hover:bg-indigo-600 hover:text-white transition-all">
+                          <ImagePlus size={14} /> 新增附件
+                          <input type="file" className="hidden" />
+                       </label>
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                       {attachments.map((att, idx) => (
+                         <div key={att.id} className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden flex flex-col group animate-in slide-in-from-bottom-2 shadow-sm">
+                            <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                               <span className="w-7 h-7 rounded-full bg-slate-900 text-white text-[11px] font-black flex items-center justify-center">0{idx + 1}</span>
+                               <button className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={14} /></button>
+                            </div>
+                            <div className="relative aspect-video overflow-hidden bg-slate-200 cursor-pointer" onClick={() => setFullscreenImage(att.url)}>
+                               <img src={att.url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Evidence" />
+                               <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white" size={40} /></div>
+                            </div>
+                            <div className="p-6">
+                               <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-slate-700 outline-none h-24 resize-none" placeholder="輸入單據說明..." defaultValue={att.description} />
+                            </div>
+                         </div>
+                       ))}
+                    </div>
                  </div>
 
-                 <div className="flex gap-3">
-                    <button onClick={() => setShowUploadModal(null)} className="flex-1 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg">取消</button>
-                    <button onClick={handleUploadSubmit} className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg shadow-sm">確認上傳</button>
+                 <div className="w-full lg:w-[450px] bg-white p-10 overflow-y-auto custom-scrollbar shadow-2xl">
+                    <div className="space-y-8">
+                       <div className="space-y-3">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">單據類型</label>
+                          <div className="flex p-1.5 bg-slate-50 border border-slate-100 rounded-2xl shadow-inner">
+                             <button onClick={() => setEditingDocType('INVOICE')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'INVOICE' ? "bg-white text-indigo-600 shadow-md border" : "text-slate-400")}>統一發票</button>
+                             <button onClick={() => setEditingDocType('LABOR_FORM')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'LABOR_FORM' ? "bg-white text-amber-600 shadow-md border" : "text-slate-400")}>勞務報酬單</button>
+                          </div>
+                       </div>
+
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">請款廠商/對象</label>
+                          <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all">
+                             <option>請選擇合作對象...</option>
+                             {MOCK_VENDORS.map(v => (
+                               <option key={v.id} selected={selectedInvoice?.vendorName === v.name}>{v.name}</option>
+                             ))}
+                          </select>
+                       </div>
+
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">發票/單據編號</label>
+                          <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none font-mono" placeholder="輸入單號..." defaultValue={selectedInvoice?.invoiceNo} />
+                       </div>
+
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">金額 ({currency})</label>
+                          <div className="relative">
+                             <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                             <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-xl font-black text-slate-800 outline-none" placeholder="0" defaultValue={selectedInvoice?.amount} />
+                          </div>
+                       </div>
+
+                       <div className="pt-6">
+                          <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-3xl flex items-start gap-4">
+                             <AlertCircle className="text-indigo-500 shrink-0" size={20} />
+                             <p className="text-[10px] text-indigo-700 font-bold leading-relaxed">
+                                上傳之附件影像將經由 AI 進行自動光學識別 (OCR)，若金額與輸入值不符，系統將會提出警示。
+                             </p>
+                          </div>
+                       </div>
+                    </div>
                  </div>
               </div>
+
+              <div className="p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-6 shrink-0">
+                 <button onClick={() => setShowModal(false)} className="px-10 py-5 bg-slate-50 text-slate-500 font-black rounded-3xl hover:bg-slate-100 transition-all uppercase tracking-widest text-xs">取消操作</button>
+                 <button onClick={() => setShowModal(false)} className="px-14 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center gap-3"><Save size={18} /> 儲存並提交審核</button>
+              </div>
            </div>
-         </div>
+        </div>
+      )}
+
+      {/* 6. 全螢幕影像檢視器 */}
+      {fullscreenImage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-12 bg-slate-900/95 backdrop-blur-xl animate-in fade-in" onClick={() => setFullscreenImage(null)}>
+           <button className="absolute top-10 right-10 p-6 text-white hover:scale-110 transition-transform"><X size={48} /></button>
+           <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-[3rem] shadow-2xl border-4 border-white/10" alt="Fullscreen" />
+        </div>
       )}
     </div>
   );
