@@ -1,165 +1,457 @@
+import { useState } from 'react';
 import type { MetaFunction } from "@remix-run/node";
 import { 
-  Settings, Users, Shield, Database, Activity,
-  ChevronRight, Lock, Bell, Palette
+  Settings, Users, Plus, Megaphone, 
+  Activity, X, Layers, Bot, 
+  History, LogIn, Monitor, Smartphone, Trash2, Tags, Power, Edit2,
+  Building, Terminal, ShieldCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Layout } from '~/components/Layout';
+import { ClientOnly } from '~/components/ClientOnly';
+import { 
+  MOCK_ANNOUNCEMENTS, MOCK_LOGS, MOCK_LOGIN_LOGS, 
+  MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
+  MOCK_USERS, MOCK_DEPARTMENTS 
+} from '~/constants';
 
 export const meta: MetaFunction = () => {
   return [
     { title: "系統管理 - PartnerLink Pro" },
-    { name: "description", content: "管理使用者權限與系統設定" },
+    { name: "description", content: "全域設定、協力廠商權限控管與自動化日誌監控" },
   ];
 };
 
-const adminModules = [
-  {
-    id: 'users',
-    title: '使用者管理',
-    description: '管理系統使用者帳號與權限設定',
-    icon: <Users size={24} />,
-    colorClass: 'bg-blue-50 text-blue-600',
-    stats: '12 位使用者',
-  },
-  {
-    id: 'roles',
-    title: '角色與權限',
-    description: '設定不同角色的功能存取權限',
-    icon: <Shield size={24} />,
-    colorClass: 'bg-emerald-50 text-emerald-600',
-    stats: '4 種角色',
-  },
-  {
-    id: 'security',
-    title: '安全設定',
-    description: 'IP 白名單、登入限制、密碼政策',
-    icon: <Lock size={24} />,
-    colorClass: 'bg-amber-50 text-amber-600',
-    stats: '已啟用',
-  },
-  {
-    id: 'notifications',
-    title: '通知設定',
-    description: '系統通知、Email 提醒設定',
-    icon: <Bell size={24} />,
-    colorClass: 'bg-violet-50 text-violet-600',
-    stats: '3 個頻道',
-  },
-  {
-    id: 'appearance',
-    title: '外觀設定',
-    description: '自訂系統主題與品牌標誌',
-    icon: <Palette size={24} />,
-    colorClass: 'bg-rose-50 text-rose-600',
-    stats: '預設主題',
-  },
-  {
-    id: 'database',
-    title: '資料庫管理',
-    description: '資料備份、匯出與清理',
-    icon: <Database size={24} />,
-    colorClass: 'bg-slate-100 text-slate-600',
-    stats: '正常運作',
-  },
-];
+type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
-export default function AdminPage() {
+function AdminContent() {
+  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+
+  const navItems = [
+    { id: 'dashboard', label: '數據總覽', icon: <Activity size={18} /> },
+    { id: 'logs', label: '日誌中心', icon: <Terminal size={18} /> },
+    { id: 'categories', label: '類別管理', icon: <Layers size={18} /> },
+    { id: 'tags', label: '標籤管理', icon: <Tags size={18} /> },
+    { id: 'ai', label: 'AI 設定', icon: <Bot size={18} /> },
+    { id: 'users', label: '人員權限', icon: <Users size={18} /> },
+    { id: 'departments', label: '部門清單', icon: <Building size={18} /> },
+    { id: 'announcements', label: '系統公告', icon: <Megaphone size={18} /> },
+    { id: 'settings', label: '系統設定', icon: <Settings size={18} /> },
+  ];
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 頁首 */}
+    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-            <Settings size={28} className="text-slate-600" />
-            系統管理
-          </h1>
-          <p className="text-slate-500 mt-1">管理使用者權限與系統設定</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Activity size={16} className="text-emerald-500" />
-          <span className="text-slate-600">系統狀態：</span>
-          <span className="text-emerald-600 font-bold">正常運作</span>
-        </div>
-      </div>
-
-      {/* 系統資訊卡片 */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 rounded-2xl text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold mb-1">PartnerLink Pro</h2>
-            <p className="text-slate-400 text-sm">協力廠商管理系統 v1.0.0</p>
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-slate-900 text-white rounded-xl shadow-lg">
+            <Settings size={24} />
           </div>
-          <div className="text-right">
-            <p className="text-slate-400 text-xs">最後更新</p>
-            <p className="text-sm font-medium">2026-01-28</p>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">系統核心管理中心</h1>
+            <p className="text-slate-500 text-sm">全域設定、協力廠商權限控管與自動化日誌監控</p>
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-black">128</p>
-            <p className="text-xs text-slate-400">廠商數</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black">12</p>
-            <p className="text-xs text-slate-400">使用者</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black">99.9%</p>
-            <p className="text-xs text-slate-400">系統可用率</p>
-          </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100 text-xs font-bold">
+           <ShieldCheck size={14} /> 系統狀態：運行正常
         </div>
       </div>
 
-      {/* 管理模組 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {adminModules.map(module => (
-          <div 
-            key={module.id}
-            className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group"
+      <div className="flex border-b border-slate-200 gap-6 overflow-x-auto pb-px scrollbar-hide">
+        {navItems.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as AdminTab)}
+            className={clsx(
+              "flex items-center gap-2 pb-3 text-sm font-bold transition-all relative whitespace-nowrap",
+              activeTab === tab.id ? "text-slate-900 border-b-2 border-slate-900" : "text-slate-400 hover:text-slate-600"
+            )}
           >
-            <div className="flex items-start justify-between mb-4">
-              <div className={clsx("p-3 rounded-xl", module.colorClass)}>
-                {module.icon}
-              </div>
-              <div className="p-2 bg-slate-50 text-slate-300 rounded-full group-hover:bg-slate-800 group-hover:text-white transition-all">
-                <ChevronRight size={16} />
-              </div>
-            </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-slate-600 transition-colors">
-              {module.title}
-            </h3>
-            <p className="text-sm text-slate-500 mb-3">
-              {module.description}
-            </p>
-            <p className="text-xs font-medium text-slate-400">
-              {module.stats}
-            </p>
-          </div>
+            {tab.icon}
+            {tab.label}
+          </button>
         ))}
       </div>
 
-      {/* 快速操作 */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <h2 className="text-lg font-bold text-slate-800 mb-4">快速操作</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition text-center">
-            <Users size={20} className="mx-auto mb-2 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">新增使用者</span>
-          </button>
-          <button className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition text-center">
-            <Database size={20} className="mx-auto mb-2 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">備份資料</span>
-          </button>
-          <button className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition text-center">
-            <Activity size={20} className="mx-auto mb-2 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">查看日誌</span>
-          </button>
-          <button className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition text-center">
-            <Settings size={20} className="mx-auto mb-2 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">系統設定</span>
-          </button>
+      <div className="min-h-[600px] py-4">
+        {activeTab === 'dashboard' && <DashboardSummary />}
+        {activeTab === 'logs' && <LogCenter />}
+        {activeTab === 'categories' && <CategoryManager />}
+        {activeTab === 'tags' && <TagManager />}
+        {activeTab === 'ai' && <AiConfig />}
+        {activeTab === 'users' && <UserManager />}
+        {activeTab === 'departments' && <DepartmentManager />}
+        {activeTab === 'announcements' && <AnnouncementManager />}
+        {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
+      </div>
+    </div>
+  );
+}
+
+const DashboardSummary = () => (
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
+        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">台/陸廠商比例</h3>
+        <div className="flex items-end justify-between">
+          <div className="text-3xl font-black text-slate-800">72 / 56</div>
+          <div className="text-xs text-slate-400 font-bold">總計 128 家</div>
+        </div>
+        <div className="mt-4 h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
+           <div className="h-full bg-blue-500 w-[56%]"></div>
+           <div className="h-full bg-red-400 w-[44%]"></div>
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">待處理日誌</h3>
+        <div className="text-3xl font-black text-orange-500">24 <span className="text-sm font-normal text-slate-400">條</span></div>
+        <p className="text-[10px] text-slate-400 mt-2">包含 3 條權限變更紀錄</p>
+      </div>
+      <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">系統通告轉化</h3>
+        <div className="text-3xl font-black text-indigo-600">88% <span className="text-sm font-normal text-slate-400">閱讀率</span></div>
+        <p className="text-[10px] text-slate-400 mt-2">最近一則公告：2024 年度評鑑</p>
+      </div>
+      <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">API 調用狀態</h3>
+        <div className="text-3xl font-black text-green-600">100% <span className="text-sm font-normal text-slate-400">成功</span></div>
+        <p className="text-[10px] text-slate-400 mt-2">Gemini 2.5 Pro 模型運行中</p>
+      </div>
+    </div>
+    
+    <div className="bg-slate-900 rounded-2xl p-6 text-white overflow-hidden relative">
+       <div className="relative z-10">
+          <h3 className="text-lg font-bold mb-2 flex items-center gap-2"><Terminal size={20} className="text-blue-400" /> 系統運行監控終端</h3>
+          <div className="font-mono text-xs text-blue-200/70 space-y-1">
+             <p>[OK] Cloud Database connection established.</p>
+             <p>[OK] CDN Edge caching warming up...</p>
+             <p>[INFO] Automated vendor evaluation background task started.</p>
+             <p className="text-blue-400">[READY] System is listening for new vendor applications.</p>
+          </div>
+       </div>
+       <Activity size={150} className="absolute -bottom-10 -right-10 text-white/5 opacity-10" />
+    </div>
+  </div>
+);
+
+const LogCenter = () => {
+  const [logType, setLogType] = useState<'operation' | 'login'>('operation');
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <button 
+          onClick={() => setLogType('operation')}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-black flex items-center gap-2 transition",
+            logType === 'operation' ? "bg-slate-800 text-white shadow-lg" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <History size={16} /> 操作審計日誌
+        </button>
+        <button 
+          onClick={() => setLogType('login')}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-black flex items-center gap-2 transition",
+            logType === 'login' ? "bg-slate-800 text-white shadow-lg" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <LogIn size={16} /> 帳號登入安全日誌
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          {logType === 'operation' ? (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr className="text-slate-500 font-bold">
+                  <th className="px-6 py-4">發生時間</th>
+                  <th className="px-6 py-4">執行人員</th>
+                  <th className="px-6 py-4">動作</th>
+                  <th className="px-6 py-4">變更對象</th>
+                  <th className="px-6 py-4">詳情</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {MOCK_LOGS.map(l => (
+                  <tr key={l.id} className="hover:bg-slate-50/50 transition">
+                    <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
+                    <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
+                    <td className="px-6 py-5">
+                      <span className={clsx(
+                        "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider",
+                        l.action.includes('更新') ? "bg-blue-100 text-blue-700" : 
+                        l.action.includes('新增') ? "bg-green-100 text-green-700" :
+                        "bg-slate-100 text-slate-600"
+                      )}>
+                        {l.action === '更新資源' ? 'Update' : l.action === '新增資源' ? 'Create' : 'System'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5 text-slate-600 font-bold">{l.target}</td>
+                    <td className="px-6 py-5 text-slate-500 max-w-xs truncate">{l.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr className="text-slate-500 font-bold">
+                  <th className="px-6 py-4">登入時間</th>
+                  <th className="px-6 py-4">人員</th>
+                  <th className="px-6 py-4">來源 IP</th>
+                  <th className="px-6 py-4">裝置環境</th>
+                  <th className="px-6 py-4 text-center">狀態</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {MOCK_LOGIN_LOGS.map(l => (
+                  <tr key={l.id} className="hover:bg-slate-50/50 transition">
+                    <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
+                    <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
+                    <td className="px-6 py-5 font-mono text-blue-600 text-xs">{l.ip}</td>
+                    <td className="px-6 py-5 text-slate-500 flex items-center gap-2">
+                      {l.device.includes('Desktop') ? <Monitor size={14} /> : <Smartphone size={14} />}
+                      {l.device}
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <span className={clsx(
+                        "px-2.5 py-1 rounded-full text-[10px] font-black",
+                        l.status === 'success' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      )}>
+                        {l.status === 'success' ? '成功' : '失敗'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
+  );
+};
+
+const CategoryManager = () => (
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="text-lg font-bold text-slate-800">廠商類別管理</h2>
+      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
+        <Plus size={16} /> 新增類別
+      </button>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {CATEGORY_OPTIONS.map(cat => (
+          <div key={cat.value} className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+            <span className="font-bold text-slate-700">{cat.label}</span>
+            <button className="text-slate-400 hover:text-slate-600"><Edit2 size={14} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const TagManager = () => (
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
+      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
+        <Plus size={16} /> 新增標籤
+      </button>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div className="flex flex-wrap gap-3">
+        {MOCK_SYSTEM_TAGS.map(tag => (
+          <div key={tag.id} className="px-4 py-2 bg-slate-100 rounded-full flex items-center gap-2">
+            <span className="font-bold text-slate-700">{tag.name}</span>
+            <span className="text-xs text-slate-400">({tag.count})</span>
+            <button className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const AiConfig = () => (
+  <div className="space-y-4">
+    <h2 className="text-lg font-bold text-slate-800">AI 模型設定</h2>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+        <div className="flex items-center gap-3">
+          <Bot size={24} className="text-indigo-600" />
+          <div>
+            <p className="font-bold text-slate-800">Gemini 2.5 Pro</p>
+            <p className="text-xs text-slate-500">主要 AI 模型</p>
+          </div>
+        </div>
+        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">運行中</span>
+      </div>
+      
+      <div className="space-y-4">
+        <h3 className="font-bold text-slate-700">自動化規則</h3>
+        {MOCK_MODEL_RULES.map(rule => (
+          <div key={rule.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+            <div>
+              <p className="font-bold text-slate-700">{rule.name}</p>
+              <p className="text-xs text-slate-500">{rule.description}</p>
+            </div>
+            <button className={clsx(
+              "p-2 rounded-lg transition",
+              rule.enabled ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-400"
+            )}>
+              <Power size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const UserManager = () => (
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="text-lg font-bold text-slate-800">人員權限管理</h2>
+      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
+        <Plus size={16} /> 新增人員
+      </button>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 border-b border-slate-100">
+          <tr className="text-slate-500 font-bold">
+            <th className="px-6 py-4 text-left">人員</th>
+            <th className="px-6 py-4 text-left">部門</th>
+            <th className="px-6 py-4 text-left">角色</th>
+            <th className="px-6 py-4 text-center">狀態</th>
+            <th className="px-6 py-4 text-center">操作</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {MOCK_USERS.map(user => (
+            <tr key={user.id} className="hover:bg-slate-50/50 transition">
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm">
+                    {user.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800">{user.name}</p>
+                    <p className="text-xs text-slate-400">{user.email}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4 text-slate-600">{user.department}</td>
+              <td className="px-6 py-4">
+                <span className={clsx(
+                  "px-2 py-1 rounded text-xs font-bold",
+                  user.role === 'Admin' ? "bg-red-100 text-red-700" :
+                  user.role === 'Manager' ? "bg-blue-100 text-blue-700" :
+                  "bg-slate-100 text-slate-600"
+                )}>
+                  {user.role}
+                </span>
+              </td>
+              <td className="px-6 py-4 text-center">
+                <span className={clsx(
+                  "px-2 py-1 rounded-full text-xs font-bold",
+                  user.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
+                )}>
+                  {user.status === 'active' ? '啟用' : '停用'}
+                </span>
+              </td>
+              <td className="px-6 py-4 text-center">
+                <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const DepartmentManager = () => (
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="text-lg font-bold text-slate-800">部門清單管理</h2>
+      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
+        <Plus size={16} /> 新增部門
+      </button>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {MOCK_DEPARTMENTS.map(dept => (
+        <div key={dept.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800">{dept.name}</h3>
+            <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
+          </div>
+          <p className="text-sm text-slate-500 mb-4">{dept.description}</p>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Users size={14} />
+            <span>{dept.memberCount} 人</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const AnnouncementManager = () => (
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="text-lg font-bold text-slate-800">系統公告管理</h2>
+      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
+        <Plus size={16} /> 發布公告
+      </button>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 border-b border-slate-100">
+          <tr className="text-slate-500 font-bold">
+            <th className="px-6 py-4 text-left">標題</th>
+            <th className="px-6 py-4 text-left">發布日期</th>
+            <th className="px-6 py-4 text-center">優先級</th>
+            <th className="px-6 py-4 text-center">操作</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {MOCK_ANNOUNCEMENTS.map(ann => (
+            <tr key={ann.id} className="hover:bg-slate-50/50 transition">
+              <td className="px-6 py-4 font-bold text-slate-800">{ann.title}</td>
+              <td className="px-6 py-4 text-slate-500">{ann.date}</td>
+              <td className="px-6 py-4 text-center">
+                <span className={clsx(
+                  "px-2 py-1 rounded text-xs font-bold",
+                  ann.priority === 'High' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                )}>
+                  {ann.priority === 'High' ? '緊急' : '一般'}
+                </span>
+              </td>
+              <td className="px-6 py-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
+                  <button className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+export default function AdminPage() {
+  return (
+    <Layout>
+      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+        <AdminContent />
+      </ClientOnly>
+    </Layout>
   );
 }

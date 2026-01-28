@@ -1,11 +1,18 @@
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, Link } from '@remix-run/react';
 import type { MetaFunction } from "@remix-run/node";
-import { Link } from "@remix-run/react";
 import { 
-  Users, Search, Filter, Plus, Star, MapPin, Phone, 
-  ArrowRight, Building, User, Tag
+  Search, MapPin, Star, ChevronRight, LayoutGrid, 
+  LayoutList, Plus, Sparkles, X, Heart, 
+  ArrowRight, Package, Hammer, Factory, Info, Globe, Filter,
+  ChevronDown, Save, Phone, Mail, Building2
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Region, EntityType, ServiceType, VendorCategory } from '../types';
+import { Layout } from '~/components/Layout';
+import { Pagination } from '~/components/Pagination';
+import { ClientOnly } from '~/components/ClientOnly';
+import { MOCK_VENDORS, CATEGORY_GROUPS, TAIWAN_REGIONS, CHINA_REGIONS } from '~/constants';
+import { Region, ServiceType, Vendor } from '~/types';
 
 export const meta: MetaFunction = () => {
   return [
@@ -14,211 +21,474 @@ export const meta: MetaFunction = () => {
   ];
 };
 
-// 模擬廠商資料（後續會從資料庫讀取）
-const MOCK_VENDORS = [
-  {
-    id: '1',
-    name: '大發水電工程行',
-    region: Region.TAIWAN,
-    entityType: EntityType.INDIVIDUAL,
-    serviceTypes: [ServiceType.LABOR],
-    categories: [VendorCategory.PLUMBING],
-    rating: 4.8,
-    ratingCount: 156,
-    priceRange: '$$' as const,
-    avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100&h=100&fit=crop',
-    mainPhone: '0912-345-678',
-    address: '台北市信義區信義路五段',
-    tags: ['快速響應', '價格合理'],
-  },
-  {
-    id: '2',
-    name: '永興冷凍空調',
-    region: Region.TAIWAN,
-    entityType: EntityType.COMPANY,
-    serviceTypes: [ServiceType.LABOR, ServiceType.PRODUCT],
-    categories: [VendorCategory.HVAC],
-    rating: 4.5,
-    ratingCount: 89,
-    priceRange: '$$$' as const,
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
-    mainPhone: '02-2345-6789',
-    address: '台北市中山區南京東路',
-    tags: ['專業認證', '大型設備'],
-  },
-  {
-    id: '3',
-    name: '順達玻璃行',
-    region: Region.TAIWAN,
-    entityType: EntityType.INDIVIDUAL,
-    serviceTypes: [ServiceType.PRODUCT],
-    categories: [VendorCategory.GLASS],
-    rating: 4.2,
-    ratingCount: 45,
-    priceRange: '$' as const,
-    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop',
-    mainPhone: '0933-456-789',
-    address: '新北市板橋區文化路',
-    tags: ['當日施工'],
-  },
-];
+type ViewMode = 'grid' | 'card' | 'list';
 
-// 廠商卡片元件
-const VendorCard = ({ vendor }: { vendor: typeof MOCK_VENDORS[0] }) => (
-  <Link 
-    to={`/vendors/${vendor.id}`}
-    className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all group"
-  >
-    <div className="flex items-start gap-4">
-      <img 
-        src={vendor.avatarUrl} 
-        alt={vendor.name}
-        className="w-14 h-14 rounded-xl object-cover border border-slate-200"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-lg font-bold text-slate-800 truncate group-hover:text-emerald-600 transition-colors">
-            {vendor.name}
-          </h3>
-          {vendor.entityType === EntityType.COMPANY ? (
-            <Building size={14} className="text-blue-500" />
-          ) : (
-            <User size={14} className="text-amber-500" />
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-          <MapPin size={14} />
-          <span className="truncate">{vendor.address}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <Star size={14} className="text-amber-400 fill-amber-400" />
-            <span className="text-sm font-bold text-slate-700">{vendor.rating}</span>
-            <span className="text-xs text-slate-400">({vendor.ratingCount})</span>
-          </div>
-          <span className="text-sm font-bold text-emerald-600">{vendor.priceRange}</span>
-        </div>
-      </div>
-      <div className="p-2 bg-slate-50 text-slate-300 rounded-full group-hover:bg-emerald-600 group-hover:text-white transition-all">
-        <ArrowRight size={16} />
-      </div>
-    </div>
-    
-    <div className="mt-4 flex flex-wrap gap-2">
-      {vendor.categories.map(cat => (
-        <span key={cat} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-lg">
-          {cat}
-        </span>
-      ))}
-      {vendor.serviceTypes.map(st => (
-        <span key={st} className="px-2 py-1 bg-emerald-50 text-emerald-600 text-xs font-medium rounded-lg">
-          {st}
-        </span>
-      ))}
-    </div>
+function VendorDirectoryContent() {
+  const [searchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [showAddModal, setShowAddModal] = useState(false);
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(9);
 
-    {vendor.tags.length > 0 && (
-      <div className="mt-3 flex flex-wrap gap-1">
-        {vendor.tags.map(tag => (
-          <span key={tag} className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
-            #{tag}
-          </span>
-        ))}
-      </div>
-    )}
-  </Link>
-);
+  // 監聽 URL 變化
+  useEffect(() => {
+    const q = searchParams.get('search');
+    if (q) {
+      if (Object.values(ServiceType).includes(q as ServiceType)) {
+         setSelectedServiceType(q);
+         setSearchTerm('');
+      } else {
+         setSearchTerm(q);
+      }
+    }
+  }, [searchParams]);
 
-export default function VendorsPage() {
+  const filteredVendors = useMemo(() => {
+    return MOCK_VENDORS.filter(vendor => {
+      const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            vendor.tags.some(t => t.includes(searchTerm));
+      const matchesRegion = selectedRegion ? vendor.region === selectedRegion : true;
+      const matchesService = selectedServiceType ? vendor.serviceTypes.includes(selectedServiceType as ServiceType) : true;
+      return matchesSearch && matchesRegion && matchesService;
+    });
+  }, [searchTerm, selectedRegion, selectedServiceType]);
+
+  // 分頁後的資料
+  const paginatedVendors = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredVendors.slice(start, start + itemsPerPage);
+  }, [filteredVendors, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredVendors.length / itemsPerPage);
+
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  const handleToggleFavorite = (vendorId: string) => {
+    setFavorites(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(vendorId)) {
+        newSet.delete(vendorId);
+      } else {
+        newSet.add(vendorId);
+      }
+      return newSet;
+    });
+  };
+
+  // 重置分頁當篩選條件變更
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedRegion, selectedServiceType]);
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 頁首 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-700">
+      {/* 頂部標題與操作 */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-            <Users size={28} className="text-blue-600" />
-            廠商名錄
-          </h1>
-          <p className="text-slate-500 mt-1">管理所有合作廠商資料與聯絡資訊</p>
+           <h1 className="text-2xl font-bold text-gray-800 tracking-tight">全球協作廠商戰術名錄</h1>
+           <p className="text-gray-500 text-sm mt-1">
+             管理 {MOCK_VENDORS.length} 家兩岸三地合作夥伴 • <span className="font-bold text-slate-800">身分屬性識別系統</span> 運行中
+           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition font-bold">
-          <Plus size={18} />
-          新增廠商
-        </button>
+        <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+           {/* 視角切換 */}
+           <div className="bg-white p-1 rounded-xl border border-gray-200 flex items-center shadow-sm">
+              <button 
+                onClick={() => setViewMode('grid')} 
+                className={clsx(
+                  "p-2 rounded-lg transition", 
+                  viewMode === 'grid' ? "bg-slate-900 text-white" : "text-gray-400 hover:text-gray-600"
+                )}
+              >
+                <LayoutGrid size={18} />
+              </button>
+              <button 
+                onClick={() => setViewMode('card')} 
+                className={clsx(
+                  "p-2 rounded-lg transition", 
+                  viewMode === 'card' ? "bg-slate-900 text-white" : "text-gray-400 hover:text-gray-600"
+                )}
+              >
+                <LayoutList size={18} />
+              </button>
+           </div>
+           <button className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition font-bold flex items-center gap-2 shadow-md">
+             <Sparkles size={18} /> AI 智能推薦
+           </button>
+           <button 
+             onClick={() => setShowAddModal(true)} 
+             className="bg-slate-800 text-white px-5 py-2.5 rounded-xl hover:bg-slate-900 transition font-bold flex items-center gap-2 shadow-md"
+           >
+             <Plus size={18} /> 新增廠商
+           </button>
+        </div>
       </div>
 
       {/* 搜尋與篩選 */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text"
-              placeholder="搜尋廠商名稱、電話、地址..."
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+           <div className="flex-1 relative group">
+             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-slate-800 transition-colors" size={20} />
+             <input
+               type="text"
+               placeholder="搜尋廠商名稱、標籤、系統 ID..."
+               className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-medium text-slate-700"
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+             />
+           </div>
+           <div className="flex flex-wrap gap-2">
+             {/* 身分屬性篩選 */}
+             <div className="flex items-center gap-2 bg-slate-50 rounded-2xl px-4 border border-slate-100">
+               <Info size={16} className="text-slate-400" />
+               <select 
+                 className="py-3.5 bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer"
+                 value={selectedServiceType}
+                 onChange={(e) => setSelectedServiceType(e.target.value)}
+               >
+                 <option value="">所有身分屬性</option>
+                 <option value={ServiceType.LABOR}>🛠️ 提供勞務</option>
+                 <option value={ServiceType.PRODUCT}>📦 提供商品</option>
+                 <option value={ServiceType.MANUFACTURING}>🏭 製造商品</option>
+               </select>
+             </div>
+             
+             {/* 地區篩選 */}
+             <div className="flex items-center gap-2 bg-slate-50 rounded-2xl px-4 border border-slate-100">
+               <Globe size={16} className="text-slate-400" />
+               <select 
+                 className="py-3.5 bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer"
+                 value={selectedRegion}
+                 onChange={(e) => setSelectedRegion(e.target.value)}
+               >
+                 <option value="">所有地區廠商</option>
+                 <option value={Region.TAIWAN}>🇹🇼 台灣地區</option>
+                 <option value={Region.CHINA}>🇨🇳 大陸地區</option>
+               </select>
+             </div>
+           </div>
+        </div>
+      </div>
+
+      {/* 廠商列表 - 卡片視圖 */}
+      <div className="min-h-[400px]">
+        {viewMode === 'card' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {paginatedVendors.map(vendor => (
+              <div key={vendor.id} className="bg-white rounded-[2.5rem] border border-slate-100 p-6 hover:shadow-2xl hover:shadow-slate-200 transition-all group relative h-full flex flex-col overflow-hidden">
+                <div className="absolute top-4 right-4 flex gap-1">
+                   <button 
+                     onClick={(e) => { e.preventDefault(); handleToggleFavorite(vendor.id); }} 
+                     className={clsx(
+                       "p-2 rounded-full transition bg-white/80 backdrop-blur", 
+                       favorites.has(vendor.id) ? "text-red-500 shadow-inner" : "text-gray-300 hover:text-red-300 shadow-sm"
+                     )}
+                   >
+                     <Heart size={20} className={clsx(favorites.has(vendor.id) && "fill-current")} />
+                   </button>
+                </div>
+
+                <Link to={`/vendors/${vendor.id}`} className="flex-1">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="relative">
+                      <img src={vendor.avatarUrl} className="w-16 h-16 rounded-[1.5rem] object-cover border-2 border-white shadow-md transition group-hover:scale-105" />
+                      <div className={clsx(
+                        "absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center shadow-sm text-[10px] font-black",
+                        vendor.region === Region.TAIWAN ? "bg-blue-500 text-white" : "bg-red-500 text-white"
+                      )}>
+                        {vendor.region === Region.TAIWAN ? "T" : "C"}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-black text-lg text-gray-800 line-clamp-1 group-hover:text-blue-600 transition tracking-tight">{vendor.name}</h3>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1 uppercase font-black tracking-widest">
+                        <span className="bg-slate-100 px-1.5 py-0.5 rounded">{vendor.id}</span>
+                        <span className="flex items-center gap-1"><MapPin size={10}/> {vendor.region}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {vendor.serviceTypes.map(st => (
+                      <div key={st} className={clsx(
+                        "flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest border shadow-sm",
+                        st === ServiceType.LABOR ? "bg-blue-50 text-blue-700 border-blue-100" : 
+                        st === ServiceType.PRODUCT ? "bg-orange-50 text-orange-700 border-orange-100" : 
+                        "bg-indigo-50 text-indigo-700 border-indigo-100"
+                      )}>
+                        {st === ServiceType.LABOR ? <Hammer size={12}/> : st === ServiceType.PRODUCT ? <Package size={12}/> : <Factory size={12}/>}
+                        {st}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div>
+                      <span className="text-slate-400 block mb-1 font-bold uppercase tracking-tighter">主營類別</span>
+                      <span className="font-black text-slate-700">{vendor.categories[0]}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block mb-1 font-bold uppercase tracking-tighter">好評等級</span>
+                      <div className="flex items-center justify-end gap-1 font-black text-yellow-600">
+                         {vendor.rating} <Star size={12} fill="currentColor"/>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+                
+                <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
+                   <div className="flex -space-x-3">
+                      {vendor.contacts.slice(0, 3).map((c, i) => (
+                         <div key={i} className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[10px] font-black text-slate-500 shadow-sm" title={c.name}>
+                            {c.name.charAt(0)}
+                         </div>
+                      ))}
+                   </div>
+                   <Link to={`/vendors/${vendor.id}`} className="text-xs font-black text-slate-900 bg-slate-100 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white transition flex items-center gap-2 uppercase tracking-widest">
+                      Detail <ArrowRight size={14} />
+                   </Link>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex gap-2">
-            <select className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
-              <option value="">所有地區</option>
-              <option value="taiwan">台灣</option>
-              <option value="china">大陸</option>
-            </select>
-            <select className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
-              <option value="">所有類別</option>
-              {Object.values(VendorCategory).map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-            <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition text-sm">
-              <Filter size={16} />
-              更多篩選
-            </button>
+        )}
+
+        {/* 列表視圖 */}
+        {viewMode === 'grid' && (
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-4 text-left">廠商資訊</th>
+                  <th className="px-6 py-4 text-left">身分屬性</th>
+                  <th className="px-6 py-4 text-left">地區</th>
+                  <th className="px-6 py-4 text-left">主營類別</th>
+                  <th className="px-6 py-4 text-center">評分</th>
+                  <th className="px-6 py-4 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {paginatedVendors.map(vendor => (
+                  <tr key={vendor.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <img src={vendor.avatarUrl} className="w-10 h-10 rounded-xl object-cover" />
+                        <div>
+                          <div className="font-bold text-slate-800">{vendor.name}</div>
+                          <div className="text-xs text-slate-400">{vendor.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {vendor.serviceTypes.map(st => (
+                          <span key={st} className={clsx(
+                            "text-[9px] font-black px-2 py-1 rounded-lg",
+                            st === ServiceType.LABOR ? "bg-blue-50 text-blue-600" : 
+                            st === ServiceType.PRODUCT ? "bg-orange-50 text-orange-600" : 
+                            "bg-indigo-50 text-indigo-600"
+                          )}>
+                            {st}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={clsx(
+                        "text-xs font-bold px-2 py-1 rounded-lg",
+                        vendor.region === Region.TAIWAN ? "bg-blue-50 text-blue-600" : "bg-red-50 text-red-600"
+                      )}>
+                        {vendor.region === Region.TAIWAN ? "🇹🇼 台灣" : "🇨🇳 大陸"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{vendor.categories[0]}</td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1 text-yellow-600 font-bold">
+                        {vendor.rating} <Star size={14} fill="currentColor"/>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Link 
+                        to={`/vendors/${vendor.id}`} 
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                      >
+                        查看詳情 →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* 統計摘要 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-100">
-          <p className="text-2xl font-black text-slate-800">{MOCK_VENDORS.length}</p>
-          <p className="text-sm text-slate-500">總廠商數</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100">
-          <p className="text-2xl font-black text-blue-600">
-            {MOCK_VENDORS.filter(v => v.region === Region.TAIWAN).length}
-          </p>
-          <p className="text-sm text-slate-500">台灣廠商</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100">
-          <p className="text-2xl font-black text-amber-600">
-            {MOCK_VENDORS.filter(v => v.entityType === EntityType.COMPANY).length}
-          </p>
-          <p className="text-sm text-slate-500">公司行號</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100">
-          <p className="text-2xl font-black text-emerald-600">
-            {(MOCK_VENDORS.reduce((acc, v) => acc + v.rating, 0) / MOCK_VENDORS.length).toFixed(1)}
-          </p>
-          <p className="text-sm text-slate-500">平均評分</p>
-        </div>
-      </div>
+      {/* 分頁控制 */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredVendors.length}
+        itemsPerPage={itemsPerPage}
+        onPageChange={setCurrentPage}
+        onItemsPerPageChange={setItemsPerPage}
+        itemsPerPageOptions={[9, 18, 36]}
+      />
 
-      {/* 廠商列表 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {MOCK_VENDORS.map(vendor => (
-          <VendorCard key={vendor.id} vendor={vendor} />
-        ))}
-      </div>
+      {/* 新增廠商 Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-slate-900 text-white rounded-2xl">
+                  <Building2 size={24} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-800">新增協力廠商</h3>
+                  <p className="text-sm text-slate-400">填寫基本資料建立新的合作夥伴檔案</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                className="p-3 text-slate-300 hover:text-slate-800 hover:bg-slate-100 rounded-full transition"
+              >
+                <X size={28} />
+              </button>
+            </div>
 
-      {/* 空狀態提示 */}
-      {MOCK_VENDORS.length === 0 && (
-        <div className="text-center py-12">
-          <Users size={48} className="mx-auto text-slate-300 mb-4" />
-          <h3 className="text-lg font-bold text-slate-600 mb-2">尚無廠商資料</h3>
-          <p className="text-slate-500 mb-4">點擊上方「新增廠商」按鈕開始建立</p>
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">廠商名稱 *</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" 
+                    placeholder="輸入公司或個人名稱..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">統一編號 / 身分證</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" 
+                    placeholder="12345678"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">地區 *</label>
+                  <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
+                    <option value="">請選擇地區...</option>
+                    <option value={Region.TAIWAN}>🇹🇼 台灣地區</option>
+                    <option value={Region.CHINA}>🇨🇳 大陸地區</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">主營類別 *</label>
+                  <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
+                    <option value="">請選擇類別...</option>
+                    {Object.entries(CATEGORY_GROUPS).map(([group, categories]) => (
+                      <optgroup key={group} label={group}>
+                        {categories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 身分屬性 */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">身分屬性 (可複選) *</label>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { value: ServiceType.LABOR, label: '🛠️ 提供勞務', color: 'blue' },
+                    { value: ServiceType.PRODUCT, label: '📦 提供商品', color: 'orange' },
+                    { value: ServiceType.MANUFACTURING, label: '🏭 製造商品', color: 'indigo' }
+                  ].map(item => (
+                    <label key={item.value} className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
+                      <input type="checkbox" className="w-4 h-4 rounded text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 聯絡資訊 */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Phone size={16} /> 主要聯絡人
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">姓名</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                      placeholder="聯絡人姓名"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">電話</label>
+                    <input 
+                      type="tel" 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                      placeholder="0912-345-678"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</label>
+                    <input 
+                      type="email" 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                      placeholder="contact@example.com"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 備註 */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">備註說明</label>
+                <textarea 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all h-24 resize-none" 
+                  placeholder="其他補充說明..."
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-8 border-t border-slate-100 flex gap-4 shrink-0">
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+              >
+                取消
+              </button>
+              <button className="flex-1 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 shadow-lg">
+                <Save size={18} /> 建立廠商檔案
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function VendorsPage() {
+  return (
+    <Layout>
+      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+        <VendorDirectoryContent />
+      </ClientOnly>
+    </Layout>
   );
 }

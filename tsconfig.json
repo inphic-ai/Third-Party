@@ -19,10 +19,10 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "~/*": ["./app/*"],
+      "@/*": ["./*"]
     },
+    "baseUrl": ".",
     "allowImportingTsExtensions": true,
     "noEmit": true
   }

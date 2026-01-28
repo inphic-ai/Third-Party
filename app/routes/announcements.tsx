@@ -1,148 +1,165 @@
 import type { MetaFunction } from "@remix-run/node";
+import { Link } from "@remix-run/react";
 import { 
-  Megaphone, Plus, AlertCircle, Info, Clock, User
+  Megaphone, Calendar, Bell, 
+  Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Layout } from '~/components/Layout';
+import { ClientOnly } from '~/components/ClientOnly';
+import { MOCK_ANNOUNCEMENTS } from '~/constants';
+import { ServiceType } from '~/types';
 
 export const meta: MetaFunction = () => {
   return [
     { title: "系統公告 - PartnerLink Pro" },
-    { name: "description", content: "查看最新公告與通知" },
+    { name: "description", content: "即時掌握平台政策更新、兩岸物流波動與系統維護重要通知" },
   ];
 };
 
-// 模擬公告資料
-const MOCK_ANNOUNCEMENTS = [
-  {
-    id: '1',
-    title: '2026 年度廠商評鑑開始',
-    content: '請各部門於月底前完成主要合作廠商的年度評分。評鑑結果將影響下一年度的合作優先順序。',
-    date: '2026-01-20',
-    priority: 'High' as const,
-    author: '系統管理員',
-  },
-  {
-    id: '2',
-    title: '農曆新年假期公告',
-    content: '農曆新年期間（1/28-2/4）系統維護時間調整，緊急事項請聯繫值班人員。',
-    date: '2026-01-18',
-    priority: 'High' as const,
-    author: '人事部',
-  },
-  {
-    id: '3',
-    title: '新版請款流程上線',
-    content: '即日起請款流程改為線上審核，請各位同仁熟悉新系統操作方式。',
-    date: '2026-01-15',
-    priority: 'Normal' as const,
-    author: '財務部',
-  },
-  {
-    id: '4',
-    title: '廠商資料更新提醒',
-    content: '請各負責人確認所管理廠商的聯絡資訊是否正確，如有變更請及時更新。',
-    date: '2026-01-10',
-    priority: 'Normal' as const,
-    author: '系統管理員',
-  },
-];
+function AnnouncementsContent() {
+  const getIdentityIcon = (st: ServiceType) => {
+    switch (st) {
+      case ServiceType.LABOR: return <Hammer size={12} />;
+      case ServiceType.PRODUCT: return <Package size={12} />;
+      case ServiceType.MANUFACTURING: return <Factory size={12} />;
+      default: return null;
+    }
+  };
 
-export default function AnnouncementsPage() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 頁首 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-            <Megaphone size={28} className="text-rose-600" />
-            系統公告
-          </h1>
-          <p className="text-slate-500 mt-1">查看最新公告與通知</p>
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row md:items-center gap-6 mb-10 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+        <div className="p-6 bg-blue-600 text-white rounded-[2rem] shadow-xl shadow-blue-100 relative z-10 group-hover:scale-110 transition-transform duration-500">
+          <Bell size={48} />
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition font-bold">
-          <Plus size={18} />
-          發布公告
-        </button>
-      </div>
-
-      {/* 重要公告提示 */}
-      {MOCK_ANNOUNCEMENTS.filter(a => a.priority === 'High').length > 0 && (
-        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center gap-3">
-          <AlertCircle size={20} className="text-rose-600 shrink-0" />
-          <p className="text-rose-700 text-sm font-medium">
-            您有 {MOCK_ANNOUNCEMENTS.filter(a => a.priority === 'High').length} 則重要公告需要關注
+        <div className="relative z-10">
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-4">
+            系統全局公告
+            <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-black uppercase tracking-[0.2em] shadow-sm">Live Updates</span>
+          </h1>
+          <p className="text-slate-500 font-bold mt-2 text-lg">
+            即時掌握平台政策更新、兩岸物流波動與系統維護重要通知
           </p>
         </div>
-      )}
+        <Megaphone size={160} className="absolute -top-10 -right-10 text-slate-50 opacity-10 rotate-12" />
+      </div>
 
-      {/* 公告列表 */}
-      <div className="space-y-4">
-        {MOCK_ANNOUNCEMENTS.map(announcement => (
+      <div className="space-y-8">
+        {MOCK_ANNOUNCEMENTS.map((announcement) => (
           <div 
-            key={announcement.id}
+            key={announcement.id} 
             className={clsx(
-              "bg-white p-6 rounded-2xl shadow-sm border transition-all hover:shadow-lg cursor-pointer",
-              announcement.priority === 'High' 
-                ? "border-rose-200 hover:border-rose-300" 
-                : "border-slate-100 hover:border-slate-200"
+              "bg-white p-8 rounded-[2.5rem] shadow-sm border transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200 group relative overflow-hidden",
+              announcement.priority === 'High' ? "border-red-100 bg-red-50/5" : "border-slate-50"
             )}
           >
-            <div className="flex items-start gap-4">
-              <div className={clsx(
-                "p-3 rounded-xl shrink-0",
-                announcement.priority === 'High' 
-                  ? "bg-rose-100 text-rose-600" 
-                  : "bg-blue-100 text-blue-600"
-              )}>
-                {announcement.priority === 'High' ? (
-                  <AlertCircle size={20} />
-                ) : (
-                  <Info size={20} />
+            {announcement.priority === 'High' && (
+              <div className="absolute top-0 left-0 w-2.5 h-full bg-red-500 animate-pulse"></div>
+            )}
+            
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className={clsx(
+                  "px-4 py-2 text-[10px] font-black rounded-xl uppercase tracking-[0.2em] shadow-sm",
+                  announcement.priority === 'High' 
+                    ? "bg-red-100 text-red-700 animate-bounce" 
+                    : "bg-blue-100 text-blue-700"
+                )}>
+                  {announcement.priority === 'High' ? 'Emergency' : 'General'}
+                </span>
+                <span className="text-slate-400 text-xs font-bold flex items-center gap-2 font-mono">
+                  <Calendar size={14} />
+                  {announcement.date}
+                </span>
+
+                {/* 受眾身分標籤 */}
+                {announcement.targetIdentity && announcement.targetIdentity.map(ti => (
+                  <Link 
+                    key={ti}
+                    to={`/vendors?search=${ti}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 hover:bg-slate-900 hover:text-white transition-all rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-100"
+                  >
+                    {getIdentityIcon(ti)}
+                    對象: {ti}
+                  </Link>
+                ))}
+
+                {/* 地區標籤 */}
+                {announcement.targetRegion && (
+                   <span className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                      <MapPin size={12} /> 地區: {announcement.targetRegion}
+                   </span>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    {announcement.title}
-                  </h3>
-                  {announcement.priority === 'High' && (
-                    <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-xs font-bold rounded">
-                      重要
-                    </span>
-                  )}
-                </div>
-                <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                  {announcement.content}
-                </p>
-                <div className="flex items-center gap-4 text-xs text-slate-400">
-                  <div className="flex items-center gap-1">
-                    <Clock size={14} />
-                    <span>{announcement.date}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <User size={14} />
-                    <span>{announcement.author}</span>
-                  </div>
-                </div>
+              <div className="flex gap-2">
+                 <ShieldCheck size={28} className={clsx(announcement.priority === 'High' ? "text-red-500" : "text-blue-500 opacity-20")} />
               </div>
+            </div>
+            
+            <h3 className={clsx(
+              "text-2xl font-black mb-4 transition-colors tracking-tight", 
+              announcement.priority === 'High' ? "text-red-900" : "text-slate-800 group-hover:text-blue-600"
+            )}>
+              {announcement.title}
+            </h3>
+            
+            <p className="text-slate-600 leading-relaxed font-bold text-base mb-10 max-w-3xl">
+              {announcement.content}
+            </p>
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-8 border-t border-slate-50">
+              <div className="flex flex-wrap gap-3">
+                <span className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 bg-slate-50 px-4 py-1.5 rounded-xl border border-slate-100">
+                  <Tag size={12}/> #平台政策
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 px-3 py-1.5">
+                   <User size={12}/> FROM: {announcement.author || 'SYSTEM ADMIN'}
+                </span>
+              </div>
+              <button className="text-sm text-slate-900 font-black hover:text-blue-600 flex items-center gap-3 transition-all group/btn whitespace-nowrap uppercase tracking-widest">
+                Read Bulletin <ChevronRight size={20} className="group-hover/btn:translate-x-1 transition-transform" />
+              </button>
             </div>
           </div>
         ))}
+
+        {MOCK_ANNOUNCEMENTS.length === 0 && (
+          <div className="text-center py-24 text-slate-300 bg-white rounded-[3rem] border-4 border-dashed border-slate-50 flex flex-col items-center">
+            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+               <Megaphone size={48} className="opacity-20" />
+            </div>
+            <p className="font-black text-xl tracking-[0.2em] uppercase">No active notices</p>
+            <p className="text-sm font-medium mt-2">目前尚無任何發布公告，請靜待管理員更新。</p>
+          </div>
+        )}
       </div>
 
-      {/* 統計 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100">
-          <p className="text-3xl font-black text-slate-800">{MOCK_ANNOUNCEMENTS.length}</p>
-          <p className="text-sm text-slate-500 mt-1">總公告數</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100">
-          <p className="text-3xl font-black text-rose-600">
-            {MOCK_ANNOUNCEMENTS.filter(a => a.priority === 'High').length}
-          </p>
-          <p className="text-sm text-slate-500 mt-1">重要公告</p>
-        </div>
+      <div className="bg-slate-900 p-12 rounded-[3rem] text-white mt-20 flex flex-col lg:flex-row lg:items-center justify-between shadow-2xl relative overflow-hidden">
+         <div className="relative z-10">
+            <h4 className="text-3xl font-black mb-3 flex items-center gap-4">
+               <Info className="text-blue-400" size={32}/> 
+               訂閱戰術通知
+            </h4>
+            <p className="text-slate-400 text-lg font-medium max-w-xl leading-relaxed">
+               當與您關聯的廠商或「重點監控地區」有緊急政策更新時，系統將主動發送 LINE/WeChat/Email 推播通知。
+            </p>
+         </div>
+         <button className="bg-white text-slate-900 px-12 py-5 rounded-[1.5rem] font-black hover:bg-blue-50 transition active:scale-95 shadow-2xl mt-8 lg:mt-0 relative z-10 uppercase tracking-[0.2em] text-sm">
+            Enable Alerts
+         </button>
+         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
       </div>
     </div>
+  );
+}
+
+export default function AnnouncementsPage() {
+  return (
+    <Layout>
+      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+        <AnnouncementsContent />
+      </ClientOnly>
+    </Layout>
   );
 }
