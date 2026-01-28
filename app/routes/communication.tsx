@@ -21,7 +21,7 @@ import {
   GripVertical
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { ClientOnly } from '~/components/ClientOnly';
 import { Pagination } from '~/components/Pagination';
 import { MOCK_VENDORS, CATEGORY_OPTIONS } from '~/constants';
@@ -533,10 +533,8 @@ function CommunicationContent() {
 
 export default function CommunicationPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <CommunicationContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <CommunicationContent />
+    </ClientOnly>
   );
 }

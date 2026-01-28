@@ -3,7 +3,7 @@ import type { MetaFunction } from "@remix-run/node";
 import { Link } from "@remix-run/react";
 import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { ClientOnly } from '~/components/ClientOnly';
 import { MOCK_KNOWLEDGE_BASE } from '~/constants';
 
@@ -158,10 +158,8 @@ function KnowledgeContent() {
 
 export default function KnowledgePage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <KnowledgeContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <KnowledgeContent />
+    </ClientOnly>
   );
 }

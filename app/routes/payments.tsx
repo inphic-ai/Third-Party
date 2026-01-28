@@ -9,7 +9,7 @@ import {
   Briefcase, Filter, TrendingUp, HandCoins, Activity, Clock
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { Pagination } from '~/components/Pagination';
 import { ClientOnly } from '~/components/ClientOnly';
 import { MOCK_INVOICES, MOCK_VENDORS } from '~/constants';
@@ -539,10 +539,8 @@ function PaymentsContent() {
 
 export default function PaymentsPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <PaymentsContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <PaymentsContent />
+    </ClientOnly>
   );
 }

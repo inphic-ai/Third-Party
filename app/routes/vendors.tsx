@@ -8,7 +8,7 @@ import {
   ChevronDown, Save, Phone, Mail, Building2
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { Pagination } from '~/components/Pagination';
 import { ClientOnly } from '~/components/ClientOnly';
 import { MOCK_VENDORS, CATEGORY_GROUPS, TAIWAN_REGIONS, CHINA_REGIONS } from '~/constants';
@@ -485,10 +485,8 @@ function VendorDirectoryContent() {
 
 export default function VendorsPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <VendorDirectoryContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <VendorDirectoryContent />
+    </ClientOnly>
   );
 }

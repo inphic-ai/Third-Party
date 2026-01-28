@@ -17,7 +17,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { ClientOnly } from '~/components/ClientOnly';
 import { MOCK_VENDORS } from '~/constants';
 import { TransactionStatus } from '~/types';
@@ -401,10 +401,8 @@ function TasksContent() {
 
 export default function TasksPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <TasksContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <TasksContent />
+    </ClientOnly>
   );
 }

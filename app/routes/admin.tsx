@@ -7,7 +7,7 @@ import {
   Building, Terminal, ShieldCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { ClientOnly } from '~/components/ClientOnly';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, MOCK_LOGIN_LOGS, 
@@ -448,10 +448,8 @@ const AnnouncementManager = () => (
 
 export default function AdminPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <AdminContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <AdminContent />
+    </ClientOnly>
   );
 }

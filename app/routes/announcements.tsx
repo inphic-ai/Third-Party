@@ -5,7 +5,7 @@ import {
   Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Layout } from '~/components/Layout';
+
 import { ClientOnly } from '~/components/ClientOnly';
 import { MOCK_ANNOUNCEMENTS } from '~/constants';
 import { ServiceType } from '~/types';
@@ -156,10 +156,8 @@ function AnnouncementsContent() {
 
 export default function AnnouncementsPage() {
   return (
-    <Layout>
-      <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
-        <AnnouncementsContent />
-      </ClientOnly>
-    </Layout>
+    <ClientOnly fallback={<div className="p-8 text-center text-slate-400">載入中...</div>}>
+      <AnnouncementsContent />
+    </ClientOnly>
   );
 }
