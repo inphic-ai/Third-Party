@@ -21,8 +21,11 @@ export default defineConfig({
     }),
     tsconfigPaths(),
   ],
-  server: {
-    port: 3000,
-    host: "0.0.0.0",
-  },
+  // 僅在開發模式使用
+  ...(process.env.NODE_ENV === "development" && {
+    server: {
+      port: 3000,
+      host: "0.0.0.0",
+    },
+  }),
 });
