@@ -1,74 +1,103 @@
-
-import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher, Form, useNavigation } from "@remix-run/react";
+import { json, type MetaFunction } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { 
   Search, Filter, Plus, MapPin, ChevronRight, ChevronLeft, 
   History, X, Camera, Upload, CheckCircle2, Save, Maximize2, Tag, MessageSquare,
-  Check
+  Check, AlertCircle, Clock, Wrench
 } from "lucide-react";
 import { clsx } from "clsx";
-import { db } from "../services/db.server";
-import { MaintenanceStatus } from "../types";
+import { MOCK_MAINTENANCE } from "../constants";
+import type { MaintenanceRecord, MaintenanceStatus, MediaItem } from "../types";
+
+export const meta: MetaFunction = () => {
+  return [
+    { title: "設備維修紀錄 - PartnerLink Pro" },
+    { name: "description", content: "追蹤設備維修進度與歷史紀錄" },
+  ];
+};
 
 // 常見產品標籤
 const PRODUCT_TAG_OPTIONS = ['空調', '電力', '水路', '裝修', '家具', '網路', '安控', '結構', '玻璃'];
 
-/**
- * Remix Loader: 在伺服器端運行
- * 從 Postgres 讀取資料並預處理 R2 連結
- */
-export async function loader({ request }: LoaderFunctionArgs) {
-  const url = new URL(request.url);
-  const q = url.searchParams.get("q") || "";
-  const tagFilter = url.searchParams.get("tag") || "";
-  
-  const allRecords = await db.maintenance.findMany();
-  
-  // 伺服器端過濾邏輯
-  const filtered = allRecords.filter(r => {
-    const matchesSearch = r.deviceName.includes(q) || r.vendorName.includes(q);
-    const matchesTag = tagFilter ? r.productTags.includes(tagFilter) : true;
-    return matchesSearch && matchesTag;
-  });
-
-  return json({ records: filtered, q, tagFilter });
+// Loader: 使用 Mock 資料
+export async function loader() {
+  return json({ records: MOCK_MAINTENANCE });
 }
 
-/**
- * Remix Action: 處理資料寫入與 R2 授權
- */
-export async function action({ request }: ActionFunctionArgs) {
-  const formData = await request.formData();
-  const _action = formData.get("_action");
-
-  if (_action === "create_record") {
-    const data = {
-      deviceName: formData.get("deviceName"),
-      productTags: formData.getAll("productTags"),
-      // 其他欄位...
-    };
-    await db.maintenance.create(data);
-    return json({ success: true });
-  }
-  return null;
-}
+// 狀態顏色對應
+const statusConfig: Record<MaintenanceStatus, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
+  pending: { label: '待處理', color: 'text-amber-600', bgColor: 'bg-amber-50', icon: <Clock className="w-4 h-4" /> },
+  in_progress: { label: '進行中', color: 'text-blue-600', bgColor: 'bg-blue-50', icon: <Wrench className="w-4 h-4" /> },
+  completed: { label: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50', icon: <CheckCircle2 className="w-4 h-4" /> },
+  cancelled: { label: '已取消', color: 'text-gray-500', bgColor: 'bg-gray-100', icon: <X className="w-4 h-4" /> },
+};
 
 export default function MaintenancePage() {
-  const { records, q, tagFilter } = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const fetcher = useFetcher();
+  const { records } = useLoaderData<typeof loader>();
   
-  const [selectedRecord, setSelectedRecord] = useState<any>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProductTags, setSelectedProductTags] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isPageDropdownOpen, setIsPageDropdownOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   
-  // 相簿狀態
+  // 相簿燈箱狀態
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
   const [activePhotoType, setActivePhotoType] = useState<'before' | 'after'>('before');
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  // Filtering
+  const filteredRecords = useMemo(() => {
+    return records.filter((r: MaintenanceRecord) => {
+      const matchesSearch = 
+        r.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.deviceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.caseId.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesTags = selectedProductTags.length === 0 || 
+        selectedProductTags.some(tag => r.productTags?.includes(tag));
+
+      return matchesSearch && matchesTags;
+    });
+  }, [records, searchTerm, selectedProductTags]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredRecords.slice(start, start + itemsPerPage);
+  }, [filteredRecords, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+
+  // Click outside handlers
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsPageDropdownOpen(false);
+      }
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 相簿功能
   const openGallery = (index: number, type: 'before' | 'after') => {
     setActivePhotoIndex(index);
     setActivePhotoType(type);
+  };
+
+  const closeGallery = () => {
+    setActivePhotoIndex(null);
   };
 
   const activePhotos = useMemo(() => {
@@ -76,260 +105,527 @@ export default function MaintenancePage() {
     return activePhotoType === 'before' ? selectedRecord.beforePhotos : selectedRecord.afterPhotos;
   }, [selectedRecord, activePhotoType]);
 
+  const handleNextPhoto = () => {
+    if (activePhotoIndex !== null && activePhotoIndex < activePhotos.length - 1) {
+      setActivePhotoIndex(activePhotoIndex + 1);
+    }
+  };
+
+  const handlePrevPhoto = () => {
+    if (activePhotoIndex !== null && activePhotoIndex > 0) {
+      setActivePhotoIndex(activePhotoIndex - 1);
+    }
+  };
+
+  // 統計卡片資料
+  const stats = useMemo(() => {
+    const pending = records.filter((r: MaintenanceRecord) => r.status === 'pending').length;
+    const inProgress = records.filter((r: MaintenanceRecord) => r.status === 'in_progress').length;
+    const completed = records.filter((r: MaintenanceRecord) => r.status === 'completed').length;
+    return { pending, inProgress, completed, total: records.length };
+  }, [records]);
+
   return (
-    <div className="flex flex-col space-y-8 animate-in fade-in duration-700 max-w-[1600px] mx-auto">
-      
-      {/* 1. 頂部操作與篩選 */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-6 flex-1 w-full">
-           <div className="p-4 bg-slate-900 text-white rounded-2xl shadow-lg"><History size={28}/></div>
-           <Form method="get" className="relative flex-1 group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600" size={20} />
-              <input 
-                name="q"
-                defaultValue={q}
-                placeholder="搜尋設備關鍵字、廠商..."
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 rounded-2xl border-none focus:ring-4 focus:ring-indigo-500/10 font-bold transition-all"
-              />
-           </Form>
-        </div>
-        
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-           <button 
-             onClick={() => setIsAddModalOpen(true)}
-             className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-all active:scale-95"
-           >
-             <Plus size={20} /> 新增維修紀錄
-           </button>
+          <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+            <History className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">設備維修紀錄</h1>
+            <p className="text-sm text-gray-500">追蹤維修進度與歷史紀錄</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsFormModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          新增維修單
+        </button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+              <History className="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-sm text-gray-500">總維修單</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
+              <p className="text-sm text-gray-500">待處理</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+              <Wrench className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-blue-600">{stats.inProgress}</p>
+              <p className="text-sm text-gray-500">進行中</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
+              <p className="text-sm text-gray-500">已完成</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 2. 資料清單 (含產品標籤顯示) */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              <th className="px-10 py-6">維修日期</th>
-              <th className="px-10 py-6">設備 / 產品標籤</th>
-              <th className="px-10 py-6">承辦廠商</th>
-              <th className="px-10 py-6">狀態</th>
-              <th className="px-10 py-6 w-20"></th>
+      {/* Search & Filter */}
+      <div className="flex items-center gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="搜尋設備名稱、編號、廠商..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          />
+        </div>
+        
+        {/* 產品標籤篩選 */}
+        <div className="relative" ref={filterRef}>
+          <button
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={clsx(
+              "flex items-center gap-2 px-4 py-2.5 border rounded-lg transition-colors",
+              selectedProductTags.length > 0 
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700" 
+                : "border-gray-200 hover:bg-gray-50"
+            )}
+          >
+            <Tag className="w-4 h-4" />
+            產品標籤
+            {selectedProductTags.length > 0 && (
+              <span className="bg-emerald-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                {selectedProductTags.length}
+              </span>
+            )}
+          </button>
+          
+          {isFilterOpen && (
+            <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 p-4 z-20">
+              <p className="text-sm font-medium text-gray-700 mb-3">選擇產品標籤</p>
+              <div className="flex flex-wrap gap-2">
+                {PRODUCT_TAG_OPTIONS.map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      setSelectedProductTags(prev => 
+                        prev.includes(tag) 
+                          ? prev.filter(t => t !== tag)
+                          : [...prev, tag]
+                      );
+                    }}
+                    className={clsx(
+                      "px-3 py-1.5 rounded-full text-sm transition-colors",
+                      selectedProductTags.includes(tag)
+                        ? "bg-emerald-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    )}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+              {selectedProductTags.length > 0 && (
+                <button
+                  onClick={() => setSelectedProductTags([])}
+                  className="mt-3 text-sm text-gray-500 hover:text-gray-700"
+                >
+                  清除全部
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Records Table */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">案件編號</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">設備名稱</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">廠商</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">產品標籤</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">狀態</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">報修日期</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">照片</th>
+              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50">
-            {records.map((record: any) => (
-              <tr 
-                key={record.id} 
-                className="group hover:bg-indigo-50/30 transition-colors cursor-pointer"
-                onClick={() => setSelectedRecord(record)}
-              >
-                <td className="px-10 py-8 font-black text-slate-800 font-mono">{record.date}</td>
-                <td className="px-10 py-8">
-                  <div className="flex flex-col gap-2">
-                    <span className="font-extrabold text-slate-800 text-lg tracking-tight group-hover:text-indigo-600">{record.deviceName}</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {record.productTags?.map((tag: string) => (
-                        <span key={tag} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase tracking-widest border border-indigo-100">
+          <tbody className="divide-y divide-gray-50">
+            {paginatedRecords.map((record: MaintenanceRecord) => {
+              const status = statusConfig[record.status];
+              return (
+                <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="text-sm font-mono text-gray-600">{record.caseId}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{record.deviceName}</p>
+                      <p className="text-xs text-gray-500">{record.deviceNo}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-gray-700">{record.vendorName}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {record.productTags?.slice(0, 2).map(tag => (
+                        <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
                           {tag}
                         </span>
                       ))}
+                      {record.productTags && record.productTags.length > 2 && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
+                          +{record.productTags.length - 2}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                </td>
-                <td className="px-10 py-8 font-bold text-slate-600">{record.vendorName}</td>
-                <td className="px-10 py-8">
-                   <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black border border-emerald-100 uppercase tracking-widest">{record.status}</span>
-                </td>
-                <td className="px-10 py-8 text-right">
-                   <div className="p-2.5 bg-slate-50 text-slate-300 rounded-xl group-hover:bg-white group-hover:text-indigo-600 transition-all"><ChevronRight size={20}/></div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={clsx("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", status.bgColor, status.color)}>
+                      {status.icon}
+                      {status.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-gray-600">{record.reportDate}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {record.beforePhotos && record.beforePhotos.length > 0 && (
+                        <span className="text-xs text-gray-500">
+                          施工前 {record.beforePhotos.length}
+                        </span>
+                      )}
+                      {record.afterPhotos && record.afterPhotos.length > 0 && (
+                        <span className="text-xs text-emerald-600">
+                          施工後 {record.afterPhotos.length}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => setSelectedRecord(record)}
+                      className="px-3 py-1.5 text-sm text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                    >
+                      查看詳情
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center gap-2" ref={dropdownRef}>
+            <span className="text-sm text-gray-500">每頁</span>
+            <div className="relative">
+              <button
+                onClick={() => setIsPageDropdownOpen(!isPageDropdownOpen)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50"
+              >
+                {itemsPerPage}
+                <ChevronRight className={clsx("w-4 h-4 transition-transform", isPageDropdownOpen && "rotate-90")} />
+              </button>
+              {isPageDropdownOpen && (
+                <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10">
+                  {[10, 25, 50].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => {
+                        setItemsPerPage(num);
+                        setCurrentPage(1);
+                        setIsPageDropdownOpen(false);
+                      }}
+                      className={clsx(
+                        "w-full px-4 py-2 text-left text-sm hover:bg-gray-50",
+                        itemsPerPage === num && "bg-emerald-50 text-emerald-600"
+                      )}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <span className="text-sm text-gray-500">共 {filteredRecords.length} 筆紀錄</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm text-gray-600">
+              {currentPage} / {totalPages || 1}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 3. 維修詳情 Modal (相簿模式：多圖 + 敘述) */}
+      {/* Detail Modal */}
       {selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-4">
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">{selectedRecord.deviceName}</h3>
-                  <span className="text-slate-300 font-mono text-sm">#{selectedRecord.caseId}</span>
-               </div>
-               <button onClick={() => setSelectedRecord(null)} className="p-2 text-slate-300 hover:text-slate-800 transition-all"><X size={32} /></button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">{selectedRecord.deviceName}</h2>
+                  <p className="text-sm text-gray-500">{selectedRecord.caseId}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedRecord(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-10 space-y-12 bg-slate-50/30 custom-scrollbar">
-               {/* 維修前影像列表 */}
-               <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                     <h4 className="font-black text-slate-800 uppercase tracking-widest text-sm flex items-center gap-2">
-                        <Camera className="text-rose-500" /> 維修前現況相簿 (R2 Signed Storage)
-                     </h4>
-                     <span className="text-[10px] font-black text-slate-400 bg-white px-3 py-1 rounded border border-slate-100">{selectedRecord.beforePhotos.length} 張</span>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                     {selectedRecord.beforePhotos.map((photo: any, idx: number) => (
-                        <div key={photo.id} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm group hover:shadow-xl transition-all">
-                           <div onClick={() => openGallery(idx, 'before')} className="aspect-square cursor-pointer overflow-hidden bg-slate-200">
-                              <img src={photo.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"/>
-                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><Maximize2 size={24}/></div>
-                           </div>
-                           <div className="p-4 bg-white border-t border-slate-50">
-                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">現場紀錄描述</label>
-                              <textarea 
-                                className="w-full bg-slate-50 border-none rounded-xl p-2 text-xs font-bold h-16 resize-none focus:ring-2 focus:ring-indigo-500/10" 
-                                placeholder="輸入此影像的特定說明..."
-                                defaultValue={photo.description}
-                              />
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </div>
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Status & Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 mb-1">狀態</p>
+                  <span className={clsx(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
+                    statusConfig[selectedRecord.status].bgColor,
+                    statusConfig[selectedRecord.status].color
+                  )}>
+                    {statusConfig[selectedRecord.status].icon}
+                    {statusConfig[selectedRecord.status].label}
+                  </span>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 mb-1">負責廠商</p>
+                  <p className="font-medium text-gray-900">{selectedRecord.vendorName}</p>
+                </div>
+              </div>
 
-               {/* 維修後影像列表 */}
-               <div className="space-y-6">
-                  <h4 className="font-black text-slate-800 uppercase tracking-widest text-sm flex items-center gap-2">
-                     <Upload className="text-emerald-500" /> 維修後完工相簿 (Multiple Evidence)
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                     {selectedRecord.afterPhotos.map((photo: any, idx: number) => (
-                        <div key={photo.id} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm group hover:shadow-xl transition-all">
-                           <div onClick={() => openGallery(idx, 'after')} className="aspect-square cursor-pointer overflow-hidden bg-slate-200">
-                              <img src={photo.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"/>
-                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><Maximize2 size={24}/></div>
-                           </div>
-                           <div className="p-4 bg-white border-t border-slate-50">
-                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">完工品質標註</label>
-                              <textarea 
-                                className="w-full bg-slate-50 border-none rounded-xl p-2 text-xs font-bold h-16 resize-none focus:ring-2 focus:ring-indigo-500/10" 
-                                placeholder="輸入完工說明..."
-                                defaultValue={photo.description}
-                              />
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </div>
-            </div>
+              {/* Description */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">問題描述</h3>
+                <p className="text-gray-600 bg-gray-50 rounded-xl p-4">{selectedRecord.description}</p>
+              </div>
 
-            <div className="p-8 border-t border-slate-100 flex justify-end gap-4 bg-white">
-               <button onClick={() => setSelectedRecord(null)} className="px-10 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest">關閉</button>
-               <button className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2"><Save size={18}/> 儲存所有敘述變更</button>
+              {/* Product Tags */}
+              {selectedRecord.productTags && selectedRecord.productTags.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">產品標籤</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedRecord.productTags.map(tag => (
+                      <span key={tag} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Photos */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Before Photos */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    施工前照片 ({selectedRecord.beforePhotos?.length || 0})
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedRecord.beforePhotos?.map((photo, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => openGallery(idx, 'before')}
+                        className="aspect-square bg-gray-100 rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                      >
+                        <img src={photo.url} alt={photo.caption || '施工前'} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                    {(!selectedRecord.beforePhotos || selectedRecord.beforePhotos.length === 0) && (
+                      <div className="col-span-3 aspect-video bg-gray-50 rounded-lg flex items-center justify-center text-gray-400">
+                        <Camera className="w-8 h-8" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* After Photos */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    施工後照片 ({selectedRecord.afterPhotos?.length || 0})
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedRecord.afterPhotos?.map((photo, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => openGallery(idx, 'after')}
+                        className="aspect-square bg-gray-100 rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                      >
+                        <img src={photo.url} alt={photo.caption || '施工後'} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                    {(!selectedRecord.afterPhotos || selectedRecord.afterPhotos.length === 0) && (
+                      <div className="col-span-3 aspect-video bg-gray-50 rounded-lg flex items-center justify-center text-gray-400">
+                        <Camera className="w-8 h-8" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. 相簿全螢幕燈箱切換 */}
-      {activePhotoIndex !== null && (
-         <div className="fixed inset-0 z-[100] bg-slate-950/98 backdrop-blur-2xl flex flex-col animate-in fade-in">
-            <div className="p-8 flex justify-between items-center text-white">
-               <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">R2 Dynamic Signed Viewer</span>
-                  <h4 className="text-lg font-black">{activePhotoType === 'before' ? '維修前' : '維修後'} 影像檢視 ({activePhotoIndex + 1} / {activePhotos.length})</h4>
-               </div>
-               <button onClick={() => setActivePhotoIndex(null)} className="p-3 hover:bg-white/10 rounded-full transition-all text-white/50 hover:text-white"><X size={48}/></button>
-            </div>
-            
-            <div className="flex-1 relative flex items-center justify-center px-20">
-               <button 
-                 disabled={activePhotoIndex === 0}
-                 onClick={() => setActivePhotoIndex(activePhotoIndex - 1)}
-                 className="absolute left-10 p-6 text-white/30 hover:text-white disabled:opacity-0 transition-all"
-               >
-                 <ChevronLeft size={64} />
-               </button>
-
-               <div className="max-w-6xl w-full h-full flex flex-col items-center justify-center">
-                  <img src={activePhotos[activePhotoIndex].url} className="max-h-[70vh] object-contain rounded-3xl shadow-2xl border-4 border-white/5 animate-in zoom-in-95 duration-500"/>
-                  {activePhotos[activePhotoIndex].description && (
-                     <div className="mt-10 bg-white/5 backdrop-blur-xl border border-white/10 px-10 py-6 rounded-[2rem] text-white font-bold text-xl max-w-3xl text-center">
-                       {activePhotos[activePhotoIndex].description}
-                     </div>
-                  )}
-               </div>
-
-               <button 
-                 disabled={activePhotoIndex === activePhotos.length - 1}
-                 onClick={() => setActivePhotoIndex(activePhotoIndex + 1)}
-                 className="absolute right-10 p-6 text-white/30 hover:text-white disabled:opacity-0 transition-all"
-               >
-                 <ChevronRight size={64} />
-               </button>
-            </div>
-
-            <div className="h-28 bg-black/40 border-t border-white/5 flex items-center justify-center gap-4 px-10">
-               {activePhotos.map((p: any, idx: number) => (
-                  <button 
-                    key={p.id} 
-                    onClick={() => setActivePhotoIndex(idx)} 
-                    className={clsx(
-                      "w-16 h-16 rounded-xl overflow-hidden border-2 transition-all duration-300", 
-                      activePhotoIndex === idx ? "border-indigo-500 scale-110 shadow-lg" : "border-transparent opacity-30 hover:opacity-100"
-                    )}
-                  >
-                    <img src={p.url} className="w-full h-full object-cover"/>
-                  </button>
-               ))}
-            </div>
-         </div>
+      {/* Photo Lightbox */}
+      {activePhotoIndex !== null && activePhotos.length > 0 && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60]">
+          <button
+            onClick={closeGallery}
+            className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          
+          <button
+            onClick={handlePrevPhoto}
+            disabled={activePhotoIndex === 0}
+            className="absolute left-4 p-3 text-white hover:bg-white/10 rounded-full disabled:opacity-30"
+          >
+            <ChevronLeft className="w-8 h-8" />
+          </button>
+          
+          <div className="max-w-4xl max-h-[80vh]">
+            <img
+              src={activePhotos[activePhotoIndex].url}
+              alt={activePhotos[activePhotoIndex].caption || '照片'}
+              className="max-w-full max-h-[80vh] object-contain"
+            />
+            {activePhotos[activePhotoIndex].caption && (
+              <p className="text-white text-center mt-4">{activePhotos[activePhotoIndex].caption}</p>
+            )}
+          </div>
+          
+          <button
+            onClick={handleNextPhoto}
+            disabled={activePhotoIndex === activePhotos.length - 1}
+            className="absolute right-4 p-3 text-white hover:bg-white/10 rounded-full disabled:opacity-30"
+          >
+            <ChevronRight className="w-8 h-8" />
+          </button>
+          
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm">
+            {activePhotoIndex + 1} / {activePhotos.length}
+          </div>
+        </div>
       )}
 
-      {/* 5. 新增維修紀錄 Modal (含產品標籤勾選) */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
-           <Form method="post" className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-              <input type="hidden" name="_action" value="create_record" />
-              <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                 <h3 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">建立維修單據</h3>
-                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="p-4 text-slate-300 hover:text-slate-800 transition-all"><X size={32} /></button>
+      {/* Add Form Modal */}
+      {isFormModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">新增維修單</h2>
+              <button
+                onClick={() => setIsFormModalOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">設備名稱</label>
+                <input type="text" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="輸入設備名稱" />
               </div>
-
-              <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar bg-slate-50/50">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">設備名稱</label>
-                       <input name="deviceName" type="text" required className="w-full bg-white border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all shadow-inner" placeholder="輸入設備全名..." />
-                    </div>
-                    <div className="space-y-3">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">產品分類標籤 (勾選勾選區)</label>
-                       <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-inner">
-                          {PRODUCT_TAG_OPTIONS.map(tag => (
-                             <label key={tag} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 rounded-xl cursor-pointer transition-all border border-transparent hover:border-indigo-100">
-                                <input type="checkbox" name="productTags" value={tag} className="w-4 h-4 text-indigo-600 rounded" />
-                                <span className="text-xs font-black text-slate-600">{tag}</span>
-                             </label>
-                          ))}
-                       </div>
-                    </div>
-                 </div>
-                 
-                 <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">上傳初步證據影像</label>
-                    <div className="grid grid-cols-4 gap-4">
-                       <div className="aspect-square border-4 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-300 hover:border-indigo-300 hover:text-indigo-400 transition-all bg-white group cursor-pointer">
-                          <Plus size={32} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-[10px] font-black uppercase tracking-widest mt-2">Before</span>
-                       </div>
-                       <div className="aspect-square border-4 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-300 hover:border-emerald-300 hover:text-emerald-400 transition-all bg-white group cursor-pointer">
-                          <Plus size={32} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-[10px] font-black uppercase tracking-widest mt-2">After</span>
-                       </div>
-                    </div>
-                 </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">設備編號</label>
+                <input type="text" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="輸入設備編號" />
               </div>
-
-              <div className="p-10 border-t border-slate-100 bg-white flex gap-6 shrink-0">
-                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-5 bg-slate-50 text-slate-500 font-black rounded-[1.5rem] hover:bg-slate-100 transition-all uppercase tracking-widest text-xs">取消</button>
-                 <button type="submit" className="flex-1 py-5 bg-slate-900 text-white font-black rounded-[1.5rem] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center gap-3">
-                    <Save size={20} /> 儲存至 Postgres 資料庫
-                 </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">問題描述</label>
+                <textarea className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 h-24" placeholder="描述問題..." />
               </div>
-           </Form>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">產品標籤</label>
+                <div className="flex flex-wrap gap-2">
+                  {PRODUCT_TAG_OPTIONS.map(tag => (
+                    <button key={tag} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-sm hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">施工前照片</label>
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-emerald-500 transition-colors cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">點擊或拖曳上傳照片</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => setIsFormModalOpen(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                儲存
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
