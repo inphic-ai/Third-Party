@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { MOCK_MAINTENANCE } from "../constants";
-import type { MaintenanceRecord, MaintenanceStatus, MediaItem } from "../types";
+import type { MaintenanceRecord, MediaItem } from "../types";
+import { MaintenanceStatus } from "../types";
 
 export const meta: MetaFunction = () => {
   return [
@@ -27,10 +28,10 @@ export async function loader() {
 
 // 狀態顏色對應
 const statusConfig: Record<MaintenanceStatus, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
-  pending: { label: '待處理', color: 'text-amber-600', bgColor: 'bg-amber-50', icon: <Clock className="w-4 h-4" /> },
-  in_progress: { label: '進行中', color: 'text-blue-600', bgColor: 'bg-blue-50', icon: <Wrench className="w-4 h-4" /> },
-  completed: { label: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50', icon: <CheckCircle2 className="w-4 h-4" /> },
-  cancelled: { label: '已取消', color: 'text-gray-500', bgColor: 'bg-gray-100', icon: <X className="w-4 h-4" /> },
+  [MaintenanceStatus.PENDING]: { label: '待處理', color: 'text-amber-600', bgColor: 'bg-amber-50', icon: <Clock className="w-4 h-4" /> },
+  [MaintenanceStatus.IN_PROGRESS]: { label: '進行中', color: 'text-blue-600', bgColor: 'bg-blue-50', icon: <Wrench className="w-4 h-4" /> },
+  [MaintenanceStatus.COMPLETED]: { label: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50', icon: <CheckCircle2 className="w-4 h-4" /> },
+  [MaintenanceStatus.ARCHIVED]: { label: '已歸檔', color: 'text-gray-500', bgColor: 'bg-gray-100', icon: <X className="w-4 h-4" /> },
 };
 
 export default function MaintenancePage() {
@@ -119,9 +120,9 @@ export default function MaintenancePage() {
 
   // 統計卡片資料
   const stats = useMemo(() => {
-    const pending = records.filter((r: MaintenanceRecord) => r.status === 'pending').length;
-    const inProgress = records.filter((r: MaintenanceRecord) => r.status === 'in_progress').length;
-    const completed = records.filter((r: MaintenanceRecord) => r.status === 'completed').length;
+    const pending = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.PENDING).length;
+    const inProgress = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.IN_PROGRESS).length;
+    const completed = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.COMPLETED).length;
     return { pending, inProgress, completed, total: records.length };
   }, [records]);
 
@@ -319,7 +320,7 @@ export default function MaintenancePage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-gray-600">{record.reportDate}</span>
+                    <span className="text-sm text-gray-600">{record.date}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
