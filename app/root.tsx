@@ -43,8 +43,15 @@ export function ErrorBoundary() {
             <p className="text-sm text-slate-500 mb-6">
               {isRouteErrorResponse(error) 
                 ? error.data 
-                : "很抱歉，應用程式遇到未預期的錯誤。請嘗試重新整理頁面。"}
+                : error instanceof Error 
+                  ? error.message 
+                  : "很抱歉，應用程式遇到未預期的錯誤。請嘗試重新整理頁面。"}
             </p>
+            {error instanceof Error && (
+              <pre className="text-xs text-left bg-slate-100 p-3 rounded overflow-auto max-h-40 mb-4">
+                {error.stack}
+              </pre>
+            )}
             <a 
               href="/"
               className="inline-block px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition font-bold"
