@@ -164,13 +164,13 @@ function VendorDirectoryContent() {
 
   const filteredVendors = useMemo(() => {
     return allVendors.filter(vendor => {
-      const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            vendor.tags.some(t => t.includes(searchTerm));
+      const matchesSearch = vendor.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            (vendor.tags || []).some(t => t.includes(searchTerm));
       const matchesRegion = selectedRegion ? vendor.region === selectedRegion : true;
-      const matchesService = selectedServiceType ? vendor.serviceTypes.includes(selectedServiceType as ServiceType) : true;
+      const matchesService = selectedServiceType ? (vendor.serviceTypes || []).includes(selectedServiceType as ServiceType) : true;
       return matchesSearch && matchesRegion && matchesService;
     });
-  }, [searchTerm, selectedRegion, selectedServiceType]);
+  }, [allVendors, searchTerm, selectedRegion, selectedServiceType]);
 
   // 分頁後的資料
   const paginatedVendors = useMemo(() => {
