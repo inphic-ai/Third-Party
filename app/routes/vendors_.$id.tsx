@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useLoaderData } from '@remix-run/react';
+import React, { useState } from 'react';
+import { useLoaderData, useNavigate } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { 
@@ -8,7 +8,7 @@ import {
   TrendingUp, Clock, CheckCircle, AlertCircle, Tag, Users, Briefcase,
   Crown, EyeOff, Eye, CalendarCheck, X, Info, MessageSquare, Camera,
   ExternalLink, Settings, Pencil, Plus, Calendar, DollarSign, Image,
-  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download
+  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download, Sparkles
 } from 'lucide-react';
 
 import { MOCK_VENDORS, CATEGORY_GROUPS } from '~/constants';
@@ -111,13 +111,17 @@ const getLaborFormStatusLabel = (status: string) => {
 
 export default function VendorDetail() {
   const { vendor } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // Not needed for now
   const [isFavorite, setIsFavorite] = useState(vendor.isFavorite || false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'logs' | 'transactions' | 'docs'>('info');
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
+  const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
 
   // Helper functions
   const getCategoryLabel = (category: string) => {
@@ -150,6 +154,19 @@ export default function VendorDetail() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(amount);
+  };
+
+  const handleContactClick = (contact: ContactWindow, mode: 'log' | 'reservation' = 'log') => {
+    setSelectedContact(contact);
+    setModalInitialState(mode);
+    setShowContactModal(true);
+  };
+
+  const handleQuickReservation = () => {
+    const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
+    if (mainContact) {
+      handleContactClick(mainContact, 'reservation');
+    }
   };
 
   const serviceAreas = vendor.serviceArea?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
@@ -211,7 +228,10 @@ export default function VendorDetail() {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-3 mb-2">
                 <h1 className="text-2xl font-bold text-slate-800">{vendor.name}</h1>
-                <button className="flex items-center gap-2 text-sm font-bold text-white bg-yellow-500 border border-yellow-600 hover:bg-yellow-600 px-4 py-2 rounded-xl transition shadow-md">
+                <button 
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-2 text-sm font-bold text-white bg-yellow-500 border border-yellow-600 hover:bg-yellow-600 px-4 py-2 rounded-xl transition shadow-md"
+                >
                    <Pencil size={14} /> 編輯資料
                 </button>
                 <span className="font-mono text-slate-400 text-sm">#{vendor.id}</span>
@@ -283,7 +303,10 @@ export default function VendorDetail() {
                </div>
                
                <div className="flex flex-col gap-2 w-full">
-                 <button className="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-sm flex items-center justify-center gap-2 w-full">
+                 <button 
+                   onClick={handleQuickReservation}
+                   className="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-sm flex items-center justify-center gap-2 w-full"
+                 >
                    <CalendarCheck size={16} /> 立即預約
                  </button>
                  <button className="bg-slate-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-700 transition w-full">
@@ -442,8 +465,14 @@ export default function VendorDetail() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-slate-800">聯繫窗口</h3>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium">
-                    <Users size={16} /> 新增窗口
+                  <button 
+                    onClick={() => {
+                      const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
+                      if (mainContact) handleContactClick(mainContact, 'log');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
+                  >
+                    <Plus size={16} /> 新增紀錄
                   </button>
                 </div>
                 
@@ -488,10 +517,16 @@ export default function VendorDetail() {
                         </div>
                         
                         <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                          <button className="flex-1 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition">
+                          <button 
+                            onClick={() => handleContactClick(contact, 'log')}
+                            className="flex-1 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition"
+                          >
                             新增紀錄
                           </button>
-                          <button className="flex-1 px-3 py-2 bg-orange-100 text-orange-600 rounded-lg text-sm hover:bg-orange-200 transition">
+                          <button 
+                            onClick={() => handleContactClick(contact, 'reservation')}
+                            className="flex-1 px-3 py-2 bg-orange-100 text-orange-600 rounded-lg text-sm hover:bg-orange-200 transition"
+                          >
                             預約服務
                           </button>
                         </div>
@@ -553,7 +588,13 @@ export default function VendorDetail() {
               {/* Header with Add Button */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800">聯繫紀錄</h3>
-                <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
+                <button 
+                  onClick={() => {
+                    const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
+                    if (mainContact) handleContactClick(mainContact, 'log');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
+                >
                   <Plus size={16} /> 新增紀錄
                 </button>
               </div>
@@ -919,6 +960,24 @@ export default function VendorDetail() {
           </div>
         )}
 
+        {/* Contact Log Modal */}
+        {showContactModal && selectedContact && (
+          <ContactLogModal 
+            contact={selectedContact}
+            vendor={vendor}
+            initialIsReservation={modalInitialState === 'reservation'}
+            onClose={() => setShowContactModal(false)}
+          />
+        )}
+
+        {/* Edit Vendor Modal */}
+        {showEditModal && (
+          <EditVendorModal 
+            vendor={vendor}
+            onClose={() => setShowEditModal(false)}
+          />
+        )}
+
         {/* Transaction Detail Modal */}
         {selectedTransaction && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTransaction(null)}>
@@ -1024,3 +1083,276 @@ export default function VendorDetail() {
     </div>
   );
 }
+
+
+// ===== Modal Components =====
+
+const MOCK_SYSTEM_TAGS = {
+  contactTags: ['報價中', '已預約', '無人接聽', '已確認檔期', '等待報價', '報價過高', '態度良好', '需要主管確認', '約定場勘']
+};
+
+const ContactLogModal: React.FC<{ 
+  contact: ContactWindow; 
+  vendor: any;
+  initialIsReservation?: boolean;
+  onClose: () => void; 
+}> = ({ contact, vendor, initialIsReservation = false, onClose }) => {
+  const [note, setNote] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [generatedSummary, setGeneratedSummary] = useState('');
+  const [isReservation, setIsReservation] = useState(initialIsReservation);
+  const [resDate, setResDate] = useState(new Date().toISOString().split('T')[0]);
+  const [resTime, setResTime] = useState('10:00');
+  const [quoteAmount, setQuoteAmount] = useState('');
+  const [productId, setProductId] = useState('');
+
+  const handleAiSummarize = () => {
+    if (!note.trim()) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+       setGeneratedSummary("1. 確認可於週末進場施工。\n2. 報價需重新評估，預計週五前回覆。\n3. 注意停車問題。");
+       setIsProcessing(false);
+    }, 1200);
+  };
+
+  const handleAddTag = (tag: string) => {
+    setNote(prev => prev ? `${prev} ${tag}` : tag);
+  };
+
+  const handleSave = () => {
+    alert('聯繫紀錄已儲存（模擬）');
+    onClose();
+  };
+
+  const contactPhone = contact.mobile || vendor.mainPhone;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
+       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+           <h2 className="text-lg font-bold flex items-center gap-2">
+             <Phone size={20} /> 聯繫詳情
+           </h2>
+           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24}/></button>
+         </div>
+
+         <div className="p-6">
+           <div className="mb-6 text-center">
+             <p className="text-sm text-slate-500 mb-1">正在聯繫</p>
+             <h3 className="text-2xl font-bold text-slate-800">{contact.name} ({contact.role})</h3>
+             
+             <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-mono font-bold text-xl border border-blue-200">
+                {contactPhone || "無號碼"}
+                <Phone size={16} className="animate-pulse" />
+             </div>
+             <p className="text-[10px] text-slate-400 mt-1">系統將自動記錄此次聯繫意圖</p>
+           </div>
+
+           <div className="space-y-4">
+             <div className={`border rounded-xl p-4 transition-all ${isReservation ? "bg-orange-50 border-orange-300" : "bg-white border-slate-200"}`}>
+               <div className="flex items-center justify-between mb-2">
+                  <label className="flex items-center gap-2 font-bold text-slate-800 cursor-pointer">
+                     <input type="checkbox" className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500" checked={isReservation} onChange={(e) => setIsReservation(e.target.checked)} />
+                     確認預約 / 場勘 / 施工
+                  </label>
+                  {isReservation && <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded font-bold">RESERVATION</span>}
+               </div>
+               
+               {isReservation && (
+                 <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                       <label className="block text-xs font-bold text-slate-500 mb-1">預約日期</label>
+                       <div className="relative">
+                          <CalendarCheck size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-orange-500"/>
+                          <input type="date" value={resDate} onChange={(e) => setResDate(e.target.value)} className="w-full pl-8 pr-2 py-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" />
+                       </div>
+                    </div>
+                    <div>
+                       <label className="block text-xs font-bold text-slate-500 mb-1">預約時間</label>
+                       <input type="time" value={resTime} onChange={(e) => setResTime(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" />
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">預估報價 (若有)</label>
+                       <div className="relative">
+                          <DollarSign size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"/>
+                          <input type="number" placeholder="輸入金額..." value={quoteAmount} onChange={(e) => setQuoteAmount(e.target.value)} className="w-full pl-8 pr-2 py-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" />
+                       </div>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">商品/專案編號 (Product ID/SKU)</label>
+                       <div className="relative">
+                          <Package size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-purple-500"/>
+                          <input 
+                            type="text" 
+                            placeholder="例如：P-2024-001 (將自動標記於知識庫)" 
+                            value={productId} 
+                            onChange={(e) => setProductId(e.target.value)} 
+                            className="w-full pl-8 pr-2 py-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" 
+                          />
+                       </div>
+                    </div>
+                 </div>
+               )}
+             </div>
+
+             <div>
+               <label className="block text-sm font-bold text-slate-700 mb-2">智慧標籤 (快速填寫)</label>
+               <div className="flex flex-wrap gap-2 mb-3">
+                 {MOCK_SYSTEM_TAGS.contactTags.map(tag => (
+                   <button
+                     key={tag}
+                     onClick={() => handleAddTag(tag)}
+                     className="px-3 py-1.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded-full text-xs text-slate-600 transition flex items-center gap-1 border border-slate-200 shadow-sm"
+                   >
+                     <Tag size={10} /> {tag}
+                   </button>
+                 ))}
+               </div>
+
+               <label className="block text-sm font-bold text-slate-700 mb-2">聯繫筆記</label>
+               <textarea 
+                  className="w-full border border-slate-200 rounded-lg p-3 text-sm h-24 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                  placeholder="紀錄對話重點..."
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+               />
+               <button 
+                 onClick={handleAiSummarize}
+                 disabled={isProcessing || !note}
+                 className="mt-2 text-xs flex items-center gap-1 text-purple-600 hover:text-purple-800 font-bold disabled:opacity-50"
+               >
+                 <Sparkles size={12} /> {isProcessing ? "AI 分析中..." : "AI 協助整理重點"}
+               </button>
+             </div>
+
+             {generatedSummary && (
+               <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 text-sm text-slate-700">
+                 <div className="flex items-center gap-2 font-bold text-purple-800 mb-1">
+                   <MessageCircle size={14} /> AI 摘要建議
+                 </div>
+                 <pre className="whitespace-pre-wrap font-sans text-xs">{generatedSummary}</pre>
+               </div>
+             )}
+
+             <div className="flex gap-3 pt-2">
+                <button onClick={onClose} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg">取消</button>
+                <button 
+                  onClick={handleSave}
+                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2"
+                >
+                   <CheckCircle size={16} /> {isReservation ? "建立預約並儲存" : "儲存紀錄"}
+                </button>
+             </div>
+           </div>
+         </div>
+       </div>
+    </div>
+  );
+};
+
+const EditVendorModal: React.FC<{ vendor: any; onClose: () => void }> = ({ vendor, onClose }) => {
+  const [formData, setFormData] = useState({
+    name: vendor.name,
+    entityType: vendor.entityType,
+    region: vendor.region,
+    taxId: vendor.taxId || '',
+    mainPhone: vendor.mainPhone || '',
+    priceRange: vendor.priceRange || '$$'
+  });
+
+  const handleSave = () => {
+    alert("資料已更新 (模擬)");
+    onClose();
+  };
+
+  const handleChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white shrink-0">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Edit size={20} className="text-blue-400" /> 編輯廠商資料
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X size={24}/>
+          </button>
+        </div>
+        
+        <div className="p-6 space-y-6 overflow-y-auto">
+           <div className="space-y-4">
+              <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide">基本資料</h4>
+              <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">廠商名稱</label>
+                    <input 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                      value={formData.name} 
+                      onChange={e => handleChange('name', e.target.value)} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">身分類型</label>
+                    <select 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
+                      value={formData.entityType} 
+                      onChange={e => handleChange('entityType', e.target.value)}
+                    >
+                      <option value="公司行號">公司行號</option>
+                      <option value="個人接案">個人接案</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">統一編號</label>
+                    <input 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                      value={formData.taxId} 
+                      onChange={e => handleChange('taxId', e.target.value)} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
+                    <input 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                      value={formData.mainPhone} 
+                      onChange={e => handleChange('mainPhone', e.target.value)} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
+                    <select 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
+                      value={formData.region} 
+                      onChange={e => handleChange('region', e.target.value)}
+                    >
+                      <option value="台灣">台灣</option>
+                      <option value="大陸">大陸</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
+                    <select 
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
+                      value={formData.priceRange} 
+                      onChange={e => handleChange('priceRange', e.target.value)}
+                    >
+                      <option value="$">$ (平價)</option>
+                      <option value="$$">$$ (中等)</option>
+                      <option value="$$$">$$$ (中高)</option>
+                      <option value="$$$$">$$$$ (昂貴)</option>
+                    </select>
+                  </div>
+              </div>
+           </div>
+        </div>
+        
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+           <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm">取消</button>
+           <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md">儲存變更</button>
+        </div>
+      </div>
+    </div>
+  );
+};
