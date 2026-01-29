@@ -12,7 +12,7 @@ import type { MaintenanceRecord, MediaItem } from "../types";
 import { MaintenanceStatus } from "../types";
 import { ImageLightbox } from "../components/ImageLightbox";
 import { db, maintenanceRecords, vendors } from "../../db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { uploadPhotosToR2 } from "~/services/r2.server";
 
 export const meta: MetaFunction = () => {
@@ -135,6 +135,72 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ 
         success: false, 
         error: '新增失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
+  if (intent === 'uploadPhoto') {
+    try {
+      const caseId = formData.get('caseId') as string;
+      const photoType = formData.get('photoType') as string;
+      const photoData = formData.get('photoData') as string;
+      
+      if (!caseId || !photoType || !photoData) {
+        return json({ 
+          success: false, 
+          error: '缺少必要參數' 
+        }, { status: 400 });
+      }
+
+      // 上傳到 R2
+      let photoUrl = photoData;
+      try {
+        const r2Url = await uploadPhotosToR2([{ url: photoData, description: `新增照片` }]);
+        if (r2Url.length > 0) {
+          photoUrl = r2Url[0].url;
+        }
+      } catch (error) {
+        console.error('Failed to upload to R2, using base64:', error);
+      }
+
+      // 查詢現有記錄
+      const [record] = await db
+        .select()
+        .from(maintenanceRecords)
+        .where(eq(maintenanceRecords.caseId, caseId))
+        .limit(1);
+      
+      if (!record) {
+        return json({ 
+          success: false, 
+          error: '找不到該維修記錄' 
+        }, { status: 404 });
+      }
+
+      // 更新照片
+      const newPhoto = {
+        id: `photo-${Date.now()}`,
+        url: photoUrl,
+        description: `新增照片`,
+        type: 'image' as const,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      const fieldName = photoType === 'before' ? 'beforePhotos' : 'afterPhotos';
+      const existingPhotos = (record[fieldName] as any[]) || [];
+      const updatedPhotos = [...existingPhotos, newPhoto];
+
+      await db
+        .update(maintenanceRecords)
+        .set({ [fieldName]: updatedPhotos })
+        .where(eq(maintenanceRecords.caseId, caseId));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to upload photo:', error);
+      return json({ 
+        success: false, 
+        error: '上傳失敗，請稍後再試' 
       }, { status: 500 });
     }
   }
@@ -738,9 +804,37 @@ export default function MaintenancePage() {
           onPrev={handlePrevPhoto}
           onNext={handleNextPhoto}
           onSelect={handleSelectPhoto}
-          onUpload={(file) => {
-            // TODO: 階段 B 實作上傳功能
-            console.log('Upload file:', file);
+          onUpload={async (file) => {
+            try {
+              // 轉換為 base64
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64Data = reader.result as string;
+                
+                // 提交到後端
+                const formData = new FormData();
+                formData.append('intent', 'uploadPhoto');
+                formData.append('caseId', selectedRecord!.caseId);
+                formData.append('photoType', activePhotoType);
+                formData.append('photoData', base64Data);
+                
+                const response = await fetch('/maintenance', {
+                  method: 'POST',
+                  body: formData,
+                });
+                
+                if (response.ok) {
+                  // 重新載入頁面
+                  window.location.reload();
+                } else {
+                  alert('上傳失敗，請稍後再試');
+                }
+              };
+              reader.readAsDataURL(file);
+            } catch (error) {
+              console.error('Upload error:', error);
+              alert('上傳失敗，請稍後再試');
+            }
           }}
         />
       )}
