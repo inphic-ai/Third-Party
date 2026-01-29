@@ -50,6 +50,13 @@ export async function action({ request }: ActionFunctionArgs) {
         }, { status: 400 });
       }
 
+      // 將中文 region 映射為資料庫 enum 值
+      const regionMap: Record<string, string> = {
+        '台灣': 'TAIWAN',
+        '大陸': 'CHINA',
+      };
+      const dbRegion = regionMap[region] || region;
+
       // 生成預設頭像 URL（使用 UI Avatars）
       const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=fff&size=128`;
 
@@ -58,7 +65,7 @@ export async function action({ request }: ActionFunctionArgs) {
         name,
         taxId: taxId || null,
         avatarUrl,
-        region: region as any,
+        region: dbRegion as any,
         entityType: taxId && taxId.length === 8 ? 'COMPANY' : 'INDIVIDUAL',
         serviceTypes,
         categories: [category],
