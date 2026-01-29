@@ -109,12 +109,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // 將資料庫 enum 值轉換為前端顯示用的中文
     const vendorsWithMapping = allVendors.map(vendor => ({
       ...vendor,
+      id: vendor.id,
+      name: vendor.name,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
+      entityType: vendor.entityType,
+      serviceTypes: vendor.serviceTypes || [],
+      categories: vendor.categories || [],
+      rating: vendor.rating ? parseFloat(vendor.rating) : 0,
+      ratingCount: vendor.ratingCount || 0,
+      tags: vendor.tags || [],
+      avatarUrl: vendor.avatarUrl,
+      priceRange: vendor.priceRange,
+      isBlacklisted: vendor.isBlacklisted || false,
+      isFavorite: vendor.isFavorite || false,
     }));
     
     return json({ vendors: vendorsWithMapping });
   } catch (error) {
     console.error('Failed to load vendors:', error);
+    // 發生錯誤時返回空陣列，讓頁面至少能顯示
     return json({ vendors: [] });
   }
 }
