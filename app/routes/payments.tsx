@@ -1,5 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import type { MetaFunction } from "@remix-run/node";
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useLoaderData, useActionData, useNavigation, Form } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { invoiceRecords } from '../../db/schema/financial';
+import { eq } from 'drizzle-orm';
 import { 
   Search, LayoutGrid, List, FilePlus, Tag, Calendar, 
   DollarSign, ImageIcon, Download, Trash2, ChevronRight, 
@@ -22,6 +27,33 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Payments Loader] Loading invoices from database...');
+    
+    const allInvoices = await db.select().from(invoiceRecords);
+    
+    console.log(`[Payments Loader] Loaded ${allInvoices.length} invoices`);
+    
+    // 轉換為前端格式
+    const invoicesWithMapping = allInvoices.map(invoice => ({
+      id: invoice.id,
+      vendorName: invoice.vendorName,
+      maintenanceId: invoice.maintenanceId || undefined,
+      amount: parseFloat(String(invoice.amount)),
+      date: invoice.date.toISOString().split('T')[0],
+      invoiceNo: invoice.invoiceNo,
+      status: invoice.status,
+      attachmentUrl: invoice.attachmentUrl,
+    }));
+    
+    return json({ invoices: invoicesWithMapping });
+  } catch (error) {
+    console.error('[Payments Loader] Error:', error);
+    return json({ invoices: [] });
+  }
+}
+
 type ViewMode = 'GRID' | 'LIST';
 type DocType = 'INVOICE' | 'LABOR_FORM';
 type Currency = 'TWD' | 'CNY';
@@ -33,6 +65,7 @@ interface AttachmentItem {
 }
 
 function PaymentsContent() {
+  const { invoices: dbInvoices } = useLoaderData<typeof loader>();
   const [viewMode, setViewMode] = useState<ViewMode>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -69,7 +102,7 @@ function PaymentsContent() {
 
   // --- 核心過濾邏輯 (包含日期區間) ---
   const filteredInvoices = useMemo(() => {
-    return MOCK_INVOICES.filter(inv => {
+    return dbInvoices.filter((inv: any) => {
       const matchesSearch = inv.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             inv.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
