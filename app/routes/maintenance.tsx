@@ -13,6 +13,7 @@ import { MaintenanceStatus } from "../types";
 import { ImageLightbox } from "../components/ImageLightbox";
 import { db, maintenanceRecords, vendors } from "../../db";
 import { desc } from "drizzle-orm";
+import { uploadPhotosToR2 } from "~/services/r2.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -66,9 +67,17 @@ export async function action({ request }: ActionFunctionArgs) {
       // 解析產品標籤
       const tagsArray = productTags ? productTags.split(',').filter(Boolean) : [];
 
-      // 解析照片數據
+      // 解析照片數據並上傳到 R2（階段 C）
       let beforePhotos: any[] = [];
       try {
+        if (beforePhotosJson) {
+          const parsed = JSON.parse(beforePhotosJson);
+          // 上傳到 R2 並獲取 URL
+          beforePhotos = await uploadPhotosToR2(parsed);
+        }
+      } catch (error) {
+        console.error('Failed to upload photos to R2:', error);
+        // 如果 R2 上傳失敗，回退到 base64（階段 B）
         if (beforePhotosJson) {
           const parsed = JSON.parse(beforePhotosJson);
           beforePhotos = parsed.map((photo: any, index: number) => ({
@@ -79,8 +88,6 @@ export async function action({ request }: ActionFunctionArgs) {
             uploadedAt: new Date().toISOString(),
           }));
         }
-      } catch (error) {
-        console.error('Failed to parse beforePhotos:', error);
       }
 
       // 查詢或創建測試廠商（階段 A 暫時使用）
@@ -106,7 +113,7 @@ export async function action({ request }: ActionFunctionArgs) {
       
       const defaultVendorId = firstVendor[0].id;
 
-      // 插入資料庫（階段 B：含 base64 照片）
+      // 插入資料庫（階段 C：含 R2 URL）
       await db.insert(maintenanceRecords).values({
         caseId,
         date: now,
