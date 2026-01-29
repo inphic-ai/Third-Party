@@ -217,7 +217,7 @@ export function ImageLightbox({
         {/* 9-Grid Gallery */}
         <div 
           ref={gridContainerRef}
-          className="flex-1 overflow-y-auto p-6"
+          className="flex-1 overflow-y-auto p-6 max-h-[350px]"
         >
           <div className="grid grid-cols-3 gap-3">
             {displayedPhotos.map((photo, idx) => (
