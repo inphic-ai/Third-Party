@@ -572,6 +572,7 @@ function VendorDirectoryContent() {
                   placeholder="其他補充說明..."
                 />
               </div>
+            </div>
               
               {/* Modal Footer */}
               <div className="p-8 border-t border-slate-100 flex gap-4 shrink-0">
