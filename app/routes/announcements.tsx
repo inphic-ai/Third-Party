@@ -1,5 +1,9 @@
-import type { MetaFunction } from "@remix-run/node";
-import { Link } from "@remix-run/react";
+import { useState } from 'react';
+import { useLoaderData, Link } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { announcements } from '../../db/schema/system';
 import { 
   Megaphone, Calendar, Bell, 
   Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight
@@ -17,7 +21,34 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Announcements Loader] Loading announcements...');
+    
+    const allAnnouncements = await db.select().from(announcements);
+    
+    console.log(`[Announcements Loader] Loaded ${allAnnouncements.length} announcements`);
+    
+    const announcementsWithMapping = allAnnouncements.map(ann => ({
+      id: ann.id,
+      title: ann.title,
+      content: ann.content,
+      date: ann.date.toISOString().split('T')[0],
+      priority: ann.priority === 'HIGH' ? 'High' : 'Normal',
+      tags: Array.isArray(ann.tags) ? ann.tags : [],
+      targetIdentity: Array.isArray(ann.targetIdentity) ? ann.targetIdentity : [],
+      targetRegion: ann.targetRegion || undefined,
+    }));
+    
+    return json({ announcements: announcementsWithMapping });
+  } catch (error) {
+    console.error('[Announcements Loader] Error:', error);
+    return json({ announcements: [] });
+  }
+}
+
 function AnnouncementsContent() {
+  const { announcements: dbAnnouncements } = useLoaderData<typeof loader>();
   const getIdentityIcon = (st: ServiceType) => {
     switch (st) {
       case ServiceType.LABOR: return <Hammer size={12} />;
@@ -46,7 +77,7 @@ function AnnouncementsContent() {
       </div>
 
       <div className="space-y-8">
-        {MOCK_ANNOUNCEMENTS.map((announcement) => (
+        {dbAnnouncements.map((announcement: any) => (
           <div 
             key={announcement.id} 
             className={clsx(
@@ -124,7 +155,7 @@ function AnnouncementsContent() {
           </div>
         ))}
 
-        {MOCK_ANNOUNCEMENTS.length === 0 && (
+        {dbAnnouncements.length === 0 && (
           <div className="text-center py-24 text-slate-300 bg-white rounded-[3rem] border-4 border-dashed border-slate-50 flex flex-col items-center">
             <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
                <Megaphone size={48} className="opacity-20" />

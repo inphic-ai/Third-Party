@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
-import type { MetaFunction } from "@remix-run/node";
-import { Link } from "@remix-run/react";
+import { useLoaderData, Link } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { knowledgeBaseItems } from '../../db/schema/system';
 import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -14,7 +17,32 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Knowledge Loader] Loading knowledge base items...');
+    
+    const allKnowledgeItems = await db.select().from(knowledgeBaseItems);
+    
+    console.log(`[Knowledge Loader] Loaded ${allKnowledgeItems.length} items`);
+    
+    const itemsWithMapping = allKnowledgeItems.map(item => ({
+      id: item.id,
+      question: item.question,
+      answer: item.answer,
+      sourceTransactionId: item.sourceTransactionId || undefined,
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      createdAt: item.createdAt.toISOString(),
+    }));
+    
+    return json({ knowledgeItems: itemsWithMapping });
+  } catch (error) {
+    console.error('[Knowledge Loader] Error:', error);
+    return json({ knowledgeItems: [] });
+  }
+}
+
 function KnowledgeContent() {
+  const { knowledgeItems: dbKnowledgeItems } = useLoaderData<typeof loader>();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -22,12 +50,12 @@ function KnowledgeContent() {
   // Extract all unique tags
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    MOCK_KNOWLEDGE_BASE.forEach(item => item.tags.forEach(t => tags.add(t)));
+    dbKnowledgeItems.forEach((item: any) => item.tags.forEach((t: string) => tags.add(t)));
     return Array.from(tags);
   }, []);
 
   const filteredItems = useMemo(() => {
-    return MOCK_KNOWLEDGE_BASE.filter(item => {
+    return dbKnowledgeItems.filter((item: any) => {
       const terms = searchTerm.toLowerCase().split(' ').filter(Boolean);
       const matchesSearch = terms.every(term => 
         item.question.toLowerCase().includes(term) || 
