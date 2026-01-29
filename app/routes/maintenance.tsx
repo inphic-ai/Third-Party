@@ -539,8 +539,42 @@ export default function MaintenancePage() {
           onNext={handleNextPhoto}
           onSelect={setActivePhotoIndex}
           onUpload={(file) => {
-            console.log('Upload file:', file);
-            // TODO: 實作上傳功能
+            if (!selectedRecord) return;
+            
+            // 讀取檔案並轉換為 Data URL
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const dataUrl = e.target?.result as string;
+              
+              // 創建新的 MediaItem
+              const newPhoto = {
+                id: `uploaded-${Date.now()}`,
+                url: dataUrl,
+                type: file.type.startsWith('video/') ? 'video' as const : 'image' as const,
+                description: file.name
+              };
+              
+              // 根據 activePhotoType 更新對應的照片陣列
+              const updatedRecord = {
+                ...selectedRecord,
+                beforePhotos: activePhotoType === 'before' 
+                  ? [...selectedRecord.beforePhotos, newPhoto]
+                  : selectedRecord.beforePhotos,
+                afterPhotos: activePhotoType === 'after'
+                  ? [...selectedRecord.afterPhotos, newPhoto]
+                  : selectedRecord.afterPhotos
+              };
+              
+              // 更新狀態
+              setSelectedRecord(updatedRecord);
+              
+              // 自動切換到新上傳的照片
+              const newIndex = activePhotoType === 'before'
+                ? updatedRecord.beforePhotos.length - 1
+                : updatedRecord.afterPhotos.length - 1;
+              setActivePhotoIndex(newIndex);
+            };
+            reader.readAsDataURL(file);
           }}
           onUpdateDescription={(photoId, description) => {
             console.log('Update description:', photoId, description);
