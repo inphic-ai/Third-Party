@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link, Form, useActionData, useNavigation, useLoaderData } from '@remix-run/react';
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { db } from '~/services/db.server';
+import { db } from '../services/db.server';
 import { vendors, contactWindows } from '../../db/schema/vendor';
 import { 
   Search, MapPin, Star, ChevronRight, LayoutGrid, 

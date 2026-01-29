@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLoaderData, useNavigate } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { db } from '~/services/db.server';
+import { db } from '../services/db.server';
 import { vendors, contactWindows } from '../../db/schema/vendor';
 import { eq } from 'drizzle-orm';
 import { 
