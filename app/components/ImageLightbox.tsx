@@ -1,6 +1,6 @@
 import { X, ChevronLeft, ChevronRight, Upload, Save, Edit2, Play } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface MediaItem {
   id: string;
@@ -34,6 +34,12 @@ export function ImageLightbox({
 }: ImageLightboxProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
+  const [displayedCount, setDisplayedCount] = useState(9);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  
+  const displayedPhotos = photos.slice(0, displayedCount);
+  const hasMore = displayedCount < photos.length;
 
   if (photos.length === 0) return null;
 
@@ -58,6 +64,31 @@ export function ImageLightbox({
       onUpload(file);
     }
   };
+
+  const handleScroll = () => {
+    if (!gridContainerRef.current || !hasMore || isLoadingMore) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = gridContainerRef.current;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+    
+    // 當滾動到 80% 時開始載入更多
+    if (scrollPercentage > 0.8) {
+      setIsLoadingMore(true);
+      // 模擬載入延遲
+      setTimeout(() => {
+        setDisplayedCount(prev => Math.min(prev + 9, photos.length));
+        setIsLoadingMore(false);
+      }, 500);
+    }
+  };
+
+  useEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container) return;
+    
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoadingMore, photos.length]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/98 backdrop-blur-2xl flex animate-in fade-in duration-300">
@@ -184,9 +215,12 @@ export function ImageLightbox({
         </div>
 
         {/* 9-Grid Gallery */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div 
+          ref={gridContainerRef}
+          className="flex-1 overflow-y-auto p-6"
+        >
           <div className="grid grid-cols-3 gap-3">
-            {photos.map((photo, idx) => (
+            {displayedPhotos.map((photo, idx) => (
               <button
                 key={photo.id}
                 onClick={() => onSelect(idx)}
@@ -218,17 +252,24 @@ export function ImageLightbox({
                 )}
               </button>
             ))}
-            
-            {/* Empty slots for visual balance */}
-            {Array.from({ length: Math.max(0, 9 - photos.length) }).map((_, idx) => (
-              <div
-                key={`empty-${idx}`}
-                className="aspect-square rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center"
-              >
-                <span className="text-white/20 text-xs">空位</span>
-              </div>
-            ))}
           </div>
+          
+          {/* Loading indicator */}
+          {isLoadingMore && (
+            <div className="flex justify-center items-center py-6">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm font-medium">載入更多照片...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* All loaded indicator */}
+          {!hasMore && photos.length > 9 && (
+            <div className="flex justify-center items-center py-6">
+              <span className="text-xs text-white/40 font-medium">已載入全部 {photos.length} 張照片</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

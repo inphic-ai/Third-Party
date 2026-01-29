@@ -44,7 +44,20 @@ export const MOCK_MAINTENANCE: MaintenanceRecord[] = [
     productTags: ['冷氣空調', '動力設備'],
     beforePhotos: [
       { id: 'b1', url: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '檢查內部軸承鏽蝕' },
-      { id: 'b1-2', url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '冷媒壓力異常讀數' }
+      { id: 'b1-2', url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '冷媒壓力異常讀數' },
+      { id: 'b1-3', url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '壓縮機外觀檢查' },
+      { id: 'b1-4', url: 'https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '電路板檢測' },
+      { id: 'b1-5', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '冷凝器清潔前' },
+      { id: 'b1-6', url: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '管路檢查' },
+      { id: 'b1-7', url: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '風扇葉片檢查' },
+      { id: 'b1-8', url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '溫度感測器測試' },
+      { id: 'b1-9', url: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '控制面板檢查' },
+      { id: 'b1-10', url: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '排水管路檢查' },
+      { id: 'b1-11', url: 'https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '電源線路檢查' },
+      { id: 'b1-12', url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '保護裝置測試' },
+      { id: 'b1-13', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '絕緣電阻測試' },
+      { id: 'b1-14', url: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '接地電阻測試' },
+      { id: 'b1-15', url: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '最終檢查報告' }
     ],
     afterPhotos: [
       { id: 'a1', url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80&w=800', type: 'image', uploadedAt: '2024-05-10', description: '完工後運轉測試' }
