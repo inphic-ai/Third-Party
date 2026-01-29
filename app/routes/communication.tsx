@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react';
-import type { MetaFunction } from "@remix-run/node";
-import { Link } from "@remix-run/react";
+import { useLoaderData, Link } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { contactLogs } from '../../db/schema/operations';
+import { vendors } from '../../db/schema/vendor';
 import { 
   MessageCircle, 
   Search, 
@@ -34,6 +38,54 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Communication Loader] Loading contact logs and vendors...');
+    
+    // 讀取所有聯絡紀錄
+    const allContactLogs = await db.select().from(contactLogs);
+    
+    // 讀取所有廠商（用於顯示聯絡人資訊）
+    const allVendors = await db.select().from(vendors);
+    
+    console.log(`[Communication Loader] Loaded ${allContactLogs.length} contact logs, ${allVendors.length} vendors`);
+    
+    // 轉換為前端格式
+    const contactLogsWithMapping = allContactLogs.map(log => ({
+      id: log.id,
+      vendorId: log.vendorId,
+      date: log.date.toISOString(),
+      status: log.status,
+      note: log.note,
+      aiSummary: log.aiSummary || undefined,
+      nextFollowUp: log.nextFollowUp?.toISOString() || undefined,
+      isReservation: log.isReservation || false,
+      reservationTime: log.reservationTime?.toISOString() || undefined,
+      quoteAmount: log.quoteAmount ? parseFloat(String(log.quoteAmount)) : undefined,
+    }));
+    
+    const vendorsWithMapping = allVendors.map(vendor => ({
+      id: vendor.id,
+      name: vendor.name || '',
+      avatarUrl: vendor.avatarUrl || '',
+      categories: Array.isArray(vendor.categories) ? vendor.categories : [],
+      socialGroups: [], // TODO: 從 social_groups 表讀取
+      contacts: [], // TODO: 從 contact_windows 表讀取
+    }));
+    
+    return json({ 
+      contactLogs: contactLogsWithMapping,
+      vendors: vendorsWithMapping 
+    });
+  } catch (error) {
+    console.error('[Communication Loader] Error:', error);
+    return json({ 
+      contactLogs: [],
+      vendors: []
+    });
+  }
+}
+
 type Platform = 'LINE' | 'WeChat';
 type ViewType = 'GROUPS' | 'CONTACTS';
 
@@ -60,6 +112,7 @@ interface FlattenedContact {
 const ITEMS_PER_PAGE_OPTIONS = [9, 18, 36];
 
 function CommunicationContent() {
+  const { vendors: dbVendors, contactLogs: dbContactLogs } = useLoaderData<typeof loader>();
   const [platform, setPlatform] = useState<Platform>('LINE');
   const [viewType, setViewType] = useState<ViewType>('GROUPS');
   const [groupViewMode, setGroupViewMode] = useState<'GRID' | 'LIST'>('LIST');
@@ -85,7 +138,7 @@ function CommunicationContent() {
 
   // Initialize Data
   const allGroups: FlattenedGroup[] = useMemo(() => {
-    return MOCK_VENDORS.flatMap(v => 
+    return dbVendors.flatMap((v: any) => 
       (v.socialGroups || []).map(g => ({
         ...g,
         vendorName: v.name,
@@ -100,7 +153,7 @@ function CommunicationContent() {
   const allContacts: FlattenedContact[] = useMemo(() => {
     const contacts: FlattenedContact[] = [];
 
-    MOCK_VENDORS.forEach(v => {
+    dbVendors.forEach((v: any) => {
       const common = {
         vendorName: v.name,
         vendorId: v.id,
