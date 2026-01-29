@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, Link } from '@remix-run/react';
-import type { MetaFunction } from "@remix-run/node";
+import { useSearchParams, Link, Form, useActionData, useNavigation } from '@remix-run/react';
+import type { MetaFunction, ActionFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { db } from '~/services/db.server';
+import { vendors, contactWindows } from '../../db/schema/vendor';
 import { 
   Search, MapPin, Star, ChevronRight, LayoutGrid, 
   LayoutList, Plus, Sparkles, X, Heart, 
@@ -21,10 +24,83 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+// Action 函數處理表單提交
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  if (intent === 'createVendor') {
+    try {
+      // 取得表單資料
+      const name = formData.get('name') as string;
+      const taxId = formData.get('taxId') as string;
+      const region = formData.get('region') as string;
+      const category = formData.get('category') as string;
+      const serviceTypes = formData.getAll('serviceType') as string[];
+      const contactName = formData.get('contactName') as string;
+      const contactPhone = formData.get('contactPhone') as string;
+      const contactEmail = formData.get('contactEmail') as string;
+      const notes = formData.get('notes') as string;
+
+      // 表單驗證
+      if (!name || !region || !category || serviceTypes.length === 0) {
+        return json({ 
+          success: false, 
+          error: '請填寫所有必填欄位（廠商名稱、地區、主營類別、身分屬性）' 
+        }, { status: 400 });
+      }
+
+      // 生成預設頭像 URL（使用 UI Avatars）
+      const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e293b&color=fff&size=128`;
+
+      // 插入廠商資料
+      const [newVendor] = await db.insert(vendors).values({
+        name,
+        taxId: taxId || null,
+        avatarUrl,
+        region: region as any,
+        entityType: taxId && taxId.length === 8 ? 'COMPANY' : 'INDIVIDUAL',
+        serviceTypes,
+        categories: [category],
+        priceRange: '$$',
+        tags: [],
+        internalNotes: notes || null,
+        createdBy: '00000000-0000-0000-0000-000000000000', // TODO: 替換為實際登入用戶 ID
+      }).returning();
+
+      // 如果有聯絡人資訊，插入聯絡窗口
+      if (contactName || contactPhone || contactEmail) {
+        await db.insert(contactWindows).values({
+          vendorId: newVendor.id,
+          name: contactName || '未提供',
+          role: '主要聯絡人',
+          mobile: contactPhone || null,
+          email: contactEmail || null,
+          isMainContact: true,
+        });
+      }
+
+      return json({ success: true, error: null, vendorId: newVendor.id });
+    } catch (error) {
+      console.error('Failed to create vendor:', error);
+      return json({ 
+        success: false, 
+        error: '建立失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, error: 'Invalid intent' }, { status: 400 });
+}
+
+
 type ViewMode = 'grid' | 'card' | 'list';
 
 function VendorDirectoryContent() {
   const [searchParams] = useSearchParams();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === 'submitting';
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
@@ -47,6 +123,16 @@ function VendorDirectoryContent() {
       }
     }
   }, [searchParams]);
+
+  // 監聽表單提交成功後關閉 Modal
+  useEffect(() => {
+    if (actionData?.success) {
+      setTimeout(() => {
+        setShowAddModal(false);
+        window.location.reload(); // 重新載入以顯示新廠商
+      }, 1500);
+    }
+  }, [actionData]);
 
   const filteredVendors = useMemo(() => {
     return MOCK_VENDORS.filter(vendor => {
@@ -363,12 +449,31 @@ function VendorDirectoryContent() {
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+            <Form method="post" className="flex-1 overflow-y-auto p-8 space-y-8">
+              <input type="hidden" name="intent" value="createVendor" />
+              
+              {/* 顯示錯誤訊息 */}
+              {actionData && !actionData.success && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-bold">
+                  {actionData.error}
+                </div>
+              )}
+              
+              {/* 顯示成功訊息 */}
+              {actionData && actionData.success && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl text-sm font-bold">
+                  廠商建立成功！
+                </div>
+              )}
+              
+              <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">廠商名稱 *</label>
                   <input 
-                    type="text" 
+                    type="text"
+                    name="name"
+                    required
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" 
                     placeholder="輸入公司或個人名稱..."
                   />
@@ -376,14 +481,15 @@ function VendorDirectoryContent() {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">統一編號 / 身分證</label>
                   <input 
-                    type="text" 
+                    type="text"
+                    name="taxId"
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" 
                     placeholder="12345678"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">地區 *</label>
-                  <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
+                  <select name="region" required className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
                     <option value="">請選擇地區...</option>
                     <option value={Region.TAIWAN}>🇹🇼 台灣地區</option>
                     <option value={Region.CHINA}>🇨🇳 大陸地區</option>
@@ -391,7 +497,7 @@ function VendorDirectoryContent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">主營類別 *</label>
-                  <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
+                  <select name="category" required className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
                     <option value="">請選擇類別...</option>
                     {Object.entries(CATEGORY_GROUPS).map(([group, categories]) => (
                       <optgroup key={group} label={group}>
@@ -414,7 +520,7 @@ function VendorDirectoryContent() {
                     { value: ServiceType.MANUFACTURING, label: '🏭 製造商品', color: 'indigo' }
                   ].map(item => (
                     <label key={item.value} className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
-                      <input type="checkbox" className="w-4 h-4 rounded text-indigo-600" />
+                      <input type="checkbox" name="serviceType" value={item.value} className="w-4 h-4 rounded text-indigo-600" />
                       <span className="text-sm font-bold text-slate-700">{item.label}</span>
                     </label>
                   ))}
@@ -430,7 +536,8 @@ function VendorDirectoryContent() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">姓名</label>
                     <input 
-                      type="text" 
+                      type="text"
+                      name="contactName"
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
                       placeholder="聯絡人姓名"
                     />
@@ -438,7 +545,8 @@ function VendorDirectoryContent() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">電話</label>
                     <input 
-                      type="tel" 
+                      type="tel"
+                      name="contactPhone"
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
                       placeholder="0912-345-678"
                     />
@@ -446,7 +554,8 @@ function VendorDirectoryContent() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</label>
                     <input 
-                      type="email" 
+                      type="email"
+                      name="contactEmail"
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
                       placeholder="contact@example.com"
                     />
@@ -457,25 +566,40 @@ function VendorDirectoryContent() {
               {/* 備註 */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">備註說明</label>
-                <textarea 
+                <textarea
+                  name="notes"
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all h-24 resize-none" 
                   placeholder="其他補充說明..."
                 />
               </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-8 border-t border-slate-100 flex gap-4 shrink-0">
-              <button 
-                onClick={() => setShowAddModal(false)} 
-                className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
-              >
-                取消
-              </button>
-              <button className="flex-1 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 shadow-lg">
-                <Save size={18} /> 建立廠商檔案
-              </button>
-            </div>
+              
+              {/* Modal Footer */}
+              <div className="p-8 border-t border-slate-100 flex gap-4 shrink-0">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddModal(false)} 
+                  className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                  disabled={isSubmitting}
+                >
+                  取消
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="animate-spin">⏳</span> 建立中...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} /> 建立廠商檔案
+                    </>
+                  )}
+                </button>
+              </div>
+            </Form>
           </div>
         </div>
       )}
