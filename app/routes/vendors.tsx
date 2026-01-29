@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, Link, Form, useActionData, useNavigation } from '@remix-run/react';
-import type { MetaFunction, ActionFunctionArgs } from "@remix-run/node";
+import { useSearchParams, Link, Form, useActionData, useNavigation, useLoaderData } from '@remix-run/react';
+import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { db } from '~/services/db.server';
 import { vendors, contactWindows } from '../../db/schema/vendor';
@@ -100,14 +100,37 @@ export async function action({ request }: ActionFunctionArgs) {
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
+// Loader 函數從資料庫讀取廠商列表
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    // 從資料庫讀取所有廠商
+    const allVendors = await db.select().from(vendors);
+    
+    // 將資料庫 enum 值轉換為前端顯示用的中文
+    const vendorsWithMapping = allVendors.map(vendor => ({
+      ...vendor,
+      region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
+    }));
+    
+    return json({ vendors: vendorsWithMapping });
+  } catch (error) {
+    console.error('Failed to load vendors:', error);
+    return json({ vendors: [] });
+  }
+}
+
 
 type ViewMode = 'grid' | 'card' | 'list';
 
 function VendorDirectoryContent() {
   const [searchParams] = useSearchParams();
+  const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === 'submitting';
+  
+  // 從 loader 讀取真實廠商資料
+  const allVendors = loaderData.vendors as any[];
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
@@ -134,15 +157,13 @@ function VendorDirectoryContent() {
   // 監聽表單提交成功後關閉 Modal
   useEffect(() => {
     if (actionData?.success) {
-      setTimeout(() => {
-        setShowAddModal(false);
-        window.location.reload(); // 重新載入以顯示新廠商
-      }, 1500);
+      setShowAddModal(false);
+      // Remix 會自動重新驗證 loader，無需手動重新載入
     }
   }, [actionData]);
 
   const filteredVendors = useMemo(() => {
-    return MOCK_VENDORS.filter(vendor => {
+    return allVendors.filter(vendor => {
       const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             vendor.tags.some(t => t.includes(searchTerm));
       const matchesRegion = selectedRegion ? vendor.region === selectedRegion : true;

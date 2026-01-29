@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useLoaderData, useNavigate } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { db } from '~/services/db.server';
+import { vendors, contactWindows } from '../../db/schema/vendor';
+import { eq } from 'drizzle-orm';
 import { 
   ArrowLeft, MapPin, Star, Phone, Mail, Globe, 
   Building2, Package, User, Edit, Heart, MessageCircle, FileText,
@@ -22,13 +25,33 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => {
 };
 
 export async function loader({ params }: LoaderFunctionArgs) {
-  const vendor = MOCK_VENDORS.find(v => v.id === params.id);
-  
-  if (!vendor) {
-    throw new Response("Not Found", { status: 404 });
+  try {
+    // 從資料庫讀取廠商資料
+    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, params.id!));
+    
+    if (!vendor) {
+      throw new Response("Not Found", { status: 404 });
+    }
+    
+    // 讀取廠商的聯絡窗口
+    const contacts = await db.select().from(contactWindows).where(eq(contactWindows.vendorId, params.id!));
+    
+    // 將資料庫 enum 值轉換為前端顯示用的中文
+    const vendorWithMapping = {
+      ...vendor,
+      region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
+      contactWindows: contacts,
+      // 模擬資料（待實作）
+      contactLogs: [],
+      transactions: [],
+      laborForms: [],
+    };
+    
+    return json({ vendor: vendorWithMapping });
+  } catch (error) {
+    console.error('Failed to load vendor:', error);
+    throw new Response("Internal Server Error", { status: 500 });
   }
-  
-  return json({ vendor });
 }
 
 // Tag Rule Definitions
