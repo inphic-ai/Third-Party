@@ -47,6 +47,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const description = formData.get('description') as string;
       const productTags = formData.get('productTags') as string;
       const vendorName = formData.get('vendorName') as string || '待指派';
+      const beforePhotosJson = formData.get('beforePhotos') as string;
       
       // 驗證必填欄位
       if (!deviceName || !deviceNo || !description) {
@@ -64,6 +65,23 @@ export async function action({ request }: ActionFunctionArgs) {
 
       // 解析產品標籤
       const tagsArray = productTags ? productTags.split(',').filter(Boolean) : [];
+
+      // 解析照片數據
+      let beforePhotos: any[] = [];
+      try {
+        if (beforePhotosJson) {
+          const parsed = JSON.parse(beforePhotosJson);
+          beforePhotos = parsed.map((photo: any, index: number) => ({
+            id: `photo-${Date.now()}-${index}`,
+            url: photo.url,
+            description: photo.description || `施工前 ${index + 1}`,
+            type: 'image' as const,
+            uploadedAt: new Date().toISOString(),
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to parse beforePhotos:', error);
+      }
 
       // 查詢或創建測試廠商（階段 A 暫時使用）
       let firstVendor = await db.select().from(vendors).limit(1);
@@ -88,7 +106,7 @@ export async function action({ request }: ActionFunctionArgs) {
       
       const defaultVendorId = firstVendor[0].id;
 
-      // 插入資料庫（階段 A：暫時不含照片）
+      // 插入資料庫（階段 B：含 base64 照片）
       await db.insert(maintenanceRecords).values({
         caseId,
         date: now,
@@ -99,7 +117,7 @@ export async function action({ request }: ActionFunctionArgs) {
         status: 'PENDING',
         description,
         productTags: tagsArray,
-        beforePhotos: [],
+        beforePhotos: beforePhotos,
         afterPhotos: [],
         createdBy: defaultVendorId, // TODO: 從 session 取得使用者 ID
       });
@@ -148,6 +166,7 @@ export default function MaintenancePage() {
     description: '',
     vendorName: '',
     productTags: [] as string[],
+    beforePhotos: [] as { url: string; description?: string }[],
   });
   
   // 相簿燈箱狀態
@@ -242,6 +261,47 @@ export default function MaintenancePage() {
       productTags: prev.productTags.includes(tag)
         ? prev.productTags.filter(t => t !== tag)
         : [...prev.productTags, tag]
+    }));
+  };
+
+  // 處理照片上傳
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newPhotos: { url: string; description?: string }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) continue;
+
+      // 轉換為 base64
+      const reader = new FileReader();
+      await new Promise<void>((resolve) => {
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            newPhotos.push({
+              url: event.target.result as string,
+              description: file.name
+            });
+          }
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      beforePhotos: [...prev.beforePhotos, ...newPhotos]
+    }));
+  };
+
+  // 刪除照片
+  const removePhoto = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      beforePhotos: prev.beforePhotos.filter((_, i) => i !== index)
     }));
   };
 
@@ -756,9 +816,47 @@ export default function MaintenancePage() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">施工前照片</label>
-                <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">階段 B 將實作上傳功能</p>
+                <input
+                  type="hidden"
+                  name="beforePhotos"
+                  value={JSON.stringify(formData.beforePhotos)}
+                />
+                <div className="space-y-3">
+                  {/* 上傳按鈕 */}
+                  <label className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 transition-colors block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">點擊或拖曳上傳照片</p>
+                    <p className="text-xs text-gray-400 mt-1">支援多張照片上傳</p>
+                  </label>
+
+                  {/* 照片預覽 */}
+                  {formData.beforePhotos.length > 0 && (
+                    <div className="grid grid-cols-3 gap-3">
+                      {formData.beforePhotos.map((photo, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 group">
+                          <img
+                            src={photo.url}
+                            alt={photo.description || `照片 ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(idx)}
+                            className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
