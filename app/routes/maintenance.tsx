@@ -205,6 +205,58 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === 'updatePhotoDescription') {
+    try {
+      const caseId = formData.get('caseId') as string;
+      const photoType = formData.get('photoType') as string;
+      const photoId = formData.get('photoId') as string;
+      const description = formData.get('description') as string;
+      
+      if (!caseId || !photoType || !photoId) {
+        return json({ 
+          success: false, 
+          error: '缺少必要參數' 
+        }, { status: 400 });
+      }
+
+      // 查詢現有記錄
+      const [record] = await db
+        .select()
+        .from(maintenanceRecords)
+        .where(eq(maintenanceRecords.caseId, caseId))
+        .limit(1);
+      
+      if (!record) {
+        return json({ 
+          success: false, 
+          error: '找不到該維修記錄' 
+        }, { status: 404 });
+      }
+
+      // 更新照片描述
+      const fieldName = photoType === 'before' ? 'beforePhotos' : 'afterPhotos';
+      const existingPhotos = (record[fieldName] as any[]) || [];
+      const updatedPhotos = existingPhotos.map((photo: any) => 
+        photo.id === photoId 
+          ? { ...photo, description }
+          : photo
+      );
+
+      await db
+        .update(maintenanceRecords)
+        .set({ [fieldName]: updatedPhotos })
+        .where(eq(maintenanceRecords.caseId, caseId));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to update photo description:', error);
+      return json({ 
+        success: false, 
+        error: '更新失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
@@ -774,7 +826,47 @@ export default function MaintenancePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">尚無照片</p>
+                  <label className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:bg-emerald-50 transition-colors flex flex-col items-center justify-center gap-2 group cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 group-hover:text-emerald-600 transition-colors" />
+                    <p className="text-sm text-gray-500 group-hover:text-emerald-600 transition-colors">點擊上傳施工後照片</p>
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        
+                        try {
+                          const reader = new FileReader();
+                          reader.onloadend = async () => {
+                            const base64Data = reader.result as string;
+                            
+                            const formData = new FormData();
+                            formData.append('intent', 'uploadPhoto');
+                            formData.append('caseId', selectedRecord!.caseId);
+                            formData.append('photoType', 'after');
+                            formData.append('photoData', base64Data);
+                            
+                            const response = await fetch('/maintenance', {
+                              method: 'POST',
+                              body: formData,
+                            });
+                            
+                            if (response.ok) {
+                              window.location.reload();
+                            } else {
+                              alert('上傳失敗，請稍後再試');
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        } catch (error) {
+                          console.error('Upload error:', error);
+                          alert('上傳失敗，請稍後再試');
+                        }
+                      }}
+                    />
+                  </label>
                 )}
               </div>
 
@@ -834,6 +926,32 @@ export default function MaintenancePage() {
             } catch (error) {
               console.error('Upload error:', error);
               alert('上傳失敗，請稍後再試');
+            }
+          }}
+          onUpdateDescription={async (photoId, description) => {
+            try {
+              // 提交到後端
+              const formData = new FormData();
+              formData.append('intent', 'updatePhotoDescription');
+              formData.append('caseId', selectedRecord!.caseId);
+              formData.append('photoType', activePhotoType);
+              formData.append('photoId', photoId);
+              formData.append('description', description);
+              
+              const response = await fetch('/maintenance', {
+                method: 'POST',
+                body: formData,
+              });
+              
+              if (response.ok) {
+                // 重新載入頁面
+                window.location.reload();
+              } else {
+                alert('更新失敗，請稍後再試');
+              }
+            } catch (error) {
+              console.error('Update description error:', error);
+              alert('更新失敗，請稍後再試');
             }
           }}
         />
