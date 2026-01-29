@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import { MOCK_MAINTENANCE } from "../constants";
 import type { MaintenanceRecord, MediaItem } from "../types";
 import { MaintenanceStatus } from "../types";
+import { ImageLightbox } from "../components/ImageLightbox";
 
 export const meta: MetaFunction = () => {
   return [
@@ -529,45 +530,23 @@ export default function MaintenancePage() {
 
       {/* Photo Lightbox */}
       {activePhotoIndex !== null && activePhotos.length > 0 && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60]">
-          <button
-            onClick={closeGallery}
-            className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          
-          <button
-            onClick={handlePrevPhoto}
-            disabled={activePhotoIndex === 0}
-            className="absolute left-4 p-3 text-white hover:bg-white/10 rounded-full disabled:opacity-30"
-          >
-            <ChevronLeft className="w-8 h-8" />
-          </button>
-          
-          <div className="max-w-4xl max-h-[80vh]">
-            <img
-              src={activePhotos[activePhotoIndex].url}
-              alt={activePhotos[activePhotoIndex].caption || '照片'}
-              className="max-w-full max-h-[80vh] object-contain"
-            />
-            {activePhotos[activePhotoIndex].caption && (
-              <p className="text-white text-center mt-4">{activePhotos[activePhotoIndex].caption}</p>
-            )}
-          </div>
-          
-          <button
-            onClick={handleNextPhoto}
-            disabled={activePhotoIndex === activePhotos.length - 1}
-            className="absolute right-4 p-3 text-white hover:bg-white/10 rounded-full disabled:opacity-30"
-          >
-            <ChevronRight className="w-8 h-8" />
-          </button>
-          
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm">
-            {activePhotoIndex + 1} / {activePhotos.length}
-          </div>
-        </div>
+        <ImageLightbox
+          photos={activePhotos}
+          activeIndex={activePhotoIndex}
+          title={activePhotoType === 'before' ? '施工前照片' : '施工後照片'}
+          onClose={closeGallery}
+          onPrev={handlePrevPhoto}
+          onNext={handleNextPhoto}
+          onSelect={setActivePhotoIndex}
+          onUpload={(file) => {
+            console.log('Upload file:', file);
+            // TODO: 實作上傳功能
+          }}
+          onUpdateDescription={(photoId, description) => {
+            console.log('Update description:', photoId, description);
+            // TODO: 實作更新說明功能
+          }}
+        />
       )}
 
       {/* Add Form Modal */}
