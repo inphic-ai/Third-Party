@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react';
-import type { MetaFunction } from "@remix-run/node";
-import { Link } from "@remix-run/react";
+import { useLoaderData, Link } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { transactions } from '../../db/schema/financial';
+import { contactLogs } from '../../db/schema/operations';
+import { vendors } from '../../db/schema/vendor';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -29,6 +34,71 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Tasks Loader] Loading tasks data...');
+    
+    // 讀取所有交易、聯絡紀錄和廠商
+    const [allTransactions, allContactLogs, allVendors] = await Promise.all([
+      db.select().from(transactions),
+      db.select().from(contactLogs),
+      db.select().from(vendors)
+    ]);
+    
+    console.log(`[Tasks Loader] Loaded ${allTransactions.length} transactions, ${allContactLogs.length} contact logs, ${allVendors.length} vendors`);
+    
+    // 建立 vendor map 以便快速查詢
+    const vendorMap = new Map(allVendors.map(v => [v.id, v]));
+    
+    // 轉換交易為任務格式
+    const transactionTasks = allTransactions.map(t => {
+      const vendor = vendorMap.get(t.vendorId);
+      return {
+        id: t.id,
+        type: 'transaction',
+        date: t.date.toISOString().split('T')[0],
+        title: `工單: ${t.description}`,
+        subtitle: vendor?.name || '',
+        status: t.status,
+        vendorId: t.vendorId,
+        vendorName: vendor?.name || '',
+        vendorAvatar: vendor?.avatarUrl || '',
+        isCompleted: t.status === 'PAID' || t.status === 'APPROVED'
+      };
+    });
+    
+    // 轉換聯絡紀錄為任務格式
+    const contactTasks = allContactLogs
+      .filter(log => log.nextFollowUp || log.isReservation)
+      .map(log => {
+        const vendor = vendorMap.get(log.vendorId);
+        return {
+          id: `log-${log.id}`,
+          type: log.isReservation ? 'reservation' : 'follow_up',
+          date: log.nextFollowUp?.toISOString().split('T')[0] || log.date.toISOString().split('T')[0],
+          time: log.reservationTime?.toISOString() || undefined,
+          title: log.isReservation ? `預約: ${vendor?.name || ''}` : `跟進: ${vendor?.name || ''}`,
+          subtitle: log.note,
+          vendorId: log.vendorId,
+          vendorName: vendor?.name || '',
+          vendorAvatar: vendor?.avatarUrl || '',
+          quoteAmount: log.quoteAmount ? parseFloat(String(log.quoteAmount)) : undefined,
+        };
+      });
+    
+    return json({ 
+      transactionTasks,
+      contactTasks
+    });
+  } catch (error) {
+    console.error('[Tasks Loader] Error:', error);
+    return json({ 
+      transactionTasks: [],
+      contactTasks: []
+    });
+  }
+}
+
 // Local Type for Unified Task View
 type TaskType = 'transaction' | 'follow_up' | 'manual' | 'reservation';
 
@@ -49,6 +119,7 @@ interface UnifiedTask {
 }
 
 function TasksContent() {
+  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks } = useLoaderData<typeof loader>();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [manualTasks, setManualTasks] = useState<UnifiedTask[]>([]);
@@ -66,43 +137,13 @@ function TasksContent() {
 
   // 1. Gather Transactions
   const transactionTasks: UnifiedTask[] = useMemo(() => {
-    return MOCK_VENDORS.flatMap(v => 
-      v.transactions.map(t => ({
-        id: t.id,
-        type: 'transaction' as TaskType,
-        date: t.date,
-        title: `工單: ${t.description}`,
-        subtitle: v.name,
-        status: t.status,
-        vendorId: v.id,
-        vendorName: v.name,
-        vendorAvatar: v.avatarUrl,
-        isCompleted: t.status === TransactionStatus.PAID || t.status === TransactionStatus.APPROVED
-      }))
-    );
-  }, []);
+    return dbTransactionTasks as UnifiedTask[];
+  }, [dbTransactionTasks]);
 
   // 2. Gather Follow-ups & Reservations (From Contact Logs)
   const contactTasks: UnifiedTask[] = useMemo(() => {
-    return MOCK_VENDORS.flatMap(v => 
-      v.contactLogs
-        .filter(log => log.nextFollowUp || log.isReservation)
-        .map(log => ({
-          id: `log-${log.id}`,
-          type: log.isReservation ? 'reservation' : 'follow_up' as TaskType,
-          date: log.nextFollowUp || log.date,
-          time: log.reservationTime,
-          title: log.isReservation ? `預約: ${v.name}` : `跟進: ${v.name}`,
-          subtitle: log.note,
-          vendorId: v.id,
-          vendorName: v.name,
-          vendorAvatar: v.avatarUrl,
-          quoteAmount: log.quoteAmount,
-          location: v.address,
-          isCompleted: false
-        }))
-    );
-  }, []);
+    return dbContactTasks as UnifiedTask[];
+  }, [dbContactTasks]);
 
   // Combine All Tasks
   const allTasks = [...transactionTasks, ...contactTasks, ...manualTasks];
