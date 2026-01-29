@@ -40,11 +40,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     try {
       // 映射地區到 enum 值
       const dbRegion = region === '台灣' ? 'TAIWAN' : 'CHINA';
+      // 映射身分類型到 enum 值
+      const dbEntityType = entityType === '公司行號' ? 'COMPANY' : 'INDIVIDUAL';
 
       await db.update(vendors)
         .set({
           name,
-          entityType,
+          entityType: dbEntityType as any,
           region: dbRegion as any,
           taxId: taxId || null,
           mainPhone: mainPhone || null,
@@ -76,6 +78,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
     const vendorWithMapping = {
       ...vendor,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
+      entityType: vendor.entityType === 'COMPANY' ? '公司行號' : vendor.entityType === 'INDIVIDUAL' ? '個人接案' : vendor.entityType,
       contactWindows: contacts,
       contactLogs: [],
       transactions: [],
