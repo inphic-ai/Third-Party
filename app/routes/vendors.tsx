@@ -128,6 +128,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           priceRange: vendor.priceRange || '$$',
           isBlacklisted: vendor.isBlacklisted || false,
           isFavorite: vendor.isFavorite || false,
+          contacts: [], // TODO: 從 contact_windows 表讀取
         };
       } catch (mapError) {
         console.error('[Vendors Loader] Error mapping vendor:', vendor.id, mapError);
