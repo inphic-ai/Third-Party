@@ -8,7 +8,7 @@ import {
   TrendingUp, Clock, CheckCircle, AlertCircle, Tag, Users, Briefcase,
   Crown, EyeOff, Eye, CalendarCheck, X, Info, MessageSquare, Camera,
   ExternalLink, Settings, Pencil, Plus, Calendar, DollarSign, Image,
-  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download, Sparkles
+  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download, Sparkles, Edit2
 } from 'lucide-react';
 
 import { MOCK_VENDORS, CATEGORY_GROUPS } from '~/constants';
@@ -122,6 +122,8 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [editedAddress, setEditedAddress] = useState(vendor.address || '');
 
   // Helper functions
   const getCategoryLabel = (category: string) => {
@@ -404,22 +406,65 @@ export default function VendorDetail() {
 
                 {/* Address */}
                 <div>
-                  <h3 className="text-base font-bold text-slate-800 mb-4">公司/聯絡地址</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-slate-800">公司/聯絡地址</h3>
+                    {!isEditingAddress ? (
+                      <button 
+                        onClick={() => setIsEditingAddress(true)}
+                        className="text-slate-400 hover:text-slate-600 transition"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => {
+                            // Save address logic here
+                            setIsEditingAddress(false);
+                          }}
+                          className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition"
+                        >
+                          儲存
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditedAddress(vendor.address || '');
+                            setIsEditingAddress(false);
+                          }}
+                          className="px-3 py-1 bg-slate-200 text-slate-700 rounded-lg text-sm hover:bg-slate-300 transition"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <div className="space-y-3">
                     {vendor.address && (
                       <div className="flex items-start gap-3">
                         <MapPin size={18} className="text-slate-400 mt-0.5" />
-                        <div>
+                        <div className="flex-1">
                           <div className="text-xs text-slate-400 mb-1">地址</div>
-                          <div className="text-slate-700">{vendor.address}</div>
-                          <a 
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vendor.address)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1 mt-1"
-                          >
-                            在 Google Maps 上查看 <ExternalLink size={12} />
-                          </a>
+                          {isEditingAddress ? (
+                            <input
+                              type="text"
+                              value={editedAddress}
+                              onChange={(e) => setEditedAddress(e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="請輸入地址"
+                            />
+                          ) : (
+                            <div className="text-slate-700">{editedAddress || vendor.address}</div>
+                          )}
+                          {!isEditingAddress && (
+                            <a 
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editedAddress || vendor.address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1 mt-1"
+                            >
+                              在 Google Maps 上查看 <ExternalLink size={12} />
+                            </a>
+                          )}
                         </div>
                       </div>
                     )}
