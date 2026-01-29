@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import type { MetaFunction } from "@remix-run/node";
+import { useLoaderData } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { db } from '../services/db.server';
+import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
 import { 
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
@@ -22,9 +26,69 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    console.log('[Admin Loader] Loading admin data...');
+    
+    // 只讀取已有資料表的數據
+    const [allSystemLogs, allAdminUsers, allAnnouncements] = await Promise.all([
+      db.select().from(systemLogs).limit(100), // 限制日誌數量
+      db.select().from(adminUsers),
+      db.select().from(announcements)
+    ]);
+    
+    console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
+    
+    const logsWithMapping = allSystemLogs.map(log => ({
+      id: log.id,
+      timestamp: log.timestamp.toISOString(),
+      user: log.user,
+      action: log.action,
+      target: log.target,
+      details: log.details,
+      ip: log.ip,
+      userAgent: log.userAgent,
+      status: log.status
+    }));
+    
+    const usersWithMapping = allAdminUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl || '',
+      department: user.department,
+      role: user.role,
+      isActive: user.isActive || false,
+      accumulatedBonus: user.accumulatedBonus ? parseFloat(String(user.accumulatedBonus)) : 0,
+    }));
+    
+    const announcementsWithMapping = allAnnouncements.map(ann => ({
+      id: ann.id,
+      title: ann.title,
+      content: ann.content,
+      date: ann.date.toISOString().split('T')[0],
+      priority: ann.priority === 'HIGH' ? 'High' : 'Normal',
+    }));
+    
+    return json({ 
+      systemLogs: logsWithMapping,
+      adminUsers: usersWithMapping,
+      announcements: announcementsWithMapping
+    });
+  } catch (error) {
+    console.error('[Admin Loader] Error:', error);
+    return json({ 
+      systemLogs: [],
+      adminUsers: [],
+      announcements: []
+    });
+  }
+}
+
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
   const navItems = [
@@ -173,7 +237,7 @@ const LogCenter = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {MOCK_LOGS.map(l => (
+                {dbSystemLogs.map((l: any) => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
@@ -332,7 +396,7 @@ const UserManager = () => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {MOCK_USERS.map(user => (
+          {dbAdminUsers.map((user: any) => (
             <tr key={user.id} className="hover:bg-slate-50/50 transition">
               <td className="px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -420,7 +484,7 @@ const AnnouncementManager = () => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {MOCK_ANNOUNCEMENTS.map(ann => (
+          {dbAnnouncements.map((ann: any) => (
             <tr key={ann.id} className="hover:bg-slate-50/50 transition">
               <td className="px-6 py-4 font-bold text-slate-800">{ann.title}</td>
               <td className="px-6 py-4 text-slate-500">{ann.date}</td>
