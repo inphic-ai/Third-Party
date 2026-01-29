@@ -103,30 +103,44 @@ export async function action({ request }: ActionFunctionArgs) {
 // Loader 函數從資料庫讀取廠商列表
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
+    console.log('[Vendors Loader] Starting to load vendors...');
+    
     // 從資料庫讀取所有廠商
     const allVendors = await db.select().from(vendors);
     
+    console.log(`[Vendors Loader] Loaded ${allVendors.length} vendors from database`);
+    
     // 將資料庫 enum 值轉換為前端顯示用的中文
-    const vendorsWithMapping = allVendors.map(vendor => ({
-      ...vendor,
-      id: vendor.id,
-      name: vendor.name,
-      region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
-      entityType: vendor.entityType,
-      serviceTypes: vendor.serviceTypes || [],
-      categories: vendor.categories || [],
-      rating: vendor.rating ? parseFloat(vendor.rating) : 0,
-      ratingCount: vendor.ratingCount || 0,
-      tags: vendor.tags || [],
-      avatarUrl: vendor.avatarUrl,
-      priceRange: vendor.priceRange,
-      isBlacklisted: vendor.isBlacklisted || false,
-      isFavorite: vendor.isFavorite || false,
-    }));
+    const vendorsWithMapping = allVendors.map(vendor => {
+      try {
+        return {
+          id: vendor.id,
+          name: vendor.name || '',
+          taxId: vendor.taxId || '',
+          avatarUrl: vendor.avatarUrl || '',
+          region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
+          entityType: vendor.entityType || 'INDIVIDUAL',
+          serviceTypes: Array.isArray(vendor.serviceTypes) ? vendor.serviceTypes : [],
+          categories: Array.isArray(vendor.categories) ? vendor.categories : [],
+          rating: vendor.rating ? parseFloat(String(vendor.rating)) : 0,
+          ratingCount: vendor.ratingCount || 0,
+          tags: Array.isArray(vendor.tags) ? vendor.tags : [],
+          priceRange: vendor.priceRange || '$$',
+          isBlacklisted: vendor.isBlacklisted || false,
+          isFavorite: vendor.isFavorite || false,
+        };
+      } catch (mapError) {
+        console.error('[Vendors Loader] Error mapping vendor:', vendor.id, mapError);
+        return null;
+      }
+    }).filter(v => v !== null);
+    
+    console.log(`[Vendors Loader] Successfully mapped ${vendorsWithMapping.length} vendors`);
     
     return json({ vendors: vendorsWithMapping });
   } catch (error) {
-    console.error('Failed to load vendors:', error);
+    console.error('[Vendors Loader] Fatal error:', error);
+    console.error('[Vendors Loader] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     // 發生錯誤時返回空陣列，讓頁面至少能顯示
     return json({ vendors: [] });
   }
