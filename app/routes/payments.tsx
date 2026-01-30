@@ -291,8 +291,8 @@ function PaymentsContent() {
                   <td className="px-10 py-6 text-sm font-black text-slate-900">${inv.amount.toLocaleString()}</td>
                   <td className="px-10 py-6 text-sm font-bold text-slate-400">{inv.date}</td>
                   <td className="px-10 py-6">
-                    <span className={clsx("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border", statusStyles[inv.status].text, "bg-white")}>
-                      {statusStyles[inv.status].label}
+                    <span className={clsx("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border", statusStyles[inv.status]?.text || "text-gray-600", "bg-white")}>
+                      {statusStyles[inv.status]?.label || inv.status}
                     </span>
                   </td>
                   <td className="px-10 py-6 text-right">
