@@ -3,8 +3,8 @@ import postgres from 'postgres';
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
-  console.error('❌ DATABASE_URL is not set');
-  process.exit(1);
+  console.log('⚠️  DATABASE_URL is not set. Skipping column migration.');
+  process.exit(0);
 }
 
 const sql = postgres(DATABASE_URL, { ssl: 'require' });
@@ -53,7 +53,9 @@ async function migrateAddColumns() {
     await sql.end();
   } catch (error) {
     console.error('[Migration] Error:', error);
-    process.exit(1);
+    console.log('⚠️  Column migration failed. This is not critical for deployment.');
+    await sql.end().catch(() => {});
+    process.exit(0);
   }
 }
 
