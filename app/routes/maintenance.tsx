@@ -76,6 +76,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const tags = formData.get('tags') as string;
     const tagsArray = tags ? tags.split(',').map(t => t.trim()) : [];
 
+    // 獲取廠商名稱
+    const vendor = await db.select().from(vendors).where(eq(vendors.id, vendorId)).limit(1);
+    const vendorName = vendor[0]?.name || '未指定廠商';
+
     await db.insert(maintenanceRecords).values({
       caseId,
       deviceName,
@@ -87,7 +91,8 @@ export async function action({ request }: ActionFunctionArgs) {
       afterPhotos,
       createdBy: vendorId,
       vendorId,
-      vendorName: '', // Will be populated by client
+      vendorName,
+      date: new Date(),
     });
 
     return json({ success: true });
@@ -98,10 +103,21 @@ export async function action({ request }: ActionFunctionArgs) {
     const status = formData.get('status') as string;
     const vendorId = formData.get('vendorId') as string;
     const vendorName = formData.get('vendorName') as string;
+    const beforePhotosJson = formData.get('beforePhotos') as string;
+    const afterPhotosJson = formData.get('afterPhotos') as string;
+
+    const updateData: any = { status, vendorId, vendorName };
+    
+    if (beforePhotosJson) {
+      updateData.beforePhotos = JSON.parse(beforePhotosJson);
+    }
+    if (afterPhotosJson) {
+      updateData.afterPhotos = JSON.parse(afterPhotosJson);
+    }
 
     await db
       .update(maintenanceRecords)
-      .set({ status, vendorId, vendorName })
+      .set(updateData)
       .where(eq(maintenanceRecords.caseId, caseId));
 
     return json({ success: true });
@@ -135,6 +151,8 @@ export default function MaintenancePage() {
   // 照片上傳 state
   const [beforePhotos, setBeforePhotos] = useState<MediaItem[]>([]);
   const [afterPhotos, setAfterPhotos] = useState<MediaItem[]>([]);
+  const [editBeforePhotos, setEditBeforePhotos] = useState<MediaItem[]>([]);
+  const [editAfterPhotos, setEditAfterPhotos] = useState<MediaItem[]>([]);
 
   // 全端閉環：Action 成功後關閉 Modal 並重新載入
   useEffect(() => {
@@ -143,9 +161,19 @@ export default function MaintenancePage() {
       setSelectedRecord(null);
       setBeforePhotos([]);
       setAfterPhotos([]);
+      setEditBeforePhotos([]);
+      setEditAfterPhotos([]);
       revalidator.revalidate();
     }
   }, [actionData, revalidator]);
+
+  // 編輯時初始化照片 state
+  useEffect(() => {
+    if (selectedRecord) {
+      setEditBeforePhotos((selectedRecord.beforePhotos as MediaItem[]) || []);
+      setEditAfterPhotos((selectedRecord.afterPhotos as MediaItem[]) || []);
+    }
+  }, [selectedRecord]);
 
   const filteredRecords = useMemo(() => {
     return records.filter((record: any) => {
@@ -186,6 +214,38 @@ export default function MaintenancePage() {
     } else {
       setAfterPhotos(prev => prev.filter(p => p.id !== id));
     }
+  };
+
+  const removeEditPhoto = (type: 'before' | 'after', id: string) => {
+    if (type === 'before') {
+      setEditBeforePhotos(prev => prev.filter(p => p.id !== id));
+    } else {
+      setEditAfterPhotos(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleEditFileUpload = (type: 'before' | 'after', files: FileList | null) => {
+    if (!files) return;
+    
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newPhoto: MediaItem = {
+          id: `${Date.now()}-${Math.random()}`,
+          url: e.target?.result as string,
+          description: file.name,
+          type: 'image',
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        if (type === 'before') {
+          setEditBeforePhotos(prev => [...prev, newPhoto]);
+        } else {
+          setEditAfterPhotos(prev => [...prev, newPhoto]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   return (
@@ -329,6 +389,8 @@ export default function MaintenancePage() {
               <Form method="post" className="space-y-8">
                 <input type="hidden" name="intent" value="updateStatus" />
                 <input type="hidden" name="caseId" value={selectedRecord.caseId} />
+                <input type="hidden" name="beforePhotos" value={JSON.stringify(editBeforePhotos)} />
+                <input type="hidden" name="afterPhotos" value={JSON.stringify(editAfterPhotos)} />
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
@@ -374,23 +436,80 @@ export default function MaintenancePage() {
                   </p>
                 </div>
 
-                <div className="space-y-6">
-                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                {/* 施工前照片 */}
+                <div className="space-y-4">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <Camera className="w-4 h-4" />
-                    施工照片
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {((selectedRecord.beforePhotos as any[]) || []).map((photo, i) => (
-                      <div key={i} className="aspect-square rounded-2xl overflow-hidden border border-gray-100 shadow-sm group relative">
-                        <img src={photo.url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button className="p-2 bg-white rounded-full shadow-lg">
-                            <Maximize2 className="w-4 h-4 text-gray-700" />
+                    施工前照片
+                  </label>
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
+                    <input
+                      type="file"
+                      id="editBeforePhotosInput"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleEditFileUpload('before', e.target.files)}
+                      className="hidden"
+                    />
+                    <label htmlFor="editBeforePhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600">點擊上傳施工前照片</span>
+                    </label>
+                  </div>
+                  {editBeforePhotos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-4">
+                      {editBeforePhotos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                          <button
+                            type="button"
+                            onClick={() => removeEditPhoto('before', photo.id)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
                           </button>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 施工後照片 */}
+                <div className="space-y-4">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    施工後照片
+                  </label>
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
+                    <input
+                      type="file"
+                      id="editAfterPhotosInput"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleEditFileUpload('after', e.target.files)}
+                      className="hidden"
+                    />
+                    <label htmlFor="editAfterPhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600">點擊上傳施工後照片</span>
+                    </label>
                   </div>
+                  {editAfterPhotos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-4">
+                      {editAfterPhotos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                          <button
+                            type="button"
+                            onClick={() => removeEditPhoto('after', photo.id)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
