@@ -1,0 +1,9 @@
+# Railway ignore file
+# This file is used to force Railway to rebuild from scratch
+
+# Ignore build cache
+.cache/
+build/
+dist/
+.vite/
+node_modules/.vite/

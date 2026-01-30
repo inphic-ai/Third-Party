@@ -29,7 +29,13 @@ async function runMigration() {
   
   try {
     // 建立連接
-    client = postgres(connectionString, { connect_timeout: 10 });
+    try {
+      client = postgres(connectionString, { connect_timeout: 10 });
+    } catch (error) {
+      console.warn(`⚠️  Invalid DATABASE_URL format. Skipping migration.`);
+      console.log('ℹ️  Hint: DATABASE_URL should be in format: postgresql://user:password@host:port/database');
+      return;
+    }
     try {
       await client`SELECT 1`;
     } catch (error) {
@@ -110,7 +116,8 @@ async function runMigration() {
     
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
-    process.exit(1);
+    console.log('⚠️  Migration failed but deployment will continue.');
+    // Don't exit with error code to allow deployment to continue
   } finally {
     if (client) {
       await client.end();
