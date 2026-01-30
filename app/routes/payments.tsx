@@ -121,7 +121,7 @@ function PaymentsContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(9);
+  const [itemsPerPage] = useState(15);
   const [currency, setCurrency] = useState<Currency>('TWD');
 
   const [showModal, setShowModal] = useState(false);
@@ -216,7 +216,7 @@ function PaymentsContent() {
 
   return (
     <div className="flex flex-col space-y-10 p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
             <Coins className="text-indigo-600" size={40} />
@@ -224,7 +224,24 @@ function PaymentsContent() {
           </h1>
           <p className="text-slate-400 font-bold mt-2 uppercase tracking-[0.2em] text-xs">Financial Document Control Center</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+           {/* 幣別切換按鈕 */}
+           <div className="inline-flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm">
+             {(['TWD', 'CNY', 'USD'] as Currency[]).map((curr) => (
+               <button
+                 key={curr}
+                 onClick={() => setCurrency(curr)}
+                 className={clsx(
+                   "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                   currency === curr
+                     ? "bg-slate-900 text-white shadow-md"
+                     : "text-slate-400 hover:text-slate-600"
+                 )}
+               >
+                 {curr}
+               </button>
+             ))}
+           </div>
            <button 
              onClick={handleOpenCreate}
              className="px-8 py-4 bg-slate-900 text-white rounded-[2rem] font-black text-sm flex items-center gap-3 shadow-2xl hover:bg-indigo-600 transition-all active:scale-95"
@@ -232,26 +249,6 @@ function PaymentsContent() {
              <FilePlus size={20} />
              建立新單據
            </button>
-        </div>
-      </div>
-
-      {/* 幣別切換按鈕 */}
-      <div className="flex justify-end">
-        <div className="inline-flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm">
-          {(['TWD', 'CNY', 'USD'] as Currency[]).map((curr) => (
-            <button
-              key={curr}
-              onClick={() => setCurrency(curr)}
-              className={clsx(
-                "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                currency === curr
-                  ? "bg-slate-900 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-600"
-              )}
-            >
-              {curr}
-            </button>
-          ))}
         </div>
       </div>
 
