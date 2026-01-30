@@ -93,6 +93,11 @@ export async function loader({ params }: LoaderFunctionArgs) {
       ...vendor,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
       entityType: vendor.entityType === 'COMPANY' ? '公司行號' : vendor.entityType === 'INDIVIDUAL' ? '個人接案' : vendor.entityType,
+      serviceArea: vendor.serviceArea || '',
+      companyAddress: vendor.companyAddress || '',
+      taxId: vendor.taxId || '',
+      mainPhone: vendor.mainPhone || '',
+      priceRange: vendor.priceRange || '$$',
       contacts: contacts,
       contactLogs: [],
       transactions: [],
@@ -202,6 +207,12 @@ export default function VendorDetail() {
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
   const [vendorDetails, setVendorDetails] = useState({
+    name: vendor.name,
+    entityType: vendor.entityType,
+    region: vendor.region,
+    taxId: vendor.taxId || '',
+    mainPhone: vendor.mainPhone || '',
+    priceRange: vendor.priceRange || '$$',
     serviceArea: vendor.serviceArea || '',
     companyAddress: vendor.companyAddress || vendor.address || ''
   });
@@ -210,6 +221,12 @@ export default function VendorDetail() {
     if (actionData?.success) {
       if (actionData.vendor) {
         setVendorDetails({
+          name: actionData.vendor.name,
+          entityType: actionData.vendor.entityType,
+          region: actionData.vendor.region,
+          taxId: actionData.vendor.taxId || '',
+          mainPhone: actionData.vendor.mainPhone || '',
+          priceRange: actionData.vendor.priceRange || '$$',
           serviceArea: actionData.vendor.serviceArea || '',
           companyAddress: actionData.vendor.companyAddress || actionData.vendor.address || ''
         });
@@ -322,7 +339,7 @@ export default function VendorDetail() {
             {/* Main Info */}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-slate-800">{vendor.name}</h1>
+                <h1 className="text-2xl font-bold text-slate-800">{vendorDetails.name}</h1>
                 <button 
                   onClick={() => setShowEditModal(true)}
                   className="flex items-center gap-2 text-sm font-bold text-white bg-yellow-500 border border-yellow-600 hover:bg-yellow-600 px-4 py-2 rounded-xl transition shadow-md"
@@ -331,32 +348,31 @@ export default function VendorDetail() {
                 </button>
                 <span className="font-mono text-slate-400 text-sm">#{vendor.id}</span>
                 <span className={`px-2 py-1 text-xs rounded-full font-medium flex items-center gap-1 ${
-                  vendor.entityType === EntityType.COMPANY ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
+                  vendorDetails.entityType === '公司行號' ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
                 }`}>
-                  {vendor.entityType === EntityType.COMPANY ? <Building2 size={12}/> : <User size={12}/>}
-                  {vendor.entityType}
+                  {vendorDetails.entityType === '公司行號' ? <Building2 size={12}/> : <User size={12}/>}
+                  {vendorDetails.entityType}
                 </span>
               </div>
               
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-600 mb-4">
                 <span className="flex items-center gap-1">
                   <MapPin size={14} className="text-slate-400" /> 
-                  註冊地：{vendor.region}
+                  註冊地：{vendorDetails.region}
                 </span>
-                {vendor.taxId && (
+                {vendorDetails.taxId && (
                   <span className="flex items-center gap-1">
                     <Building2 size={14} className="text-slate-400" />
-                    統編：<span className="font-mono">{vendor.taxId}</span>
+                    統編：<span className="font-mono">{vendorDetails.taxId}</span>
                   </span>
                 )}
-                {vendor.mainPhone && (
+                {vendorDetails.mainPhone && (
                   <span 
                     className="flex items-center gap-1 cursor-pointer hover:text-blue-600 group" 
                     onClick={() => toggleRevealPhone('main')}
-                    title="點擊查看完整號碼"
                   >
                     <Phone size={14} className="text-slate-400" /> 
-                    <span className="font-mono">{getDisplayPhone('main', vendor.mainPhone)}</span>
+                    <span className="font-mono">{getDisplayPhone('main', vendorDetails.mainPhone)}</span>
                     {revealedPhones['main'] ? <EyeOff size={12} className="text-slate-400"/> : <Eye size={12} className="text-slate-400 group-hover:text-blue-500"/>}
                   </span>
                 )}
@@ -1361,20 +1377,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
   isSubmitting,
   actionData
 }) => {
-  const [formData, setFormData] = useState({
-    name: vendor.name,
-    entityType: vendor.entityType,
-    region: vendor.region,
-    taxId: vendor.taxId || '',
-    mainPhone: vendor.mainPhone || '',
-    priceRange: vendor.priceRange || '$$',
-    serviceArea: vendor.serviceArea || '',
-    companyAddress: vendor.companyAddress || vendor.address || ''
-  });
-
-  const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
@@ -1405,8 +1407,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="name"
-                    value={formData.name} 
-                    onChange={e => handleChange('name', e.target.value)} 
+                    defaultValue={vendor.name} 
                   />
                 </div>
                 <div>
@@ -1414,8 +1415,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
                     name="entityType"
-                    value={formData.entityType} 
-                    onChange={e => handleChange('entityType', e.target.value)}
+                    defaultValue={vendor.entityType}
                   >
                     <option value="公司行號">公司行號</option>
                     <option value="個人接案">個人接案</option>
@@ -1426,8 +1426,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="taxId"
-                    value={formData.taxId} 
-                    onChange={e => handleChange('taxId', e.target.value)} 
+                    defaultValue={vendor.taxId || ''} 
                   />
                 </div>
                 <div>
@@ -1435,8 +1434,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="mainPhone"
-                    value={formData.mainPhone} 
-                    onChange={e => handleChange('mainPhone', e.target.value)} 
+                    defaultValue={vendor.mainPhone || ''} 
                   />
                 </div>
                 <div>
@@ -1444,8 +1442,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
                     name="region"
-                    value={formData.region} 
-                    onChange={e => handleChange('region', e.target.value)}
+                    defaultValue={vendor.region}
                   >
                     <option value="台灣">台灣</option>
                     <option value="大陸">大陸</option>
@@ -1456,8 +1453,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
                     name="priceRange"
-                    value={formData.priceRange} 
-                    onChange={e => handleChange('priceRange', e.target.value)}
+                    defaultValue={vendor.priceRange || '$$'}
                   >
                     <option value="$">$ (平價)</option>
                     <option value="$$">$$ (中等)</option>
@@ -1470,8 +1466,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <textarea
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
                     name="serviceArea"
-                    value={formData.serviceArea}
-                    onChange={e => handleChange('serviceArea', e.target.value)}
+                    defaultValue={vendor.serviceArea || ''}
                     placeholder="例如：北部、雙北、桃園"
                   />
                 </div>
@@ -1480,8 +1475,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <textarea
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
                     name="companyAddress"
-                    value={formData.companyAddress}
-                    onChange={e => handleChange('companyAddress', e.target.value)}
+                    defaultValue={vendor.companyAddress || vendor.address || ''}
                     placeholder="例如：台北市○○區○○路○○號"
                   />
                 </div>
