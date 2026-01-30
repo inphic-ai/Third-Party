@@ -76,6 +76,35 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "uploadBusinessCard") {
+    const id = params.id;
+    const avatarUrl = formData.get("avatarUrl") as string;
+
+    if (!avatarUrl) {
+      return json({ success: false, message: "缺少名片圖片" }, { status: 400 });
+    }
+
+    try {
+      await db.update(vendors)
+        .set({
+          avatarUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(vendors.id, id!));
+
+      const [updatedVendor] = await db.select().from(vendors).where(eq(vendors.id, id!));
+
+      if (!updatedVendor) {
+        throw new Error('Updated vendor not found');
+      }
+
+      return json({ success: true, message: "名片已上傳", avatarUrl: updatedVendor.avatarUrl });
+    } catch (error) {
+      console.error("Failed to upload business card:", error);
+      return json({ success: false, message: "上傳失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -206,6 +235,7 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
+  const [avatarUrl, setAvatarUrl] = useState(vendor.avatarUrl);
   const [vendorDetails, setVendorDetails] = useState({
     name: vendor.name,
     entityType: vendor.entityType,
@@ -230,6 +260,9 @@ export default function VendorDetail() {
           serviceArea: actionData.vendor.serviceArea || '',
           companyAddress: actionData.vendor.companyAddress || actionData.vendor.address || ''
         });
+      }
+      if (actionData.avatarUrl) {
+        setAvatarUrl(actionData.avatarUrl);
       }
       setShowEditModal(false);
     }
@@ -338,7 +371,7 @@ export default function VendorDetail() {
             {/* Avatar */}
             <div className="flex-shrink-0">
               <img 
-                src={vendor.avatarUrl} 
+                src={avatarUrl} 
                 alt={vendor.name} 
                 className="w-24 h-24 rounded-full object-cover border-4 border-slate-100" 
               />
@@ -577,10 +610,55 @@ export default function VendorDetail() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-base font-bold text-slate-800 mb-4">名片預覽</h3>
-                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
-                    <Camera size={32} className="text-slate-300 mb-3" />
-                    <span className="text-slate-400 text-sm">點擊上傳名片</span>
-                  </div>
+                  <label htmlFor="businessCardUpload" className="block">
+                    {avatarUrl && avatarUrl !== 'https://api.dicebear.com/7.x/initials/svg?seed=12' ? (
+                      <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer group">
+                        <img src={avatarUrl} alt="Business Card" className="w-full h-auto object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                          <div className="text-white text-center">
+                            <Upload size={32} className="mx-auto mb-2" />
+                            <span className="text-sm font-medium">更換名片</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
+                        <Camera size={32} className="text-slate-300 mb-3" />
+                        <span className="text-slate-400 text-sm">點擊上傳名片</span>
+                      </div>
+                    )}
+                  </label>
+                  <input 
+                    id="businessCardUpload" 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          const formData = new FormData();
+                          formData.append('intent', 'uploadBusinessCard');
+                          formData.append('avatarUrl', reader.result as string);
+                          const form = e.target.closest('form') || document.createElement('form');
+                          form.method = 'post';
+                          Array.from(formData.entries()).forEach(([key, value]) => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = value as string;
+                            form.appendChild(input);
+                          });
+                          if (!e.target.closest('form')) {
+                            document.body.appendChild(form);
+                          }
+                          form.requestSubmit();
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
