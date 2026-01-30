@@ -61,6 +61,7 @@ export const vendors = pgTable('vendors', {
   // 聯絡資訊
   mainPhone: varchar('main_phone', { length: 20 }),
   address: text('address'),
+  companyAddress: text('company_address'),
   website: text('website'),
   lineId: varchar('line_id', { length: 100 }),
   wechatId: varchar('wechat_id', { length: 100 }),
