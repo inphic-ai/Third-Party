@@ -76,6 +76,7 @@ export async function action({ request }: ActionFunctionArgs) {
         priceRange: '$$',
         tags: [],
         serviceScopes,
+        companyAddress: contactAddress || null,
         internalNotes: notes || null,
         createdBy: '00000000-0000-0000-0000-000000000000', // TODO: 替換為實際登入用戶 ID
       }).returning();

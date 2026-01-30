@@ -48,6 +48,24 @@ async function migrateAddColumns() {
     } else {
       console.log('✅ contact_address column already exists');
     }
+
+    // Check if company_address column exists in vendors
+    const companyAddressColumns = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'vendors' AND column_name = 'company_address'
+    `;
+    
+    if (companyAddressColumns.length === 0) {
+      console.log('[Migration] Adding company_address column to vendors table...');
+      await sql`
+        ALTER TABLE vendors 
+        ADD COLUMN company_address text
+      `;
+      console.log('✅ company_address column added');
+    } else {
+      console.log('✅ company_address column already exists');
+    }
     
     console.log('[Migration] All columns migrated successfully!');
     await sql.end();

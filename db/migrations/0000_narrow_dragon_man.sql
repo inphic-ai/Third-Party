@@ -54,6 +54,7 @@ CREATE TABLE "vendors" (
 	"rating_count" integer DEFAULT 0,
 	"main_phone" varchar(20),
 	"address" text,
+	"company_address" text,
 	"website" text,
 	"line_id" varchar(100),
 	"wechat_id" varchar(100),

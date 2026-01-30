@@ -45,6 +45,8 @@ export const VendorDetail: React.FC = () => {
 
   // Local state for favorites to simulate interactivity
   const [isFavorite, setIsFavorite] = useState(vendor?.isFavorite || false);
+  const [addressDraft, setAddressDraft] = useState(vendor?.address || '');
+  const [addressSaved, setAddressSaved] = useState(false);
 
   if (!vendor) return <div className="p-8">找不到廠商資料</div>;
 
@@ -104,6 +106,12 @@ export const VendorDetail: React.FC = () => {
   const toggleFavorite = () => {
     setIsFavorite(!isFavorite);
     // In real app, dispatch API call here
+  };
+
+  const handleAddressSave = () => {
+    const trimmedAddress = addressDraft.trim();
+    vendor.address = trimmedAddress;
+    setAddressSaved(true);
   };
 
   // Helper to mask/format phone based on revealed state
@@ -323,6 +331,29 @@ export const VendorDetail: React.FC = () => {
               {/* Address & Street View Section */}
               <div className="mb-6">
                  <h3 className="font-bold text-slate-800 mb-2">公司/聯絡地址</h3>
+                 <div className="flex flex-col gap-2 mb-3">
+                   <input
+                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm"
+                     placeholder="輸入公司或聯絡地址"
+                     value={addressDraft}
+                     onChange={(event) => {
+                       setAddressDraft(event.target.value);
+                       setAddressSaved(false);
+                     }}
+                   />
+                   <div className="flex items-center gap-2">
+                     <button
+                       type="button"
+                       onClick={handleAddressSave}
+                       className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm"
+                     >
+                       儲存
+                     </button>
+                     {addressSaved && (
+                       <span className="text-xs text-green-600 font-semibold">已儲存</span>
+                     )}
+                   </div>
+                 </div>
                  <div className="flex items-start gap-2 text-sm text-slate-600 mb-3">
                     <MapPin size={16} className="mt-0.5 text-slate-400"/>
                     <div>
