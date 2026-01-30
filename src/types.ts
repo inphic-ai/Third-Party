@@ -150,6 +150,7 @@ export interface Vendor {
   isBlacklisted: boolean;
   mainPhone?: string;
   address?: string;
+  companyAddress?: string;
   website?: string;
   lineId?: string;
   wechatId?: string;
