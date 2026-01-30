@@ -8,6 +8,7 @@
     "dev": "remix vite:dev",
     "build": "remix vite:build",
     "start": "NODE_ENV=production remix-serve ./build/server/index.js",
+    "postinstall": "node scripts/run-migration.js",
     "typecheck": "tsc",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
