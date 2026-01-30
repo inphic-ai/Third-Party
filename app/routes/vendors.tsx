@@ -174,6 +174,7 @@ function VendorDirectoryContent() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [serviceScopeInput, setServiceScopeInput] = useState('');
   const [serviceScopes, setServiceScopes] = useState<string[]>([]);
+
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -195,7 +196,6 @@ function VendorDirectoryContent() {
   // 監聽表單提交成功後關閉 Modal
   useEffect(() => {
     if (!actionData) return;
-    setFormFeedback(actionData);
     if (actionData.success) {
       setShowAddModal(false);
       setServiceScopeInput('');
