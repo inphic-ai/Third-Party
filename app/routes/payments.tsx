@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useLoaderData, useActionData, useNavigation, Form } from '@remix-run/react';
+import { useLoaderData, useActionData, useNavigation, Form, useSubmit, useRevalidator } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
@@ -7,12 +7,10 @@ import { invoiceRecords } from '../../db/schema/financial';
 import { vendors } from '../../db/schema/vendor';
 import { eq, desc } from 'drizzle-orm';
 import { 
-  Search, LayoutGrid, List, FilePlus, Tag, Calendar, 
-  DollarSign, ImageIcon, Download, Trash2, ChevronRight, 
-  X, Maximize2, Camera, ChevronLeft, MoreHorizontal, ChevronDown,
-  Edit3, FileSignature, RefreshCw, ImagePlus, FileText, Plus,
-  Layers, CheckCircle2, AlertCircle, Save, Coins, ArrowRightLeft,
-  Briefcase, Filter, TrendingUp, HandCoins, Activity, Clock
+  Search, FilePlus, DollarSign, Download, Trash2, 
+  X, Maximize2, Camera, Edit3, FileText, 
+  CheckCircle2, AlertCircle, Save, Coins, ArrowRightLeft,
+  Upload, FileUp, Image as ImageIcon
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -92,9 +90,7 @@ export async function action({ request }: ActionFunctionArgs) {
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
-type ViewMode = 'GRID' | 'LIST';
-type DocType = 'INVOICE' | 'LABOR_FORM';
-type Currency = 'TWD' | 'CNY';
+type Currency = 'TWD' | 'CNY' | 'USD';
 
 interface AttachmentItem {
   id: string;
@@ -102,55 +98,57 @@ interface AttachmentItem {
   description: string;
 }
 
+const EXCHANGE_RATES: Record<Currency, number> = {
+  TWD: 1,
+  CNY: 4.5,
+  USD: 31.5,
+};
+
+const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  TWD: 'NT$',
+  CNY: '¥',
+  USD: '$',
+};
+
 function PaymentsContent() {
   const { invoices: dbInvoices, vendorList } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const revalidator = useRevalidator();
+  const isSubmitting = navigation.state !== 'idle';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [itemsPerPage] = useState(9);
   const [currency, setCurrency] = useState<Currency>('TWD');
-  const exchangeRate = 4.5; 
 
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const datePickerRef = useRef<HTMLDivElement>(null);
-  
   const [showModal, setShowModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
-
-  const [editingDocType, setEditingDocType] = useState<DocType>('INVOICE');
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
+  // 全端閉環：Action 成功後關閉 Modal 並重新載入資料
   useEffect(() => {
     if (actionData?.success) {
       setShowModal(false);
+      setSelectedInvoice(null);
+      setAttachments([]);
+      setUploadedFile(null);
+      revalidator.revalidate();
     }
-  }, [actionData]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
-        setIsDatePickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [actionData, revalidator]);
 
   const filteredInvoices = useMemo(() => {
     return dbInvoices.filter((inv: any) => {
       const matchesSearch = inv.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             inv.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
-      const matchesStartDate = startDate ? inv.date >= startDate : true;
-      const matchesEndDate = endDate ? inv.date <= endDate : true;
-      return matchesSearch && matchesStatus && matchesStartDate && matchesEndDate;
+      return matchesSearch && matchesStatus;
     });
-  }, [dbInvoices, searchTerm, statusFilter, startDate, endDate]);
+  }, [dbInvoices, searchTerm, statusFilter]);
 
   const statsSummary = useMemo(() => {
     let total = 0;
@@ -173,11 +171,11 @@ function PaymentsContent() {
     return filteredInvoices.slice(start, start + itemsPerPage);
   }, [filteredInvoices, currentPage, itemsPerPage]);
 
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
+
   const formatAmount = (val: number) => {
-    if (currency === 'CNY') {
-      return (val / exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    return val.toLocaleString();
+    const converted = val / EXCHANGE_RATES[currency];
+    return `${CURRENCY_SYMBOLS[currency]}${converted.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
   const handleOpenEdit = (inv: any) => {
@@ -189,7 +187,25 @@ function PaymentsContent() {
   const handleOpenCreate = () => {
     setSelectedInvoice(null);
     setAttachments([]);
+    setUploadedFile(null);
     setShowModal(true);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newAttachment = {
+          id: Date.now().toString(),
+          url: reader.result as string,
+          description: file.name,
+        };
+        setAttachments([newAttachment]);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const statusStyles: Record<string, { bg: string; text: string; label: string; ring: string }> = {
@@ -219,22 +235,42 @@ function PaymentsContent() {
         </div>
       </div>
 
+      {/* 幣別切換按鈕 */}
+      <div className="flex justify-end">
+        <div className="inline-flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm">
+          {(['TWD', 'CNY', 'USD'] as Currency[]).map((curr) => (
+            <button
+              key={curr}
+              onClick={() => setCurrency(curr)}
+              className={clsx(
+                "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                currency === curr
+                  ? "bg-slate-900 text-white shadow-md"
+                  : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              {curr}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <p className="text-xs font-bold text-slate-400 mb-1">總計金額</p>
-          <p className="text-2xl font-black text-slate-900">${formatAmount(statsSummary.total)}</p>
+          <p className="text-2xl font-black text-slate-900">{formatAmount(statsSummary.total)}</p>
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <p className="text-xs font-bold text-slate-400 mb-1">未請款</p>
-          <p className="text-2xl font-black text-amber-600">${formatAmount(statsSummary.pending)}</p>
+          <p className="text-2xl font-black text-amber-600">{formatAmount(statsSummary.pending)}</p>
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <p className="text-xs font-bold text-slate-400 mb-1">已請款</p>
-          <p className="text-2xl font-black text-indigo-600">${formatAmount(statsSummary.billed)}</p>
+          <p className="text-2xl font-black text-indigo-600">{formatAmount(statsSummary.billed)}</p>
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <p className="text-xs font-bold text-slate-400 mb-1">已付款</p>
-          <p className="text-2xl font-black text-emerald-600">${formatAmount(statsSummary.paid)}</p>
+          <p className="text-2xl font-black text-emerald-600">{formatAmount(statsSummary.paid)}</p>
         </div>
       </div>
 
@@ -288,7 +324,7 @@ function PaymentsContent() {
                     </div>
                   </td>
                   <td className="px-10 py-6 text-sm font-bold text-slate-600">{inv.vendorName}</td>
-                  <td className="px-10 py-6 text-sm font-black text-slate-900">${inv.amount.toLocaleString()}</td>
+                  <td className="px-10 py-6 text-sm font-black text-slate-900">{formatAmount(inv.amount)}</td>
                   <td className="px-10 py-6 text-sm font-bold text-slate-400">{inv.date}</td>
                   <td className="px-10 py-6">
                     <span className={clsx("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border", statusStyles[inv.status]?.text || "text-gray-600", "bg-white")}>
@@ -304,6 +340,17 @@ function PaymentsContent() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* 分頁系統 */}
+        <div className="p-6 border-t border-slate-100 bg-slate-50/30">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredInvoices.length}
+            itemsPerPage={itemsPerPage}
+          />
         </div>
       </div>
 
@@ -328,14 +375,23 @@ function PaymentsContent() {
 
               <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
                  <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50 border-r border-slate-100">
-                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-6"><ImageIcon size={18} className="text-indigo-500" /> 附件預覽</h4>
+                    <div className="flex items-center justify-between mb-6">
+                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                        <ImageIcon size={18} className="text-indigo-500" /> 附件預覽
+                      </h4>
+                      <label className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest cursor-pointer hover:bg-indigo-700 transition-all">
+                        <Upload size={14} /> 上傳文件
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
+                      </label>
+                    </div>
                     {attachments.length > 0 ? (
-                      <div className="aspect-video rounded-3xl overflow-hidden bg-slate-200 shadow-inner">
+                      <div className="aspect-video rounded-3xl overflow-hidden bg-slate-200 shadow-inner cursor-pointer" onClick={() => setFullscreenImage(attachments[0].url)}>
                         <img src={attachments[0].url} className="w-full h-full object-cover" alt="Invoice" />
                       </div>
                     ) : (
-                      <div className="aspect-video rounded-3xl border-2 border-dashed border-slate-200 flex flex-center items-center justify-center text-slate-400 font-bold">
-                        尚未上傳附件
+                      <div className="aspect-video rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 font-bold gap-3">
+                        <FileUp size={48} className="text-slate-300" />
+                        <p className="text-sm">尚未上傳附件</p>
                       </div>
                     )}
                  </div>
@@ -360,7 +416,7 @@ function PaymentsContent() {
                        </div>
 
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">金額</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">金額（台幣）</label>
                           <input name="amount" type="number" required className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xl font-black text-slate-800 outline-none" defaultValue={selectedInvoice?.amount} />
                        </div>
 
@@ -375,12 +431,21 @@ function PaymentsContent() {
                     </div>
 
                     <div className="mt-10 flex gap-4">
-                       <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-slate-50 text-slate-500 font-black rounded-2xl">取消</button>
-                       <button type="submit" className="flex-1 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg">儲存</button>
+                       <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-slate-50 text-slate-500 font-black rounded-2xl hover:bg-slate-100 transition-all">取消</button>
+                       <button type="submit" disabled={isSubmitting} className="flex-1 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                         {isSubmitting ? '儲存中...' : '儲存'}
+                       </button>
                     </div>
                  </Form>
               </div>
            </div>
+        </div>
+      )}
+
+      {fullscreenImage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-12 bg-slate-900/95 backdrop-blur-xl animate-in fade-in" onClick={() => setFullscreenImage(null)}>
+           <button className="absolute top-10 right-10 p-6 text-white hover:scale-110 transition-transform"><X size={48} /></button>
+           <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-[3rem] shadow-2xl border-4 border-white/10" alt="Fullscreen" />
         </div>
       )}
     </div>
