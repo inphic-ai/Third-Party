@@ -28,6 +28,7 @@ import { db } from '~/services/db.server';
 import { maintenanceRecords } from '../../db/schema/operations';
 import { vendors } from '../../db/schema/vendor';
 import { eq, desc } from 'drizzle-orm';
+import { ImageLightbox } from '../components/ImageLightbox';
 
 // ============================================
 // Types
@@ -153,6 +154,8 @@ export default function MaintenancePage() {
   const [afterPhotos, setAfterPhotos] = useState<MediaItem[]>([]);
   const [editBeforePhotos, setEditBeforePhotos] = useState<MediaItem[]>([]);
   const [editAfterPhotos, setEditAfterPhotos] = useState<MediaItem[]>([]);
+  const [lightboxOpen, setLightboxOpen] = useState<'before' | 'after' | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // 全端閉環：Action 成功後關閉 Modal 並重新載入
   useEffect(() => {
@@ -230,11 +233,12 @@ export default function MaintenancePage() {
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
+        const isVideo = file.type.startsWith('video/');
         const newPhoto: MediaItem = {
           id: `${Date.now()}-${Math.random()}`,
           url: e.target?.result as string,
           description: file.name,
-          type: 'image',
+          type: isVideo ? 'video' : 'image',
           uploadedAt: new Date().toISOString(),
         };
         
@@ -246,6 +250,35 @@ export default function MaintenancePage() {
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handleLightboxUpload = (type: 'before' | 'after', file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const isVideo = file.type.startsWith('video/');
+      const newPhoto: MediaItem = {
+        id: `${Date.now()}-${Math.random()}`,
+        url: e.target?.result as string,
+        description: file.name,
+        type: isVideo ? 'video' : 'image',
+        uploadedAt: new Date().toISOString(),
+      };
+      
+      if (type === 'before') {
+        setEditBeforePhotos(prev => [...prev, newPhoto]);
+      } else {
+        setEditAfterPhotos(prev => [...prev, newPhoto]);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpdateDescription = (type: 'before' | 'after', photoId: string, description: string) => {
+    if (type === 'before') {
+      setEditBeforePhotos(prev => prev.map(p => p.id === photoId ? { ...p, description } : p));
+    } else {
+      setEditAfterPhotos(prev => prev.map(p => p.id === photoId ? { ...p, description } : p));
+    }
   };
 
   return (
@@ -437,77 +470,129 @@ export default function MaintenancePage() {
                 </div>
 
                 {/* 施工前照片 */}
-                <div className="space-y-4">
-                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <Camera className="w-4 h-4" />
-                    施工前照片
-                  </label>
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
-                    <input
-                      type="file"
-                      id="editBeforePhotosInput"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => handleEditFileUpload('before', e.target.files)}
-                      className="hidden"
-                    />
-                    <label htmlFor="editBeforePhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
-                      <Upload className="w-8 h-8 text-gray-400" />
-                      <span className="text-sm text-gray-600">點擊上傳施工前照片</span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Camera className="w-4 h-4" />
+                      施工前照片
+                    </label>
+                    <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg cursor-pointer transition-colors flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      上傳
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={(e) => handleEditFileUpload('before', e.target.files)}
+                        className="hidden"
+                      />
                     </label>
                   </div>
                   {editBeforePhotos.length > 0 && (
-                    <div className="grid grid-cols-4 gap-4">
-                      {editBeforePhotos.map((photo) => (
-                        <div key={photo.id} className="relative group">
-                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                    <div className="grid grid-cols-6 gap-2">
+                      {editBeforePhotos.slice(0, 6).map((photo, idx) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('before');
+                            setLightboxIndex(idx);
+                          }}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors"
+                        >
+                          {photo.type === 'video' ? (
+                            <video src={photo.url} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                          )}
                           <button
                             type="button"
-                            onClick={() => removeEditPhoto('before', photo.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeEditPhoto('before', photo.id);
+                            }}
                             className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-3 h-3" />
                           </button>
-                        </div>
+                        </button>
                       ))}
+                      {editBeforePhotos.length > 6 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('before');
+                            setLightboxIndex(0);
+                          }}
+                          className="aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
+                        >
+                          +{editBeforePhotos.length - 6}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
 
                 {/* 施工後照片 */}
-                <div className="space-y-4">
-                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <Camera className="w-4 h-4" />
-                    施工後照片
-                  </label>
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
-                    <input
-                      type="file"
-                      id="editAfterPhotosInput"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => handleEditFileUpload('after', e.target.files)}
-                      className="hidden"
-                    />
-                    <label htmlFor="editAfterPhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
-                      <Upload className="w-8 h-8 text-gray-400" />
-                      <span className="text-sm text-gray-600">點擊上傳施工後照片</span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Camera className="w-4 h-4" />
+                      施工後照片
+                    </label>
+                    <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg cursor-pointer transition-colors flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      上傳
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={(e) => handleEditFileUpload('after', e.target.files)}
+                        className="hidden"
+                      />
                     </label>
                   </div>
                   {editAfterPhotos.length > 0 && (
-                    <div className="grid grid-cols-4 gap-4">
-                      {editAfterPhotos.map((photo) => (
-                        <div key={photo.id} className="relative group">
-                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                    <div className="grid grid-cols-6 gap-2">
+                      {editAfterPhotos.slice(0, 6).map((photo, idx) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('after');
+                            setLightboxIndex(idx);
+                          }}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors"
+                        >
+                          {photo.type === 'video' ? (
+                            <video src={photo.url} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                          )}
                           <button
                             type="button"
-                            onClick={() => removeEditPhoto('after', photo.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeEditPhoto('after', photo.id);
+                            }}
                             className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-3 h-3" />
                           </button>
-                        </div>
+                        </button>
                       ))}
+                      {editAfterPhotos.length > 6 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('after');
+                            setLightboxIndex(0);
+                          }}
+                          className="aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
+                        >
+                          +{editAfterPhotos.length - 6}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -670,6 +755,36 @@ export default function MaintenancePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ImageLightbox for Before Photos */}
+      {lightboxOpen === 'before' && editBeforePhotos.length > 0 && (
+        <ImageLightbox
+          photos={editBeforePhotos}
+          activeIndex={lightboxIndex}
+          title="施工前照片"
+          onClose={() => setLightboxOpen(null)}
+          onPrev={() => setLightboxIndex(prev => Math.max(0, prev - 1))}
+          onNext={() => setLightboxIndex(prev => Math.min(editBeforePhotos.length - 1, prev + 1))}
+          onSelect={(idx) => setLightboxIndex(idx)}
+          onUpload={(file) => handleLightboxUpload('before', file)}
+          onUpdateDescription={(photoId, description) => handleUpdateDescription('before', photoId, description)}
+        />
+      )}
+
+      {/* ImageLightbox for After Photos */}
+      {lightboxOpen === 'after' && editAfterPhotos.length > 0 && (
+        <ImageLightbox
+          photos={editAfterPhotos}
+          activeIndex={lightboxIndex}
+          title="施工後照片"
+          onClose={() => setLightboxOpen(null)}
+          onPrev={() => setLightboxIndex(prev => Math.max(0, prev - 1))}
+          onNext={() => setLightboxIndex(prev => Math.min(editAfterPhotos.length - 1, prev + 1))}
+          onSelect={(idx) => setLightboxIndex(idx)}
+          onUpload={(file) => handleLightboxUpload('after', file)}
+          onUpdateDescription={(photoId, description) => handleUpdateDescription('after', photoId, description)}
+        />
       )}
     </div>
   );
