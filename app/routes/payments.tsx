@@ -123,6 +123,17 @@ function PaymentsContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15);
   const [currency, setCurrency] = useState<Currency>('TWD');
+  
+  // 日期範圍 state
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return {
+      start: firstDay.toISOString().split('T')[0],
+      end: lastDay.toISOString().split('T')[0],
+    };
+  });
 
   const [showModal, setShowModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -146,9 +157,10 @@ function PaymentsContent() {
       const matchesSearch = inv.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             inv.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesDateRange = inv.date >= dateRange.start && inv.date <= dateRange.end;
+      return matchesSearch && matchesStatus && matchesDateRange;
     });
-  }, [dbInvoices, searchTerm, statusFilter]);
+  }, [dbInvoices, searchTerm, statusFilter, dateRange]);
 
   const statsSummary = useMemo(() => {
     let total = 0;
@@ -176,6 +188,38 @@ function PaymentsContent() {
   const formatAmount = (val: number) => {
     const converted = val / EXCHANGE_RATES[currency];
     return `${CURRENCY_SYMBOLS[currency]}${converted.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
+
+  const setQuickDateRange = (type: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'thisYear') => {
+    const now = new Date();
+    let start: Date;
+    let end: Date;
+
+    switch (type) {
+      case 'thisMonth':
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        break;
+      case 'lastMonth':
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'thisQuarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        start = new Date(now.getFullYear(), quarter * 3, 1);
+        end = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+        break;
+      case 'thisYear':
+        start = new Date(now.getFullYear(), 0, 1);
+        end = new Date(now.getFullYear(), 11, 31);
+        break;
+    }
+
+    setDateRange({
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0],
+    });
+    setCurrentPage(1);
   };
 
   const handleOpenEdit = (inv: any) => {
@@ -249,6 +293,53 @@ function PaymentsContent() {
              <FilePlus size={20} />
              建立新單據
            </button>
+        </div>
+      </div>
+
+      {/* 日期範圍選擇器 */}
+      <div className="bg-white rounded-[2.5rem] shadow-lg border border-slate-100 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-black text-slate-600">時間範圍：</span>
+            <div className="flex items-center gap-3">
+              <input 
+                type="date" 
+                value={dateRange.start}
+                onChange={(e) => {
+                  setDateRange({ ...dateRange, start: e.target.value });
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+              />
+              <span className="text-slate-400 font-bold">至</span>
+              <input 
+                type="date" 
+                value={dateRange.end}
+                onChange={(e) => {
+                  setDateRange({ ...dateRange, end: e.target.value });
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">快速選擇：</span>
+            {[
+              { label: '本月', value: 'thisMonth' as const },
+              { label: '上月', value: 'lastMonth' as const },
+              { label: '本季', value: 'thisQuarter' as const },
+              { label: '本年', value: 'thisYear' as const },
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setQuickDateRange(option.value)}
+                className="px-4 py-2 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl text-xs font-black transition-all border border-slate-200 hover:border-indigo-200"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
