@@ -572,14 +572,14 @@ function VendorDirectoryContent() {
               <input type="hidden" name="intent" value="createVendor" />
               
               {/* 顯示錯誤訊息 */}
-              {formFeedback && !formFeedback.success && (
+              {actionData && !actionData.success && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-bold">
-                  {formFeedback.error}
+                  {actionData.error}
                 </div>
               )}
               
               {/* 顯示成功訊息 */}
-              {formFeedback && formFeedback.success && (
+              {actionData && actionData.success && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl text-sm font-bold">
                   廠商建立成功！
                 </div>
