@@ -1388,9 +1388,9 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
           </button>
         </div>
         
-        <Form method="post">
+        <Form method="post" className="flex flex-col flex-1 overflow-hidden">
           <input type="hidden" name="intent" value="updateVendor" />
-          <div className="p-6 space-y-6 overflow-y-auto">
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
             <div className="space-y-4">
               <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide">基本資料</h4>
               {actionData && !actionData.success && (
