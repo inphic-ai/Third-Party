@@ -29,13 +29,7 @@ export const meta: MetaFunction = () => {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    console.log('[Payments Loader] Loading invoices from database...');
-    
     const allInvoices = await db.select().from(invoiceRecords);
-    
-    console.log(`[Payments Loader] Loaded ${allInvoices.length} invoices`);
-    
-    // 轉換為前端格式
     const invoicesWithMapping = allInvoices.map(invoice => ({
       id: invoice.id,
       vendorName: invoice.vendorName,
@@ -46,12 +40,54 @@ export async function loader({ request }: LoaderFunctionArgs) {
       status: invoice.status,
       attachmentUrl: invoice.attachmentUrl,
     }));
-    
     return json({ invoices: invoicesWithMapping });
   } catch (error) {
     console.error('[Payments Loader] Error:', error);
     return json({ invoices: [] });
   }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  if (intent === 'create' || intent === 'update') {
+    try {
+      const id = formData.get('id') as string;
+      const vendorName = formData.get('vendorName') as string;
+      const invoiceNo = formData.get('invoiceNo') as string;
+      const amount = formData.get('amount') as string;
+      const status = formData.get('status') as any;
+      const attachmentUrl = formData.get('attachmentUrl') as string || 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000';
+
+      if (!vendorName || !invoiceNo || !amount) {
+        return json({ success: false, error: '缺少必要欄位' }, { status: 400 });
+      }
+
+      const data = {
+        vendorName,
+        invoiceNo,
+        amount: amount,
+        status: status || 'PENDING',
+        attachmentUrl,
+        date: new Date(),
+        createdBy: '00000000-0000-0000-0000-000000000000', // Mock user
+      };
+
+      if (intent === 'create') {
+        await db.insert(invoiceRecords).values(data as any);
+      } else {
+        await db.update(invoiceRecords).set(data as any).where(eq(invoiceRecords.id, id));
+      }
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to save invoice:', error);
+      return json({ success: false, error: '儲存失敗' }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
 type ViewMode = 'GRID' | 'LIST';
@@ -66,6 +102,7 @@ interface AttachmentItem {
 
 function PaymentsContent() {
   const { invoices: dbInvoices } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const [viewMode, setViewMode] = useState<ViewMode>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -82,6 +119,11 @@ function PaymentsContent() {
   
   // Modal states
   const [showModal, setShowModal] = useState(false);
+  useEffect(() => {
+    if (actionData?.success) {
+      setShowModal(false);
+    }
+  }, [actionData]);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRecord | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
@@ -506,20 +548,22 @@ function PaymentsContent() {
                     </div>
                  </div>
 
-                 <div className="w-full lg:w-[450px] bg-white p-10 overflow-y-auto shadow-2xl">
-                    <div className="space-y-8">
+                 <Form method="post" className="w-full lg:w-[450px] bg-white p-10 overflow-y-auto shadow-2xl flex flex-col">
+                    <input type="hidden" name="intent" value={selectedInvoice ? 'update' : 'create'} />
+                    {selectedInvoice && <input type="hidden" name="id" value={selectedInvoice.id} />}
+                    <div className="space-y-8 flex-1">
                        <div className="space-y-3">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">單據類型</label>
                           <div className="flex p-1.5 bg-slate-50 border border-slate-100 rounded-2xl shadow-inner">
-                             <button onClick={() => setEditingDocType('INVOICE')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'INVOICE' ? "bg-white text-indigo-600 shadow-md border" : "text-slate-400")}>統一發票</button>
-                             <button onClick={() => setEditingDocType('LABOR_FORM')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'LABOR_FORM' ? "bg-white text-amber-600 shadow-md border" : "text-slate-400")}>勞務報酬單</button>
+                             <button type="button" onClick={() => setEditingDocType('INVOICE')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'INVOICE' ? "bg-white text-indigo-600 shadow-md border" : "text-slate-400")}>統一發票</button>
+                             <button type="button" onClick={() => setEditingDocType('LABOR_FORM')} className={clsx("flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingDocType === 'LABOR_FORM' ? "bg-white text-amber-600 shadow-md border" : "text-slate-400")}>勞務報酬單</button>
                           </div>
                        </div>
 
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">請款廠商/對象</label>
-                          <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all">
-                             <option>請選擇合作對象...</option>
+                          <select name="vendorName" defaultValue={selectedInvoice?.vendorName} className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all">
+                             <option value="">請選擇合作對象...</option>
                              {MOCK_VENDORS.map(v => (
                                <option key={v.id} value={v.name}>{v.name}</option>
                              ))}
@@ -528,15 +572,24 @@ function PaymentsContent() {
 
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">發票/單據編號</label>
-                          <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none font-mono" placeholder="輸入單號..." defaultValue={selectedInvoice?.invoiceNo} />
+                          <input name="invoiceNo" type="text" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none font-mono" placeholder="輸入單號..." defaultValue={selectedInvoice?.invoiceNo} />
                        </div>
 
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">金額 ({currency})</label>
                           <div className="relative">
                              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                             <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-xl font-black text-slate-800 outline-none" placeholder="0" defaultValue={selectedInvoice?.amount} />
+                             <input name="amount" type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-xl font-black text-slate-800 outline-none" placeholder="0" defaultValue={selectedInvoice?.amount} />
                           </div>
+                       </div>
+
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">單據狀態</label>
+                          <select name="status" defaultValue={selectedInvoice?.status || 'PENDING'} className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all">
+                             <option value="PENDING">未請款</option>
+                             <option value="BILLED">已請款</option>
+                             <option value="PAID">已付款</option>
+                          </select>
                        </div>
 
                        <div className="pt-6">
@@ -548,12 +601,12 @@ function PaymentsContent() {
                           </div>
                        </div>
                     </div>
-                 </div>
-              </div>
 
-              <div className="p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-6 shrink-0">
-                 <button onClick={() => setShowModal(false)} className="px-10 py-5 bg-slate-50 text-slate-500 font-black rounded-3xl hover:bg-slate-100 transition-all uppercase tracking-widest text-xs">取消操作</button>
-                 <button onClick={() => setShowModal(false)} className="px-14 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center gap-3"><Save size={18} /> 儲存並提交審核</button>
+                    <div className="mt-10 flex flex-col md:flex-row justify-end gap-6">
+                       <button type="button" onClick={() => setShowModal(false)} className="px-10 py-5 bg-slate-50 text-slate-500 font-black rounded-3xl hover:bg-slate-100 transition-all uppercase tracking-widest text-xs">取消操作</button>
+                       <button type="submit" className="px-14 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center gap-3"><Save size={18} /> 儲存並提交審核</button>
+                    </div>
+                 </Form>
               </div>
            </div>
         </div>

@@ -28,11 +28,14 @@ const PRODUCT_TAG_OPTIONS = ['空調', '電力', '水路', '裝修', '家具', '
 // Loader: 從資料庫讀取維修記錄
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    const records = await db.select().from(maintenanceRecords).orderBy(desc(maintenanceRecords.createdAt));
-    return json({ records, error: null });
+    const [records, allVendors] = await Promise.all([
+      db.select().from(maintenanceRecords).orderBy(desc(maintenanceRecords.createdAt)),
+      db.select({ id: vendors.id, name: vendors.name }).from(vendors)
+    ]);
+    return json({ records, vendors: allVendors, error: null });
   } catch (error) {
     console.error('Failed to load maintenance records:', error);
-    return json({ records: [], error: 'Failed to load records' });
+    return json({ records: [], vendors: [], error: 'Failed to load records' });
   }
 }
 
@@ -257,6 +260,33 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === 'updateStatus') {
+    try {
+      const caseId = formData.get('caseId') as string;
+      const status = formData.get('status') as any;
+      const vendorId = formData.get('vendorId') as string;
+      const vendorName = formData.get('vendorName') as string;
+
+      if (!caseId || !status) {
+        return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+      }
+
+      const updateData: any = { status };
+      if (vendorId) updateData.vendorId = vendorId;
+      if (vendorName) updateData.vendorName = vendorName;
+
+      await db
+        .update(maintenanceRecords)
+        .set(updateData)
+        .where(eq(maintenanceRecords.caseId, caseId));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to update maintenance status:', error);
+      return json({ success: false, error: '更新失敗' }, { status: 500 });
+    }
+  }
+
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
@@ -269,7 +299,7 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 };
 
 export default function MaintenancePage() {
-  const { records, error } = useLoaderData<typeof loader>();
+  const { records, vendors: allVendors, error } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === 'submitting';
@@ -729,28 +759,70 @@ export default function MaintenancePage() {
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              {/* 狀態與廠商 */}
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">狀態</p>
-                  <span className={clsx(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium",
-                    statusConfig[selectedRecord.status].bgColor,
-                    statusConfig[selectedRecord.status].color
-                  )}>
-                    {statusConfig[selectedRecord.status].icon}
-                    {statusConfig[selectedRecord.status].label}
-                  </span>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">狀態</p>
+                  <select 
+                    value={selectedRecord.status}
+                    onChange={async (e) => {
+                      const newStatus = e.target.value;
+                      const formData = new FormData();
+                      formData.append('intent', 'updateStatus');
+                      formData.append('caseId', selectedRecord.caseId);
+                      formData.append('status', newStatus);
+                      
+                      const response = await fetch('/maintenance', {
+                        method: 'POST',
+                        body: formData,
+                      });
+                      
+                      if (response.ok) {
+                        window.location.reload();
+                      }
+                    }}
+                    className={clsx(
+                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-emerald-500",
+                      statusConfig[selectedRecord.status].bgColor,
+                      statusConfig[selectedRecord.status].color
+                    )}
+                  >
+                    {Object.entries(statusConfig).map(([key, config]) => (
+                      <option key={key} value={key}>{config.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">負責廠商</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedRecord.vendorName}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">負責廠商</p>
+                  <select
+                    value={selectedRecord.vendorId}
+                    onChange={async (e) => {
+                      const newVendorId = e.target.value;
+                      const newVendorName = allVendors.find(v => v.id === newVendorId)?.name || '';
+                      const formData = new FormData();
+                      formData.append('intent', 'updateStatus');
+                      formData.append('caseId', selectedRecord.caseId);
+                      formData.append('status', selectedRecord.status);
+                      formData.append('vendorId', newVendorId);
+                      formData.append('vendorName', newVendorName);
+                      
+                      const response = await fetch('/maintenance', {
+                        method: 'POST',
+                        body: formData,
+                      });
+                      
+                      if (response.ok) {
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {allVendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-
-              <div>
+              </div>      <div>
                 <p className="text-sm text-gray-500 mb-1">問題描述</p>
                 <p className="text-sm text-gray-700 leading-relaxed">{selectedRecord.description}</p>
               </div>
