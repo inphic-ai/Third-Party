@@ -99,10 +99,10 @@ export async function loader({ params }: LoaderFunctionArgs) {
       mainPhone: vendor.mainPhone || '',
       priceRange: vendor.priceRange || '$$',
       contacts: contacts,
-      contactLogs: [],
-      transactions: [],
-      laborForms: [],
-      socialGroups: [],
+      contactLogs: vendor.contactLogs || [],
+      transactions: vendor.transactions || [],
+      laborForms: vendor.laborForms || [],
+      socialGroups: vendor.socialGroups || [],
     };
     
     return json({ vendor: vendorWithMapping });
@@ -198,7 +198,7 @@ export default function VendorDetail() {
   const isSubmitting = navigation.state === "submitting";
   const [isFavorite, setIsFavorite] = useState(vendor.isFavorite || false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'logs' | 'transactions' | 'docs'>('info');
-  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(true);
   const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -278,7 +278,15 @@ export default function VendorDetail() {
     const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
     if (mainContact) {
       handleContactClick(mainContact, 'reservation');
+    } else {
+      // If no contact, show a message or open a general reservation modal
+      alert("請先新增聯繫窗口以進行預約");
     }
+  };
+
+  const handleToggleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    // In a real app, this would trigger an action to update the DB
   };
 
   const serviceAreas = vendorDetails.serviceArea?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
@@ -401,16 +409,16 @@ export default function VendorDetail() {
                     <div className="text-4xl font-bold text-slate-800">{vendor.rating}</div>
                     <div className="text-xs text-slate-400">基於 {vendor.ratingCount} 次評分</div>
                   </div>
-                  <button 
-                     onClick={() => setIsFavorite(!isFavorite)}
-                     className="p-1"
-                     title={isFavorite ? "取消收藏" : "加入最愛"}
-                  >
-                     <Heart 
-                       size={24} 
-                       className={isFavorite ? "fill-red-500 text-red-500" : "text-slate-300 hover:text-red-300"} 
-                     />
-                  </button>
+                <button 
+                   onClick={handleToggleFavorite}
+                   className="p-1"
+                   title={isFavorite ? "取消收藏" : "加入最愛"}
+                >
+                   <Heart 
+                     size={24} 
+                     className={isFavorite ? "fill-red-500 text-red-500" : "text-slate-300 hover:text-red-300"} 
+                   />
+                </button>
                </div>
                
                <div className="flex flex-col gap-2 w-full">
@@ -579,125 +587,133 @@ export default function VendorDetail() {
           )}
 
           {activeTab === 'contacts' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
+              {/* Social Groups Section (Line Groups) */}
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-bold text-indigo-600">#</span>
+                    <h3 className="text-lg font-bold text-slate-800">專案群組 (Group Code)</h3>
+                  </div>
+                  <button className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold">
+                    <Plus size={16} /> 建立新群組
+                  </button>
+                </div>
+                
+                {vendor.socialGroups && vendor.socialGroups.length > 0 ? (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {vendor.socialGroups.map((group: any, idx: number) => (
+                      <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition">
+                           <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                              <Settings size={14} />
+                           </button>
+                        </div>
+                        <div className="flex items-start gap-4">
+                          <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                            {group.platform === 'LINE' ? (
+                               <div className="text-center">
+                                  <MessageSquare size={24} className="text-slate-400" />
+                                  <div className="text-[8px] font-bold text-slate-400 mt-0.5">LINE</div>
+                               </div>
+                            ) : <Users size={24} className="text-slate-400" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                               <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded uppercase tracking-wider">
+                                  {group.systemCode}
+                               </span>
+                               <span className="text-[10px] text-slate-400">系統代碼</span>
+                            </div>
+                            <div className="font-bold text-slate-800 flex items-center gap-1.5 mb-3">
+                               {group.platform === 'LINE' && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                               <span className="truncate">{group.groupName}</span>
+                            </div>
+                            
+                            <a 
+                              href={group.inviteLink || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 hover:text-indigo-600 transition border border-slate-100"
+                            >
+                               <ExternalLink size={14} /> 點擊加入
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
+                     <MessageSquare size={48} className="mx-auto mb-4 text-slate-300" />
+                     <p className="text-slate-400 font-medium">尚未建立任何專案通訊群組</p>
+                     <button className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition shadow-sm">
+                        立即建立第一個群組
+                     </button>
+                  </div>
+                )}
+              </div>
+
               {/* Contacts Section */}
               <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-slate-800">聯繫窗口</h3>
-                  <button 
-                    onClick={() => {
-                      const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                      if (mainContact) handleContactClick(mainContact, 'log');
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
-                  >
-                    <Plus size={16} /> 新增紀錄
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold text-slate-800">聯繫人列表</h3>
+                  <button className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold">
+                    <Plus size={16} /> 新增窗口
                   </button>
                 </div>
                 
                 {vendor.contacts && vendor.contacts.length > 0 ? (
                   <div className="grid md:grid-cols-2 gap-4">
                     {vendor.contacts.map((contact: ContactWindow, idx: number) => (
-                      <div key={idx} className={`p-4 rounded-xl border ${contact.isMainContact ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-white'}`}>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
-                              {contact.name?.charAt(0) || '?'}
+                      <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition relative">
+                        <div className="flex items-start gap-4">
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-500 text-xl font-bold shrink-0">
+                            {contact.name?.charAt(0) || '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                               <div className="font-bold text-slate-800 text-lg truncate">{contact.name}</div>
+                               {contact.isMainContact && (
+                                  <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">主要窗口</span>
+                               )}
                             </div>
-                            <div>
-                              <div className="font-bold text-slate-800 flex items-center gap-2">
-                                {contact.name}
-                                {contact.isMainContact && (
-                                  <span className="px-2 py-0.5 bg-emerald-500 text-white text-xs rounded-full">主要</span>
-                                )}
-                              </div>
-                              <div className="text-sm text-slate-500">{contact.role || '聯絡人'}</div>
+                            <div className="text-sm text-slate-400 mb-4">{contact.role || '聯絡窗口'}</div>
+                            
+                            <div className="space-y-3">
+                               <div 
+                                 className="flex items-center justify-between group/phone cursor-pointer"
+                                 onClick={() => toggleRevealPhone(contact.id)}
+                               >
+                                  <div className="flex items-center gap-2 text-slate-600">
+                                     <Phone size={14} className="text-slate-400" />
+                                     <span className="text-sm font-mono">{getDisplayPhone(contact.id, contact.mobile)}</span>
+                                  </div>
+                                  <div className="text-slate-300 group-hover/phone:text-indigo-500 transition">
+                                     {revealedPhones[contact.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                  </div>
+                               </div>
+                               
+                               <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-slate-400">
+                                     <span className="text-[10px] font-bold uppercase tracking-widest">Line ID:</span>
+                                     <span className="text-sm font-mono text-slate-200">{getDisplayLineId(contact.lineId) || '無'}</span>
+                                  </div>
+                                  <div className="text-slate-200 italic text-[10px]">無 WeChat</div>
+                               </div>
                             </div>
                           </div>
-                        </div>
-                        
-                        <div className="space-y-2 text-sm">
-                          {contact.mobile && (
-                            <div 
-                              className="flex items-center gap-2 cursor-pointer hover:text-blue-600"
-                              onClick={() => toggleRevealPhone(contact.id)}
-                            >
-                              <Phone size={14} className="text-slate-400" />
-                              <span className="font-mono">{getDisplayPhone(contact.id, contact.mobile)}</span>
-                              {revealedPhones[contact.id] ? <EyeOff size={12} /> : <Eye size={12} />}
-                            </div>
-                          )}
-                          {contact.lineId && (
-                            <div className="flex items-center gap-2">
-                              <MessageCircle size={14} className="text-green-500" />
-                              <span className="font-mono">{getDisplayLineId(contact.lineId)}</span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                          <button 
-                            onClick={() => handleContactClick(contact, 'log')}
-                            className="flex-1 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition"
-                          >
-                            新增紀錄
-                          </button>
-                          <button 
-                            onClick={() => handleContactClick(contact, 'reservation')}
-                            className="flex-1 px-3 py-2 bg-orange-100 text-orange-600 rounded-lg text-sm hover:bg-orange-200 transition"
-                          >
-                            預約服務
-                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-slate-400">
+                  <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
                     <Users size={48} className="mx-auto mb-4 opacity-50" />
                     <p>尚無聯繫窗口資料</p>
                   </div>
                 )}
               </div>
-
-              {/* Social Groups Section */}
-              {vendor.socialGroups && vendor.socialGroups.length > 0 && (
-                <div className="mt-8">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-800">通訊群組</h3>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium">
-                      <MessageCircle size={16} /> 新增群組
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {vendor.socialGroups.map((group: any, idx: number) => (
-                      <div key={idx} className="p-4 rounded-xl border border-slate-100 bg-white flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            group.platform === 'LINE' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                          }`}>
-                            <MessageCircle size={20} />
-                          </div>
-                          <div>
-                            <div className="font-medium text-slate-800">{group.groupName}</div>
-                            <div className="text-xs text-slate-400">{group.platform} • {group.systemCode}</div>
-                          </div>
-                        </div>
-                        {group.inviteLink && (
-                          <a 
-                            href={group.inviteLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1"
-                          >
-                            加入群組 <ExternalLink size={12} />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
