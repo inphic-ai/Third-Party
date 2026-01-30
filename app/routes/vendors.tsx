@@ -608,24 +608,36 @@ function VendorDirectoryContent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">地區 *</label>
-                  <select name="region" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
-                    <option value="">請選擇地區...</option>
+                  <input 
+                    type="text"
+                    name="region"
+                    list="region-list"
+                    required
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                    placeholder="請選擇地區..."
+                  />
+                  <datalist id="region-list">
                     <option value={Region.TAIWAN}>🇹🇼 台灣地區</option>
                     <option value={Region.CHINA}>🇨🇳 大陸地區</option>
-                  </select>
+                  </datalist>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">主營類別 *</label>
-                  <select name="category" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all">
-                    <option value="">請選擇類別...</option>
+                  <input 
+                    type="text"
+                    name="category"
+                    list="category-list"
+                    required
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                    placeholder="請選擇類別..."
+                  />
+                  <datalist id="category-list">
                     {Object.entries(CATEGORY_GROUPS).map(([group, categories]) => (
-                      <optgroup key={group} label={group}>
-                        {categories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </optgroup>
+                      categories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))
                     ))}
-                  </select>
+                  </datalist>
                 </div>
               </div>
 
