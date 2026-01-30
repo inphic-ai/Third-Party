@@ -157,6 +157,7 @@ export interface ContactWindow {
   role: string;
   mobile?: string;
   email?: string;
+  contactAddress?: string;
   isMainContact: boolean;
   lineId?: string; 
   wechatId?: string;
@@ -187,6 +188,7 @@ export interface Vendor {
   createdBy: string;
   priceRange: '$' | '$$' | '$$$' | '$$$$';
   tags: string[];
+  serviceScopes?: string[];
   isBlacklisted: boolean;
   mainPhone?: string;
   address?: string;
