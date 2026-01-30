@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, Link, Form, useActionData, useNavigation, useLoaderData } from '@remix-run/react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams, Link, useFetcher, useLoaderData } from '@remix-run/react';
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { db } from '../services/db.server';
@@ -40,6 +40,10 @@ export async function action({ request }: ActionFunctionArgs) {
       const contactName = formData.get('contactName') as string;
       const contactPhone = formData.get('contactPhone') as string;
       const contactEmail = formData.get('contactEmail') as string;
+      const contactAddress = formData.get('contactAddress') as string;
+      const serviceScopes = (formData.getAll('serviceScopes') as string[])
+        .map(scope => scope.trim())
+        .filter(Boolean);
       const notes = formData.get('notes') as string;
 
       // 表單驗證
@@ -71,6 +75,7 @@ export async function action({ request }: ActionFunctionArgs) {
         categories: [category],
         priceRange: '$$',
         tags: [],
+        serviceScopes,
         internalNotes: notes || null,
         createdBy: '00000000-0000-0000-0000-000000000000', // TODO: 替換為實際登入用戶 ID
       }).returning();
@@ -83,6 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
           role: '主要聯絡人',
           mobile: contactPhone || null,
           email: contactEmail || null,
+          contactAddress: contactAddress || null,
           isMainContact: true,
         });
       }
@@ -125,6 +131,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           rating: vendor.rating ? parseFloat(String(vendor.rating)) : 0,
           ratingCount: vendor.ratingCount || 0,
           tags: Array.isArray(vendor.tags) ? vendor.tags : [],
+          serviceScopes: Array.isArray(vendor.serviceScopes) ? vendor.serviceScopes : [],
           priceRange: vendor.priceRange || '$$',
           isBlacklisted: vendor.isBlacklisted || false,
           isFavorite: vendor.isFavorite || false,
@@ -153,9 +160,10 @@ type ViewMode = 'grid' | 'card' | 'list';
 function VendorDirectoryContent() {
   const [searchParams] = useSearchParams();
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === 'submitting';
+  const fetcher = useFetcher<typeof action>();
+  const isSubmitting = fetcher.state !== 'idle';
+  const actionData = fetcher.data;
+  const formRef = useRef<HTMLFormElement | null>(null);
   
   // 從 loader 讀取真實廠商資料
   const allVendors = loaderData.vendors as any[];
@@ -164,6 +172,9 @@ function VendorDirectoryContent() {
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [serviceScopeInput, setServiceScopeInput] = useState('');
+  const [serviceScopes, setServiceScopes] = useState<string[]>([]);
+  const formFeedback = actionData ?? null;
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -184,11 +195,22 @@ function VendorDirectoryContent() {
 
   // 監聽表單提交成功後關閉 Modal
   useEffect(() => {
-    if (actionData?.success) {
+    if (!actionData) return;
+    if (actionData.success) {
       setShowAddModal(false);
+      setServiceScopeInput('');
+      setServiceScopes([]);
+      formRef.current?.reset();
       // Remix 會自動重新驗證 loader，無需手動重新載入
     }
   }, [actionData]);
+
+  useEffect(() => {
+    if (showAddModal) {
+      setServiceScopeInput('');
+      setServiceScopes([]);
+    }
+  }, [showAddModal]);
 
   const filteredVendors = useMemo(() => {
     return allVendors.filter(vendor => {
@@ -226,6 +248,47 @@ function VendorDirectoryContent() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedRegion, selectedServiceType]);
+
+  const addServiceScopeTokens = (value: string) => {
+    const tokens = value
+      .split(',')
+      .map(token => token.trim())
+      .filter(Boolean);
+
+    if (tokens.length === 0) return;
+
+    setServiceScopes(prev => {
+      const existing = new Set(prev.map(scope => scope.toLowerCase()));
+      const next = [...prev];
+      tokens.forEach(token => {
+        if (token.length > 20) return;
+        const normalized = token.toLowerCase();
+        if (existing.has(normalized)) return;
+        existing.add(normalized);
+        next.push(token);
+      });
+      return next;
+    });
+  };
+
+  const handleServiceScopeKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' || event.key === ',') {
+      event.preventDefault();
+      addServiceScopeTokens(serviceScopeInput);
+      setServiceScopeInput('');
+      return;
+    }
+
+    if (event.key === 'Backspace' && !serviceScopeInput && serviceScopes.length > 0) {
+      setServiceScopes(prev => prev.slice(0, -1));
+    }
+  };
+
+  const handleServiceScopeBlur = () => {
+    if (!serviceScopeInput) return;
+    addServiceScopeTokens(serviceScopeInput);
+    setServiceScopeInput('');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -505,18 +568,18 @@ function VendorDirectoryContent() {
             </div>
 
             {/* Modal Body */}
-            <Form method="post" className="flex-1 overflow-y-auto p-8 space-y-8">
+            <fetcher.Form ref={formRef} method="post" className="flex-1 overflow-y-auto p-8 space-y-8">
               <input type="hidden" name="intent" value="createVendor" />
               
               {/* 顯示錯誤訊息 */}
-              {actionData && !actionData.success && (
+              {formFeedback && !formFeedback.success && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-bold">
-                  {actionData.error}
+                  {formFeedback.error}
                 </div>
               )}
               
               {/* 顯示成功訊息 */}
-              {actionData && actionData.success && (
+              {formFeedback && formFeedback.success && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl text-sm font-bold">
                   廠商建立成功！
                 </div>
@@ -616,6 +679,51 @@ function VendorDirectoryContent() {
                       placeholder="contact@example.com"
                     />
                   </div>
+                  <div className="space-y-2 md:col-span-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">公司/聯絡地址</label>
+                    <textarea
+                      name="contactAddress"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all h-20 resize-none"
+                      placeholder="例如：桃園市○○區○○路○○號（可填公司地址或聯絡地址）"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">服務範圍</label>
+                    <input
+                      type="text"
+                      value={serviceScopeInput}
+                      onChange={event => setServiceScopeInput(event.target.value)}
+                      onKeyDown={handleServiceScopeKeyDown}
+                      onBlur={handleServiceScopeBlur}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                      placeholder="輸入服務範圍後按 Enter 或逗號"
+                    />
+                    {serviceScopes.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {serviceScopes.map(scope => (
+                          <span
+                            key={scope}
+                            className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold"
+                          >
+                            {scope}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setServiceScopes(prev => prev.filter(item => item !== scope))
+                              }
+                              className="text-indigo-400 hover:text-indigo-700"
+                              aria-label={`移除 ${scope}`}
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {serviceScopes.map(scope => (
+                      <input key={`${scope}-hidden`} type="hidden" name="serviceScopes" value={scope} />
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -656,7 +764,7 @@ function VendorDirectoryContent() {
                   )}
                 </button>
               </div>
-            </Form>
+            </fetcher.Form>
           </div>
         </div>
       )}

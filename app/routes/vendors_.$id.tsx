@@ -1089,6 +1089,8 @@ export default function VendorDetail() {
           <EditVendorModal 
             vendor={vendor}
             onClose={() => setShowEditModal(false)}
+            isSubmitting={isSubmitting}
+            actionData={actionData}
           />
         )}
 
@@ -1364,7 +1366,12 @@ const ContactLogModal: React.FC<{
   );
 };
 
-const EditVendorModal: React.FC<{ vendor: any; onClose: () => void }> = ({ vendor, onClose }) => {
+const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting: boolean; actionData: any }> = ({
+  vendor,
+  onClose,
+  isSubmitting,
+  actionData
+}) => {
   const [formData, setFormData] = useState({
     name: vendor.name,
     entityType: vendor.entityType,
@@ -1373,11 +1380,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void }> = ({ vendo
     mainPhone: vendor.mainPhone || '',
     priceRange: vendor.priceRange || '$$'
   });
-
-  const handleSave = () => {
-    alert("資料已更新 (模擬)");
-    onClose();
-  };
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -1395,77 +1397,104 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void }> = ({ vendo
           </button>
         </div>
         
-        <div className="p-6 space-y-6 overflow-y-auto">
-           <div className="space-y-4">
+        <Form method="post">
+          <input type="hidden" name="intent" value="updateVendor" />
+          <div className="p-6 space-y-6 overflow-y-auto">
+            <div className="space-y-4">
               <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide">基本資料</h4>
+              {actionData && !actionData.success && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <AlertCircle size={16} className="mt-0.5" />
+                  <span>{actionData.message || '更新失敗，請稍後再試。'}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">廠商名稱</label>
-                    <input 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
-                      value={formData.name} 
-                      onChange={e => handleChange('name', e.target.value)} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">身分類型</label>
-                    <select 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
-                      value={formData.entityType} 
-                      onChange={e => handleChange('entityType', e.target.value)}
-                    >
-                      <option value="公司行號">公司行號</option>
-                      <option value="個人接案">個人接案</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">統一編號</label>
-                    <input 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
-                      value={formData.taxId} 
-                      onChange={e => handleChange('taxId', e.target.value)} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
-                    <input 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
-                      value={formData.mainPhone} 
-                      onChange={e => handleChange('mainPhone', e.target.value)} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
-                    <select 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
-                      value={formData.region} 
-                      onChange={e => handleChange('region', e.target.value)}
-                    >
-                      <option value="台灣">台灣</option>
-                      <option value="大陸">大陸</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
-                    <select 
-                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
-                      value={formData.priceRange} 
-                      onChange={e => handleChange('priceRange', e.target.value)}
-                    >
-                      <option value="$">$ (平價)</option>
-                      <option value="$$">$$ (中等)</option>
-                      <option value="$$$">$$$ (中高)</option>
-                      <option value="$$$$">$$$$ (昂貴)</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">廠商名稱</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="name"
+                    value={formData.name} 
+                    onChange={e => handleChange('name', e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">身分類型</label>
+                  <select 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
+                    name="entityType"
+                    value={formData.entityType} 
+                    onChange={e => handleChange('entityType', e.target.value)}
+                  >
+                    <option value="公司行號">公司行號</option>
+                    <option value="個人接案">個人接案</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">統一編號</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="taxId"
+                    value={formData.taxId} 
+                    onChange={e => handleChange('taxId', e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="mainPhone"
+                    value={formData.mainPhone} 
+                    onChange={e => handleChange('mainPhone', e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
+                  <select 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
+                    name="region"
+                    value={formData.region} 
+                    onChange={e => handleChange('region', e.target.value)}
+                  >
+                    <option value="台灣">台灣</option>
+                    <option value="大陸">大陸</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
+                  <select 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
+                    name="priceRange"
+                    value={formData.priceRange} 
+                    onChange={e => handleChange('priceRange', e.target.value)}
+                  >
+                    <option value="$">$ (平價)</option>
+                    <option value="$$">$$ (中等)</option>
+                    <option value="$$$">$$$ (中高)</option>
+                    <option value="$$$$">$$$$ (昂貴)</option>
+                  </select>
+                </div>
               </div>
-           </div>
-        </div>
-        
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-           <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm">取消</button>
-           <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md">儲存變更</button>
-        </div>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '儲存中...' : '儲存變更'}
+            </button>
+          </div>
+        </Form>
       </div>
     </div>
   );
