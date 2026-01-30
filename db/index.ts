@@ -15,7 +15,10 @@ const connectionString = process.env.DATABASE_URL;
 const client = postgres(connectionString);
 
 // 建立 Drizzle 實例
-export const db = drizzle(client, { schema });
+export const db = drizzle(client, { 
+  schema,
+  casing: 'snake_case'
+});
 
 // 匯出所有 schema
 export * from './schema';
