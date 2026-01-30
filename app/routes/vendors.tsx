@@ -174,7 +174,6 @@ function VendorDirectoryContent() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [serviceScopeInput, setServiceScopeInput] = useState('');
   const [serviceScopes, setServiceScopes] = useState<string[]>([]);
-  const [formFeedback, setFormFeedback] = useState<typeof actionData | null>(null);
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -210,7 +209,6 @@ function VendorDirectoryContent() {
     if (showAddModal) {
       setServiceScopeInput('');
       setServiceScopes([]);
-      setFormFeedback(null);
     }
   }, [showAddModal]);
 
