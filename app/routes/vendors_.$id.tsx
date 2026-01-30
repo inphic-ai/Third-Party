@@ -36,6 +36,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const taxId = formData.get("taxId") as string;
     const mainPhone = formData.get("mainPhone") as string;
     const priceRange = formData.get("priceRange") as string;
+    const serviceArea = formData.get("serviceArea") as string;
+    const companyAddress = formData.get("companyAddress") as string;
 
     try {
       const dbRegion = region === '台灣' ? 'TAIWAN' : 'CHINA';
@@ -49,11 +51,25 @@ export async function action({ request, params }: ActionFunctionArgs) {
           taxId: taxId || null,
           mainPhone: mainPhone || null,
           priceRange: priceRange || '$$',
+          serviceArea: serviceArea?.trim() || null,
+          companyAddress: companyAddress?.trim() || null,
           updatedAt: new Date(),
         })
         .where(eq(vendors.id, id!));
 
-      return json({ success: true, message: "廠商資料已更新" });
+      const [updatedVendor] = await db.select().from(vendors).where(eq(vendors.id, id!));
+
+      if (!updatedVendor) {
+        throw new Error('Updated vendor not found');
+      }
+
+      const vendorWithMapping = {
+        ...updatedVendor,
+        region: updatedVendor.region === 'TAIWAN' ? '台灣' : updatedVendor.region === 'CHINA' ? '大陸' : updatedVendor.region,
+        entityType: updatedVendor.entityType === 'COMPANY' ? '公司行號' : updatedVendor.entityType === 'INDIVIDUAL' ? '個人接案' : updatedVendor.entityType,
+      };
+
+      return json({ success: true, message: "廠商資料已更新", vendor: vendorWithMapping });
     } catch (error) {
       console.error("Failed to update vendor:", error);
       return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
@@ -185,11 +201,19 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
-  const [isEditingAddress, setIsEditingAddress] = useState(false);
-  const [editedAddress, setEditedAddress] = useState(vendor.address || '');
+  const [vendorDetails, setVendorDetails] = useState({
+    serviceArea: vendor.serviceArea || '',
+    companyAddress: vendor.companyAddress || vendor.address || ''
+  });
 
   useEffect(() => {
     if (actionData?.success) {
+      if (actionData.vendor) {
+        setVendorDetails({
+          serviceArea: actionData.vendor.serviceArea || '',
+          companyAddress: actionData.vendor.companyAddress || actionData.vendor.address || ''
+        });
+      }
       setShowEditModal(false);
     }
   }, [actionData]);
@@ -240,7 +264,7 @@ export default function VendorDetail() {
     }
   };
 
-  const serviceAreas = vendor.serviceArea?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
+  const serviceAreas = vendorDetails.serviceArea?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
   const isExcellent = vendor.tags?.includes('優良廠商') || vendor.rating >= 4.8;
   
   // Get social groups count for tab label
@@ -464,12 +488,16 @@ export default function VendorDetail() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {serviceAreas.map((area: string, idx: number) => (
-                      <span key={idx} className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm font-medium flex items-center gap-1.5">
-                        <MapPin size={14} />
-                        {area}
-                      </span>
-                    ))}
+                    {serviceAreas.length > 0 ? (
+                      serviceAreas.map((area: string, idx: number) => (
+                        <span key={idx} className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm font-medium flex items-center gap-1.5">
+                          <MapPin size={14} />
+                          {area}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-slate-400">—</span>
+                    )}
                   </div>
                 </div>
 
@@ -477,65 +505,26 @@ export default function VendorDetail() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-base font-bold text-slate-800">公司/聯絡地址</h3>
-                    {!isEditingAddress ? (
-                      <button 
-                        onClick={() => setIsEditingAddress(true)}
-                        className="text-slate-400 hover:text-slate-600 transition"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => {
-                            // Save address logic here
-                            setIsEditingAddress(false);
-                          }}
-                          className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition"
-                        >
-                          儲存
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setEditedAddress(vendor.address || '');
-                            setIsEditingAddress(false);
-                          }}
-                          className="px-3 py-1 bg-slate-200 text-slate-700 rounded-lg text-sm hover:bg-slate-300 transition"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-3">
-                    {vendor.address && (
+                    {vendorDetails.companyAddress ? (
                       <div className="flex items-start gap-3">
                         <MapPin size={18} className="text-slate-400 mt-0.5" />
                         <div className="flex-1">
                           <div className="text-xs text-slate-400 mb-1">地址</div>
-                          {isEditingAddress ? (
-                            <input
-                              type="text"
-                              value={editedAddress}
-                              onChange={(e) => setEditedAddress(e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="請輸入地址"
-                            />
-                          ) : (
-                            <div className="text-slate-700">{editedAddress || vendor.address}</div>
-                          )}
-                          {!isEditingAddress && (
-                            <a 
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editedAddress || vendor.address)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1 mt-1"
-                            >
-                              在 Google Maps 上查看 <ExternalLink size={12} />
-                            </a>
-                          )}
+                          <div className="text-slate-700">{vendorDetails.companyAddress}</div>
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vendorDetails.companyAddress)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1 mt-1"
+                          >
+                            在 Google Maps 上查看 <ExternalLink size={12} />
+                          </a>
                         </div>
                       </div>
+                    ) : (
+                      <span className="text-sm text-slate-400">—</span>
                     )}
                   </div>
                 </div>
@@ -1087,7 +1076,7 @@ export default function VendorDetail() {
         {/* Edit Vendor Modal */}
         {showEditModal && (
           <EditVendorModal 
-            vendor={vendor}
+            vendor={{ ...vendor, serviceArea: vendorDetails.serviceArea, companyAddress: vendorDetails.companyAddress }}
             onClose={() => setShowEditModal(false)}
             isSubmitting={isSubmitting}
             actionData={actionData}
@@ -1378,7 +1367,9 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
     region: vendor.region,
     taxId: vendor.taxId || '',
     mainPhone: vendor.mainPhone || '',
-    priceRange: vendor.priceRange || '$$'
+    priceRange: vendor.priceRange || '$$',
+    serviceArea: vendor.serviceArea || '',
+    companyAddress: vendor.companyAddress || vendor.address || ''
   });
 
   const handleChange = (field: string, value: any) => {
@@ -1473,6 +1464,26 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     <option value="$$$">$$$ (中高)</option>
                     <option value="$$$$">$$$$ (昂貴)</option>
                   </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">服務範圍 (Service Area)</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="serviceArea"
+                    value={formData.serviceArea}
+                    onChange={e => handleChange('serviceArea', e.target.value)}
+                    placeholder="例如：北部、雙北、桃園"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">公司/聯絡地址</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="companyAddress"
+                    value={formData.companyAddress}
+                    onChange={e => handleChange('companyAddress', e.target.value)}
+                    placeholder="例如：台北市○○區○○路○○號"
+                  />
                 </div>
               </div>
             </div>
