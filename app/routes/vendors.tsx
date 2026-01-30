@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, Link, Form, useActionData, useNavigation, useLoaderData } from '@remix-run/react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams, Link, useFetcher, useLoaderData } from '@remix-run/react';
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { db } from '../services/db.server';
@@ -160,9 +160,10 @@ type ViewMode = 'grid' | 'card' | 'list';
 function VendorDirectoryContent() {
   const [searchParams] = useSearchParams();
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === 'submitting';
+  const fetcher = useFetcher<typeof action>();
+  const isSubmitting = fetcher.state !== 'idle';
+  const actionData = fetcher.data;
+  const formRef = useRef<HTMLFormElement | null>(null);
   
   // 從 loader 讀取真實廠商資料
   const allVendors = loaderData.vendors as any[];
@@ -193,8 +194,13 @@ function VendorDirectoryContent() {
 
   // 監聽表單提交成功後關閉 Modal
   useEffect(() => {
-    if (actionData?.success) {
+    if (!actionData) return;
+    setFormFeedback(actionData);
+    if (actionData.success) {
       setShowAddModal(false);
+      setServiceScopeInput('');
+      setServiceScopes([]);
+      formRef.current?.reset();
       // Remix 會自動重新驗證 loader，無需手動重新載入
     }
   }, [actionData]);
@@ -562,18 +568,18 @@ function VendorDirectoryContent() {
             </div>
 
             {/* Modal Body */}
-            <Form method="post" className="flex-1 overflow-y-auto p-8 space-y-8">
+            <fetcher.Form ref={formRef} method="post" className="flex-1 overflow-y-auto p-8 space-y-8">
               <input type="hidden" name="intent" value="createVendor" />
               
               {/* 顯示錯誤訊息 */}
-              {actionData && !actionData.success && (
+              {formFeedback && !formFeedback.success && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-bold">
-                  {actionData.error}
+                  {formFeedback.error}
                 </div>
               )}
               
               {/* 顯示成功訊息 */}
-              {actionData && actionData.success && (
+              {formFeedback && formFeedback.success && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl text-sm font-bold">
                   廠商建立成功！
                 </div>
@@ -758,7 +764,7 @@ function VendorDirectoryContent() {
                   )}
                 </button>
               </div>
-            </Form>
+            </fetcher.Form>
           </div>
         </div>
       )}
