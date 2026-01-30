@@ -17,6 +17,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+if (process.env.SKIP_DB_MIGRATION === 'true') {
+  console.log('⚠️  SKIP_DB_MIGRATION=true, skipping migration.');
+  process.exit(0);
+}
+
 const connectionString = process.env.DATABASE_URL;
 
 async function runMigration() {
@@ -24,7 +29,25 @@ async function runMigration() {
   
   try {
     // 建立連接
-    client = postgres(connectionString);
+    client = postgres(connectionString, { connect_timeout: 10 });
+    try {
+      await client`SELECT 1`;
+    } catch (error) {
+      const message = error?.message ?? '';
+      const isNetworkError =
+        message.includes('ENOTFOUND') ||
+        message.includes('ECONNREFUSED') ||
+        message.includes('ETIMEDOUT') ||
+        message.includes('EHOSTUNREACH');
+      if (isNetworkError && process.env.MIGRATION_STRICT !== 'true') {
+        console.warn(
+          `⚠️  Database not reachable (${message}). Skipping migration. ` +
+            'Set MIGRATION_STRICT=true to fail on connection errors.'
+        );
+        return;
+      }
+      throw error;
+    }
     
     console.log('✅ Database connection established');
     

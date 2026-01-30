@@ -68,6 +68,7 @@ export const vendors = pgTable('vendors', {
   // 業務資訊
   priceRange: priceRangeEnum('price_range').notNull(),
   tags: text('tags').array().default([]),
+  serviceScopes: text('service_scopes').array().default([]).notNull(),
   serviceArea: text('service_area'),
   
   // 狀態與設定
@@ -100,6 +101,7 @@ export const contactWindows = pgTable('contact_windows', {
   email: varchar('email', { length: 100 }),
   lineId: varchar('line_id', { length: 100 }),
   wechatId: varchar('wechat_id', { length: 100 }),
+  contactAddress: text('contact_address'),
   
   isMainContact: boolean('is_main_contact').default(false),
   
