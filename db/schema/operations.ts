@@ -28,6 +28,7 @@ export const maintenanceStatusEnum = pgEnum('maintenance_status', [
 export const contactLogs = pgTable('contact_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   vendorId: uuid('vendor_id').notNull().references(() => vendors.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id'),
   
   date: timestamp('date').notNull(),
   status: contactStatusEnum('status').notNull(),

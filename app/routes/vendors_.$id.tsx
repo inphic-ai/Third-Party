@@ -137,6 +137,100 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "createContact") {
+    const vendorId = params.id;
+    const name = formData.get("name") as string;
+    const role = formData.get("role") as string;
+    const mobile = formData.get("mobile") as string;
+    const email = formData.get("email") as string;
+    const lineId = formData.get("lineId") as string;
+    const isMainContact = formData.get("isMainContact") === "true";
+
+    try {
+      await db.insert(contactWindows).values({
+        vendorId: vendorId!,
+        name: name || '未命名聯絡人',
+        role: role || '聯絡人',
+        mobile: mobile || null,
+        email: email || null,
+        lineId: lineId || null,
+        isMainContact: isMainContact,
+      });
+
+      return json({ success: true, message: "聯絡人已新增" });
+    } catch (error) {
+      console.error("Failed to create contact:", error);
+      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  if (intent === "deleteContact") {
+    const contactId = formData.get("contactId") as string;
+
+    try {
+      await db.delete(contactWindows).where(eq(contactWindows.id, contactId));
+      return json({ success: true, message: "聯絡人已刪除" });
+    } catch (error) {
+      console.error("Failed to delete contact:", error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  if (intent === "createSocialGroup") {
+    const vendorId = params.id;
+    const platform = formData.get("platform") as string;
+    const groupName = formData.get("groupName") as string;
+    const systemCode = formData.get("systemCode") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+
+    try {
+      const { socialGroups } = await import('../../db/schema/vendor');
+      
+      await db.insert(socialGroups).values({
+        vendorId: vendorId!,
+        platform: platform as any,
+        groupName: groupName || '未命名群組',
+        systemCode: systemCode || `GRP-${Date.now()}`,
+        inviteLink: inviteLink || null,
+      });
+
+      return json({ success: true, message: "群組已新增" });
+    } catch (error) {
+      console.error("Failed to create social group:", error);
+      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  if (intent === "createContactLog") {
+    const vendorId = params.id;
+    const contactId = formData.get("contactId") as string;
+    const date = formData.get("date") as string;
+    const status = formData.get("status") as string;
+    const note = formData.get("note") as string;
+    const isReservation = formData.get("isReservation") === "true";
+    const reservationTime = formData.get("reservationTime") as string;
+
+    try {
+      const { contactLogs } = await import('../../db/schema/operations');
+      
+      await db.insert(contactLogs).values({
+        vendorId: vendorId!,
+        contactId: contactId || null,
+        date: new Date(date || Date.now()),
+        status: status as any,
+        note: note || '無備註',
+        isReservation: isReservation,
+        reservationTime: reservationTime ? new Date(reservationTime) : null,
+        createdBy: 'system', // 暫時使用 system
+      });
+
+      return json({ success: true, message: "聯繫紀錄已新增" });
+    } catch (error) {
+      console.error("Failed to create contact log:", error);
+      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -154,19 +248,31 @@ export async function loader({ params }: LoaderFunctionArgs) {
     const { transactions } = await import('../../db/schema/financial');
     const vendorTransactions = await db.select().from(transactions).where(eq(transactions.vendorId, params.id!));
     
+    // 載入 contact_logs 資料
+    const { contactLogs } = await import('../../db/schema/operations');
+    const vendorContactLogs = await db.select().from(contactLogs).where(eq(contactLogs.vendorId, params.id!));
+    
+    // 載入 social_groups 資料
+    const { socialGroups } = await import('../../db/schema/vendor');
+    const vendorSocialGroups = await db.select().from(socialGroups).where(eq(socialGroups.vendorId, params.id!));
+    
     const vendorWithMapping = {
       ...vendor,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
       entityType: vendor.entityType === 'COMPANY' ? '公司行號' : vendor.entityType === 'INDIVIDUAL' ? '個人接案' : vendor.entityType,
       contacts: contacts,
-      contactLogs: [],
+      contactLogs: vendorContactLogs.map(log => ({
+        ...log,
+        date: log.date.toISOString().split('T')[0],
+        reservationTime: log.reservationTime ? log.reservationTime.toISOString() : null,
+      })),
       transactions: vendorTransactions.map(tx => ({
         ...tx,
         date: tx.date.toISOString().split('T')[0],
         completionDate: tx.completionDate ? tx.completionDate.toISOString().split('T')[0] : null,
       })),
       laborForms: [],
-      socialGroups: [],
+      socialGroups: vendorSocialGroups,
     };
     
     return json({ vendor: vendorWithMapping });
@@ -273,6 +379,9 @@ export default function VendorDetail() {
   const [showEditContactModal, setShowEditContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<ContactWindow | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [showAddLogModal, setShowAddLogModal] = useState(false);
   const [vendorDetails, setVendorDetails] = useState({
     serviceArea: vendor.serviceArea || '',
     companyAddress: vendor.companyAddress || vendor.address || ''
@@ -289,6 +398,9 @@ export default function VendorDetail() {
       setShowEditModal(false);
       setShowEditContactModal(false);
       setShowAddTransactionModal(false);
+      setShowAddContactModal(false);
+      setShowAddGroupModal(false);
+      setShowAddLogModal(false);
     }
   }, [actionData]);
 
@@ -648,13 +760,10 @@ export default function VendorDetail() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-slate-800">聯繫窗口</h3>
                   <button 
-                    onClick={() => {
-                      const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                      if (mainContact) handleContactClick(mainContact, 'log');
-                    }}
+                    onClick={() => setShowAddContactModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
                   >
-                    <Plus size={16} /> 新增紀錄
+                    <Plus size={16} /> 新增窗口
                   </button>
                 </div>
                 
@@ -662,13 +771,30 @@ export default function VendorDetail() {
                   <div className="grid md:grid-cols-2 gap-4">
                     {vendor.contacts.map((contact: ContactWindow, idx: number) => (
                       <div key={idx} className={`p-4 rounded-xl border ${contact.isMainContact ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-white'} relative`}>
-                        <button
-                          onClick={() => handleEditContact(contact)}
-                          className="absolute top-3 right-3 p-2 rounded-lg bg-white hover:bg-slate-100 transition border border-slate-200"
-                          title="編輯聯絡人"
-                        >
-                          <Pencil size={14} className="text-slate-600" />
-                        </button>
+                        <div className="absolute top-3 right-3 flex gap-2">
+                          <button
+                            onClick={() => handleEditContact(contact)}
+                            className="p-2 rounded-lg bg-white hover:bg-slate-100 transition border border-slate-200"
+                            title="編輯聯絡人"
+                          >
+                            <Pencil size={14} className="text-slate-600" />
+                          </button>
+                          <Form method="post" onSubmit={(e) => {
+                            if (!confirm('確定要刪除這個聯絡人嗎？')) {
+                              e.preventDefault();
+                            }
+                          }}>
+                            <input type="hidden" name="intent" value="deleteContact" />
+                            <input type="hidden" name="contactId" value={contact.id} />
+                            <button
+                              type="submit"
+                              className="p-2 rounded-lg bg-white hover:bg-red-50 transition border border-slate-200"
+                              title="刪除聯絡人"
+                            >
+                              <X size={14} className="text-red-600" />
+                            </button>
+                          </Form>
+                        </div>
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
@@ -731,14 +857,17 @@ export default function VendorDetail() {
               </div>
 
               {/* Social Groups Section */}
-              {vendor.socialGroups && vendor.socialGroups.length > 0 && (
-                <div className="mt-8">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-800">通訊群組</h3>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium">
-                      <MessageCircle size={16} /> 新增群組
-                    </button>
-                  </div>
+              <div className="mt-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-slate-800">通訊群組</h3>
+                  <button 
+                    onClick={() => setShowAddGroupModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium"
+                  >
+                    <MessageCircle size={16} /> 新增群組
+                  </button>
+                </div>
+                {vendor.socialGroups && vendor.socialGroups.length > 0 ? (
                   <div className="space-y-3">
                     {vendor.socialGroups.map((group: any, idx: number) => (
                       <div key={idx} className="p-4 rounded-xl border border-slate-100 bg-white flex items-center justify-between">
@@ -766,8 +895,13 @@ export default function VendorDetail() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <MessageCircle size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>尚無通訊群組資料</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -778,10 +912,7 @@ export default function VendorDetail() {
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800">聯繫紀錄</h3>
                 <button 
-                  onClick={() => {
-                    const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                    if (mainContact) handleContactClick(mainContact, 'log');
-                  }}
+                  onClick={() => setShowAddLogModal(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
                 >
                   <Plus size={16} /> 新增紀錄
@@ -1418,6 +1549,388 @@ export default function VendorDetail() {
                   <button
                     type="button"
                     onClick={() => setShowAddTransactionModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        {/* Add Contact Modal */}
+        {showAddContactModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddContactModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <User size={24} className="text-blue-600" />
+                    新增聯絡人
+                  </h3>
+                  <button
+                    onClick={() => setShowAddContactModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+              </div>
+              <Form method="post" className="p-6 space-y-4">
+                <input type="hidden" name="intent" value="createContact" />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="請輸入姓名"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    職稱
+                  </label>
+                  <input
+                    type="text"
+                    name="role"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例：業務經理"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    手機
+                  </label>
+                  <input
+                    type="tel"
+                    name="mobile"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0912-345-678"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="example@email.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    LINE ID
+                  </label>
+                  <input
+                    type="text"
+                    name="lineId"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="LINE ID"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="isMainContact"
+                    value="true"
+                    id="isMainContact"
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isMainContact" className="text-sm text-slate-700">
+                    設為主要聯絡人
+                  </label>
+                </div>
+
+                {actionData?.message && (
+                  <div className={`px-4 py-3 rounded-xl ${
+                    actionData.success 
+                      ? 'bg-green-50 border border-green-200 text-green-700' 
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {actionData.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? '新增中...' : (
+                      <>
+                        <Plus size={18} />
+                        新增聯絡人
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddContactModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        {/* Add Group Modal */}
+        {showAddGroupModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddGroupModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <MessageCircle size={24} className="text-green-600" />
+                    新增通訊群組
+                  </h3>
+                  <button
+                    onClick={() => setShowAddGroupModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+              </div>
+              <Form method="post" className="p-6 space-y-4">
+                <input type="hidden" name="intent" value="createSocialGroup" />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    平台 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="platform"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">-- 選擇平台 --</option>
+                    <option value="LINE">LINE</option>
+                    <option value="WECHAT">WeChat</option>
+                    <option value="TELEGRAM">Telegram</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    群組名稱 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="groupName"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="例：2024 大發 x 信義區專案群"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    系統代號
+                  </label>
+                  <input
+                    type="text"
+                    name="systemCode"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="例：GRP-C2024001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    邀請連結
+                  </label>
+                  <input
+                    type="url"
+                    name="inviteLink"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="https://..."
+                  />
+                </div>
+
+                {actionData?.message && (
+                  <div className={`px-4 py-3 rounded-xl ${
+                    actionData.success 
+                      ? 'bg-green-50 border border-green-200 text-green-700' 
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {actionData.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? '新增中...' : (
+                      <>
+                        <Plus size={18} />
+                        新增群組
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        {/* Add Contact Log Modal */}
+        {showAddLogModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddLogModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <FileText size={24} className="text-blue-600" />
+                    新增聯繫紀錄
+                  </h3>
+                  <button
+                    onClick={() => setShowAddLogModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+              </div>
+              <Form method="post" className="p-6 space-y-4">
+                <input type="hidden" name="intent" value="createContactLog" />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    聯絡人
+                  </label>
+                  <select
+                    name="contactId"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- 選擇聯絡人 --</option>
+                    {vendor.contacts?.map((contact: ContactWindow) => (
+                      <option key={contact.id} value={contact.id}>{contact.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    聯繫日期 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="date"
+                    required
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    聯繫狀態 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="status"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- 選擇狀態 --</option>
+                    <option value="SUCCESS">成功聯繫</option>
+                    <option value="BUSY">忙線中</option>
+                    <option value="TOO_HIGH">報價過高</option>
+                    <option value="NO_TIME">沒時間</option>
+                    <option value="BAD_ATTITUDE">態度不佳</option>
+                    <option value="RESERVED">已預約</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    備註 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    name="note"
+                    required
+                    rows={4}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="請輸入聯繫內容..."
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="isReservation"
+                    value="true"
+                    id="isReservation"
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isReservation" className="text-sm text-slate-700">
+                    預約服務
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    預約時間
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="reservationTime"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {actionData?.message && (
+                  <div className={`px-4 py-3 rounded-xl ${
+                    actionData.success 
+                      ? 'bg-green-50 border border-green-200 text-green-700' 
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {actionData.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? '新增中...' : (
+                      <>
+                        <Plus size={18} />
+                        新增紀錄
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLogModal(false)}
                     className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
                   >
                     取消
