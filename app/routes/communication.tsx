@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { useLoaderData, Link } from '@remix-run/react';
-import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, Link, useFetcher } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { eq } from 'drizzle-orm';
 import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
-import { vendors } from '../../db/schema/vendor';
+import { vendors, socialGroups } from '../../db/schema/vendor';
 import { 
   MessageCircle, 
   Search, 
@@ -84,6 +85,111 @@ export async function loader({ request }: LoaderFunctionArgs) {
       vendors: []
     });
   }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  // 編輯通訊群組
+  if (intent === "editGroup") {
+    const groupId = formData.get("groupId") as string;
+    const groupName = formData.get("groupName") as string;
+    const platform = formData.get("platform") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+
+    if (!groupId || !groupName) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.update(socialGroups)
+        .set({
+          groupName: groupName.trim(),
+          platform: platform as any,
+          inviteLink: inviteLink?.trim() || null,
+          updatedAt: new Date()
+        })
+        .where(eq(socialGroups.id, groupId));
+
+      console.log('[Communication Action] Updated group:', groupId);
+
+      return json({ success: true, message: "群組資料已更新" });
+    } catch (error) {
+      console.error('[Communication Action] Failed to update group:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 刪除通訊群組
+  if (intent === "deleteGroup") {
+    const groupId = formData.get("groupId") as string;
+
+    if (!groupId) {
+      return json({ success: false, message: "缺少群組 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(socialGroups).where(eq(socialGroups.id, groupId));
+
+      console.log('[Communication Action] Deleted group:', groupId);
+
+      return json({ success: true, message: "群組已刪除" });
+    } catch (error) {
+      console.error('[Communication Action] Failed to delete group:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 編輯聯繫紀錄
+  if (intent === "editLog") {
+    const logId = formData.get("logId") as string;
+    const note = formData.get("note") as string;
+    const status = formData.get("status") as string;
+
+    if (!logId || !note) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.update(contactLogs)
+        .set({
+          note: note.trim(),
+          status: status as any,
+          updatedAt: new Date()
+        })
+        .where(eq(contactLogs.id, logId));
+
+      console.log('[Communication Action] Updated log:', logId);
+
+      return json({ success: true, message: "聯繫紀錄已更新" });
+    } catch (error) {
+      console.error('[Communication Action] Failed to update log:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 刪除聯繫紀錄
+  if (intent === "deleteLog") {
+    const logId = formData.get("logId") as string;
+
+    if (!logId) {
+      return json({ success: false, message: "缺少紀錄 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(contactLogs).where(eq(contactLogs.id, logId));
+
+      console.log('[Communication Action] Deleted log:', logId);
+
+      return json({ success: true, message: "聯繫紀錄已刪除" });
+    } catch (error) {
+      console.error('[Communication Action] Failed to delete log:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
 type Platform = 'LINE' | 'WeChat';
