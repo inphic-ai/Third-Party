@@ -132,26 +132,26 @@ export default function WarRoomPage() {
 
       {/* 2. KPI 卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+         <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
             <div className="flex justify-between mb-4"><div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><LayoutGrid size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-blue-600"/></div>
             <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{stats.totalVendors}</h3>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">活躍協作夥伴</p>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+         </Link>
+         <Link to="/payments" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
             <div className="flex justify-between mb-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Wallet size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-emerald-600"/></div>
             <h3 className="text-3xl font-black text-slate-800 tracking-tighter">${(stats.approvedAmount/1000).toFixed(1)}k</h3>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">已核准待撥款</p>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+         </Link>
+         <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
             <div className="flex justify-between mb-4"><div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><TrendingUp size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-indigo-600"/></div>
             <h3 className="text-3xl font-black text-slate-800 tracking-tighter">4.3</h3>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">廠商平均評分</p>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+         </Link>
+         <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
             <div className="flex justify-between mb-4"><div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><ShieldAlert size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-rose-600"/></div>
             <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{stats.riskCount}</h3>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">風險監控對象</p>
-         </div>
+         </Link>
       </div>
 
       {/* 3. 身分佈局矩陣 */}
