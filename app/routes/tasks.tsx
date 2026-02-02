@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { useLoaderData, Link } from '@remix-run/react';
-import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, Link, useFetcher } from '@remix-run/react';
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { transactions } from '../../db/schema/financial';
-import { contactLogs } from '../../db/schema/operations';
+import { contactLogs, tasks } from '../../db/schema/operations';
 import { vendors } from '../../db/schema/vendor';
+import { eq } from 'drizzle-orm';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -19,7 +20,8 @@ import {
   HelpCircle,
   CalendarCheck,
   MapPin,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -38,14 +40,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     console.log('[Tasks Loader] Loading tasks data...');
     
-    // 讀取所有交易、聯絡紀錄和廠商
-    const [allTransactions, allContactLogs, allVendors] = await Promise.all([
+    // 讀取所有交易、聯絡紀錄、任務和廠商
+    const [allTransactions, allContactLogs, allTasks, allVendors] = await Promise.all([
       db.select().from(transactions),
       db.select().from(contactLogs),
+      db.select().from(tasks),
       db.select().from(vendors)
     ]);
     
-    console.log(`[Tasks Loader] Loaded ${allTransactions.length} transactions, ${allContactLogs.length} contact logs, ${allVendors.length} vendors`);
+    console.log(`[Tasks Loader] Loaded ${allTransactions.length} transactions, ${allContactLogs.length} contact logs, ${allTasks.length} tasks, ${allVendors.length} vendors`);
     
     // 建立 vendor map 以便快速查詢
     const vendorMap = new Map(allVendors.map(v => [v.id, v]));
@@ -86,17 +89,112 @@ export async function loader({ request }: LoaderFunctionArgs) {
         };
       });
     
+    // 轉換手動任務為任務格式
+    const manualTasks = allTasks.map(task => {
+      const vendor = task.vendorId ? vendorMap.get(task.vendorId) : null;
+      return {
+        id: task.id,
+        type: 'manual',
+        date: task.dueDate ? task.dueDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        title: task.title,
+        subtitle: task.description || '',
+        priority: task.priority,
+        status: task.status,
+        vendorId: task.vendorId || undefined,
+        vendorName: vendor?.name || '',
+        vendorAvatar: vendor?.avatarUrl || '',
+        isCompleted: task.status === 'COMPLETED'
+      };
+    });
+    
     return json({ 
       transactionTasks,
-      contactTasks
+      contactTasks,
+      manualTasks
     });
   } catch (error) {
     console.error('[Tasks Loader] Error:', error);
     return json({ 
       transactionTasks: [],
-      contactTasks: []
+      contactTasks: [],
+      manualTasks: []
     });
   }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === "createTask") {
+    const title = formData.get("title") as string;
+    const description = formData.get("description") as string;
+    const priority = formData.get("priority") as string;
+    const dueDate = formData.get("dueDate") as string;
+    const vendorId = formData.get("vendorId") as string;
+
+    if (!title || !title.trim()) {
+      return json({ success: false, message: "任務標題不能為空" }, { status: 400 });
+    }
+
+    try {
+      // 使用固定的 createdBy UUID（實際應該從 session 中獲取）
+      const createdBy = '00000000-0000-0000-0000-000000000001';
+
+      const newTask = await db.insert(tasks).values({
+        title: title.trim(),
+        description: description?.trim() || null,
+        priority: (priority as any) || 'MEDIUM',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        vendorId: vendorId || null,
+        createdBy,
+        status: 'PENDING'
+      }).returning();
+
+      console.log('[Tasks Action] Created task:', newTask[0]);
+
+      return json({ success: true, message: "任務已建立", task: newTask[0] });
+    } catch (error) {
+      console.error('[Tasks Action] Failed to create task:', error);
+      return json({ success: false, message: "建立失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  if (intent === "toggleTask") {
+    const taskId = formData.get("taskId") as string;
+
+    if (!taskId) {
+      return json({ success: false, message: "缺少任務 ID" }, { status: 400 });
+    }
+
+    try {
+      const [existingTask] = await db.select().from(tasks).where(eq(tasks.id, taskId));
+
+      if (!existingTask) {
+        return json({ success: false, message: "任務不存在" }, { status: 404 });
+      }
+
+      const newStatus = existingTask.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
+      const completedAt = newStatus === 'COMPLETED' ? new Date() : null;
+
+      await db.update(tasks)
+        .set({ 
+          status: newStatus,
+          completedAt,
+          updatedAt: new Date()
+        })
+        .where(eq(tasks.id, taskId));
+
+      console.log('[Tasks Action] Toggled task:', taskId, 'to', newStatus);
+
+      return json({ success: true, message: "任務狀態已更新" });
+    } catch (error) {
+      console.error('[Tasks Action] Failed to toggle task:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
 // Local Type for Unified Task View
@@ -119,11 +217,14 @@ interface UnifiedTask {
 }
 
 function TasksContent() {
-  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks } = useLoaderData<typeof loader>();
+  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks, manualTasks: dbManualTasks } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [manualTasks, setManualTasks] = useState<UnifiedTask[]>([]);
-  const [newTaskInput, setNewTaskInput] = useState('');
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState('MEDIUM');
 
   // Helper to get days in month
   const getDaysInMonth = (date: Date) => {
@@ -144,6 +245,11 @@ function TasksContent() {
   const contactTasks: UnifiedTask[] = useMemo(() => {
     return dbContactTasks as UnifiedTask[];
   }, [dbContactTasks]);
+
+  // 3. Gather Manual Tasks
+  const manualTasks: UnifiedTask[] = useMemo(() => {
+    return dbManualTasks as UnifiedTask[];
+  }, [dbManualTasks]);
 
   // Combine All Tasks
   const allTasks = [...transactionTasks, ...contactTasks, ...manualTasks];
@@ -170,20 +276,29 @@ function TasksContent() {
 
   // Add Manual Task
   const handleAddTask = () => {
-    if (!newTaskInput.trim()) return;
-    const newTask: UnifiedTask = {
-      id: `manual-${Date.now()}`,
-      type: 'manual',
-      date: selectedDateStr,
-      title: newTaskInput,
-      isCompleted: false
-    };
-    setManualTasks([...manualTasks, newTask]);
-    setNewTaskInput('');
+    if (!newTaskTitle.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'createTask');
+    formData.append('title', newTaskTitle.trim());
+    formData.append('description', newTaskDescription.trim());
+    formData.append('priority', newTaskPriority);
+    formData.append('dueDate', selectedDateStr);
+    
+    fetcher.submit(formData, { method: 'post' });
+    
+    // 清空表單並關閉模態框
+    setNewTaskTitle('');
+    setNewTaskDescription('');
+    setNewTaskPriority('MEDIUM');
+    setShowAddTaskModal(false);
   };
 
   const toggleManualTask = (id: string) => {
-    setManualTasks(prev => prev.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted } : t));
+    const formData = new FormData();
+    formData.append('intent', 'toggleTask');
+    formData.append('taskId', id);
+    fetcher.submit(formData, { method: 'post' });
   };
 
   const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
@@ -314,17 +429,13 @@ function TasksContent() {
            </div>
 
            <div className="p-4 border-b border-slate-100">
-              <div className="relative">
-                 <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                 <input 
-                   type="text" 
-                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                   placeholder="新增臨時任務 (按 Enter 建立)..."
-                   value={newTaskInput}
-                   onChange={(e) => setNewTaskInput(e.target.value)}
-                   onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                 />
-              </div>
+              <button
+                onClick={() => setShowAddTaskModal(true)}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+              >
+                <Plus size={20} />
+                新增任務
+              </button>
            </div>
 
            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
@@ -436,6 +547,84 @@ function TasksContent() {
            </div>
         </div>
       </div>
+
+      {/* 新增任務模態框 */}
+      {showAddTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddTaskModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">新增任務</h3>
+              <button
+                onClick={() => setShowAddTaskModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">任務標題 *</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入任務標題..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">任務描述</label>
+                <textarea
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
+                  placeholder="輸入任務詳細描述..."
+                  rows={3}
+                  value={newTaskDescription}
+                  onChange={(e) => setNewTaskDescription(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">優先級</label>
+                <select
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  value={newTaskPriority}
+                  onChange={(e) => setNewTaskPriority(e.target.value)}
+                >
+                  <option value="LOW">低</option>
+                  <option value="MEDIUM">中</option>
+                  <option value="HIGH">高</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">截止日期</label>
+                <div className="text-sm text-slate-500">
+                  {selectedDate.getFullYear()}年{selectedDate.getMonth() + 1}月{selectedDate.getDate()}日
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddTaskModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddTask}
+                disabled={!newTaskTitle.trim() || fetcher.state === 'submitting'}
+                className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {fetcher.state === 'submitting' ? '建立中...' : '建立任務'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

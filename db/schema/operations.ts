@@ -21,6 +21,19 @@ export const maintenanceStatusEnum = pgEnum('maintenance_status', [
   'PENDING'
 ]);
 
+export const taskPriorityEnum = pgEnum('task_priority', [
+  'HIGH',
+  'MEDIUM',
+  'LOW'
+]);
+
+export const taskStatusEnum = pgEnum('task_status', [
+  'PENDING',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED'
+]);
+
 // ============================================
 // 聯繫紀錄 (ContactLog)
 // ============================================
@@ -71,6 +84,30 @@ export const maintenanceRecords = pgTable('maintenance_records', {
   afterPhotos: jsonb('after_photos').notNull(), // MediaItem[]
   
   aiReport: text('ai_report'),
+  
+  createdBy: uuid('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// ============================================
+// 日常任務 (Task)
+// ============================================
+
+export const tasks = pgTable('tasks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  title: varchar('title', { length: 200 }).notNull(),
+  description: text('description'),
+  
+  priority: taskPriorityEnum('priority').notNull().default('MEDIUM'),
+  status: taskStatusEnum('status').notNull().default('PENDING'),
+  
+  dueDate: timestamp('due_date'),
+  completedAt: timestamp('completed_at'),
+  
+  assignedTo: uuid('assigned_to'),
+  vendorId: uuid('vendor_id').references(() => vendors.id, { onDelete: 'set null' }),
   
   createdBy: uuid('created_by').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
