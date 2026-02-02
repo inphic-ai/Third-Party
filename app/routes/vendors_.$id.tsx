@@ -103,6 +103,40 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "createTransaction") {
+    const vendorId = params.id;
+    const description = formData.get("description") as string;
+    const date = formData.get("date") as string;
+    const amount = formData.get("amount") as string;
+    const initialQuote = formData.get("initialQuote") as string;
+    const status = formData.get("status") as string || 'IN_PROGRESS';
+
+    try {
+      // 需要先 import transactions 表
+      const { transactions } = await import('../../db/schema/financial');
+      
+      await db.insert(transactions).values({
+        vendorId: vendorId!,
+        customerId: 'system', // 暫時使用 system，實際應該是當前用戶 ID
+        date: new Date(date),
+        description: description || '新合作案件',
+        amount: amount || '0',
+        initialQuote: initialQuote || amount || '0',
+        status: status as any,
+        laborFormStatus: 'N/A' as any,
+        photosBefore: [],
+        photosAfter: [],
+        timeSpentHours: '0',
+        createdBy: 'system', // 暫時使用 system
+      });
+
+      return json({ success: true, message: "合作紀錄已新增" });
+    } catch (error) {
+      console.error("Failed to create transaction:", error);
+      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -116,13 +150,21 @@ export async function loader({ params }: LoaderFunctionArgs) {
     
     const contacts = await db.select().from(contactWindows).where(eq(contactWindows.vendorId, params.id!));
     
+    // 載入 transactions 資料
+    const { transactions } = await import('../../db/schema/financial');
+    const vendorTransactions = await db.select().from(transactions).where(eq(transactions.vendorId, params.id!));
+    
     const vendorWithMapping = {
       ...vendor,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
       entityType: vendor.entityType === 'COMPANY' ? '公司行號' : vendor.entityType === 'INDIVIDUAL' ? '個人接案' : vendor.entityType,
       contacts: contacts,
       contactLogs: [],
-      transactions: [],
+      transactions: vendorTransactions.map(tx => ({
+        ...tx,
+        date: tx.date.toISOString().split('T')[0],
+        completionDate: tx.completionDate ? tx.completionDate.toISOString().split('T')[0] : null,
+      })),
       laborForms: [],
       socialGroups: [],
     };
@@ -230,6 +272,7 @@ export default function VendorDetail() {
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
   const [showEditContactModal, setShowEditContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<ContactWindow | null>(null);
+  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [vendorDetails, setVendorDetails] = useState({
     serviceArea: vendor.serviceArea || '',
     companyAddress: vendor.companyAddress || vendor.address || ''
@@ -245,6 +288,7 @@ export default function VendorDetail() {
       }
       setShowEditModal(false);
       setShowEditContactModal(false);
+      setShowAddTransactionModal(false);
     }
   }, [actionData]);
 
@@ -823,7 +867,10 @@ export default function VendorDetail() {
               {/* Header with Add Button */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800">合作/驗收紀錄</h3>
-                <button className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium">
+                <button 
+                  onClick={() => setShowAddTransactionModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium"
+                >
                   <Plus size={16} /> 新增合作
                 </button>
               </div>
@@ -974,7 +1021,10 @@ export default function VendorDetail() {
                   <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
                     <Upload size={16} /> 上傳勞報單
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium">
+                  <button 
+                    onClick={() => setShowAddTransactionModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium"
+                  >
                     <Receipt size={16} /> 新增請款
                   </button>
                 </div>
@@ -1240,6 +1290,134 @@ export default function VendorDetail() {
                   <button
                     type="button"
                     onClick={() => setShowEditContactModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        {/* Add Transaction Modal */}
+        {showAddTransactionModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddTransactionModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <Briefcase size={24} className="text-emerald-600" />
+                    新增合作紀錄
+                  </h3>
+                  <button
+                    onClick={() => setShowAddTransactionModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+              </div>
+
+              <Form method="post" className="p-6 space-y-4">
+                <input type="hidden" name="intent" value="createTransaction" />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    案件名稱 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="description"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="例：辦公室裝潢工程"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    施工日期 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="date"
+                    required
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    合作金額 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="amount"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    初始報價
+                  </label>
+                  <input
+                    type="number"
+                    name="initialQuote"
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="留空則與合作金額相同"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    狀態
+                  </label>
+                  <select
+                    name="status"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="IN_PROGRESS">進行中</option>
+                    <option value="PENDING_APPROVAL">待驗收</option>
+                    <option value="APPROVED">已驗收</option>
+                    <option value="PAID">已付款</option>
+                  </select>
+                </div>
+
+                {actionData?.message && (
+                  <div className={`px-4 py-3 rounded-xl ${
+                    actionData.success 
+                      ? 'bg-green-50 border border-green-200 text-green-700' 
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {actionData.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? '新增中...' : (
+                      <>
+                        <Plus size={18} />
+                        新增紀錄
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddTransactionModal(false)}
                     className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
                   >
                     取消
