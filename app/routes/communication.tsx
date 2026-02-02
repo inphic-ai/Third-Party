@@ -5,7 +5,7 @@ import { json } from "@remix-run/node";
 import { eq } from 'drizzle-orm';
 import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
-import { vendors, socialGroups } from '../../db/schema/vendor';
+import { vendors, socialGroups, contactWindows } from '../../db/schema/vendor';
 import { 
   MessageCircle, 
   Search, 
@@ -23,7 +23,9 @@ import {
   LayoutGrid,
   LayoutList,
   Sparkles,
-  GripVertical
+  GripVertical,
+  Settings,
+  Trash2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -43,13 +45,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     console.log('[Communication Loader] Loading contact logs and vendors...');
     
-    // 讀取所有聯絡紀錄
-    const allContactLogs = await db.select().from(contactLogs);
+    // 讀取所有聯絡紀錄、廠商、群組和聯絡窗口
+    const [allContactLogs, allVendors, allSocialGroups, allContactWindows] = await Promise.all([
+      db.select().from(contactLogs),
+      db.select().from(vendors),
+      db.select().from(socialGroups),
+      db.select().from(contactWindows)
+    ]);
     
-    // 讀取所有廠商（用於顯示聯絡人資訊）
-    const allVendors = await db.select().from(vendors);
-    
-    console.log(`[Communication Loader] Loaded ${allContactLogs.length} contact logs, ${allVendors.length} vendors`);
+    console.log(`[Communication Loader] Loaded ${allContactLogs.length} contact logs, ${allVendors.length} vendors, ${allSocialGroups.length} social groups, ${allContactWindows.length} contact windows`);
     
     // 轉換為前端格式
     const contactLogsWithMapping = allContactLogs.map(log => ({
@@ -65,13 +69,51 @@ export async function loader({ request }: LoaderFunctionArgs) {
       quoteAmount: log.quoteAmount ? parseFloat(String(log.quoteAmount)) : undefined,
     }));
     
+    // 建立 vendor map 以便快速查詢
+    const vendorMap = new Map(allVendors.map(v => [v.id, v]));
+    
+    // 按 vendorId 分組 socialGroups
+    const groupsByVendor = new Map<string, any[]>();
+    allSocialGroups.forEach(group => {
+      if (!groupsByVendor.has(group.vendorId)) {
+        groupsByVendor.set(group.vendorId, []);
+      }
+      groupsByVendor.get(group.vendorId)!.push({
+        id: group.id,
+        platform: group.platform,
+        groupName: group.groupName,
+        systemCode: group.systemCode,
+        inviteLink: group.inviteLink || '',
+        qrCodeUrl: group.qrCodeUrl || '',
+        note: group.note || ''
+      });
+    });
+    
+    // 按 vendorId 分組 contactWindows
+    const contactsByVendor = new Map<string, any[]>();
+    allContactWindows.forEach(contact => {
+      if (!contactsByVendor.has(contact.vendorId)) {
+        contactsByVendor.set(contact.vendorId, []);
+      }
+      contactsByVendor.get(contact.vendorId)!.push({
+        id: contact.id,
+        name: contact.name,
+        role: contact.role,
+        mobile: contact.mobile || '',
+        email: contact.email || '',
+        lineId: contact.lineId || '',
+        wechatId: contact.wechatId || '',
+        isMainContact: contact.isMainContact || false
+      });
+    });
+    
     const vendorsWithMapping = allVendors.map(vendor => ({
       id: vendor.id,
       name: vendor.name || '',
       avatarUrl: vendor.avatarUrl || '',
       categories: Array.isArray(vendor.categories) ? vendor.categories : [],
-      socialGroups: [], // TODO: 從 social_groups 表讀取
-      contacts: [], // TODO: 從 contact_windows 表讀取
+      socialGroups: groupsByVendor.get(vendor.id) || [],
+      contacts: contactsByVendor.get(vendor.id) || []
     }));
     
     return json({ 
@@ -219,6 +261,7 @@ const ITEMS_PER_PAGE_OPTIONS = [9, 18, 36];
 
 function CommunicationContent() {
   const { vendors: dbVendors, contactLogs: dbContactLogs } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher();
   const [platform, setPlatform] = useState<Platform>('LINE');
   const [viewType, setViewType] = useState<ViewType>('GROUPS');
   const [groupViewMode, setGroupViewMode] = useState<'GRID' | 'LIST'>('LIST');
@@ -228,6 +271,11 @@ function CommunicationContent() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<FlattenedGroup | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editPlatform, setEditPlatform] = useState<Platform>('LINE');
+  const [editInviteLink, setEditInviteLink] = useState('');
 
   // Reset pagination when main controls change
   const handlePlatformChange = (p: Platform) => {
@@ -347,6 +395,44 @@ function CommunicationContent() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert(`已複製 ID: ${text}`);
+  };
+
+  const handleEditGroup = (group: FlattenedGroup) => {
+    setSelectedGroup(group);
+    setEditGroupName(group.groupName);
+    setEditPlatform(group.platform as Platform);
+    setEditInviteLink(group.inviteLink || '');
+    setShowEditGroupModal(true);
+  };
+
+  const handleSaveGroup = () => {
+    if (!selectedGroup || !editGroupName.trim()) return;
+
+    const formData = new FormData();
+    formData.append('intent', 'editGroup');
+    formData.append('groupId', selectedGroup.id);
+    formData.append('groupName', editGroupName.trim());
+    formData.append('platform', editPlatform);
+    formData.append('inviteLink', editInviteLink.trim());
+
+    fetcher.submit(formData, { method: 'post' });
+
+    setShowEditGroupModal(false);
+    setSelectedGroup(null);
+  };
+
+  const handleDeleteGroup = () => {
+    if (!selectedGroup) return;
+    if (!confirm(`確定要刪除群組「${selectedGroup.groupName}」嗎？`)) return;
+
+    const formData = new FormData();
+    formData.append('intent', 'deleteGroup');
+    formData.append('groupId', selectedGroup.id);
+
+    fetcher.submit(formData, { method: 'post' });
+
+    setShowEditGroupModal(false);
+    setSelectedGroup(null);
   };
 
   return (
@@ -529,10 +615,13 @@ function CommunicationContent() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-400 font-mono">{group.systemCode}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => copyToClipboard(group.systemCode)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                      <button onClick={() => handleEditGroup(group)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600" title="編輯群組">
+                        <Settings size={14} />
+                      </button>
+                      <button onClick={() => copyToClipboard(group.systemCode)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="複製代碼">
                         <Copy size={14} />
                       </button>
-                      <button className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                      <button className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="開啟連結">
                         <ExternalLink size={14} />
                       </button>
                     </div>
@@ -579,10 +668,13 @@ function CommunicationContent() {
                         <td className="px-4 py-3 text-slate-500">{group.memberCount} 人</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
-                            <button onClick={() => copyToClipboard(group.systemCode)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                            <button onClick={() => handleEditGroup(group)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600" title="編輯群組">
+                              <Settings size={14} />
+                            </button>
+                            <button onClick={() => copyToClipboard(group.systemCode)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="複製代碼">
                               <Copy size={14} />
                             </button>
-                            <button className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                            <button className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="開啟連結">
                               <ExternalLink size={14} />
                             </button>
                           </div>
@@ -683,6 +775,91 @@ function CommunicationContent() {
             >
               關閉
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯群組模態框 */}
+      {showEditGroupModal && selectedGroup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditGroupModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">編輯群組</h3>
+              <button
+                onClick={() => setShowEditGroupModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">群組名稱 *</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入群組名稱..."
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">平台</label>
+                <select
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  value={editPlatform}
+                  onChange={(e) => setEditPlatform(e.target.value as Platform)}
+                >
+                  <option value="LINE">LINE</option>
+                  <option value="WeChat">WeChat</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">邀請連結</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入邀請連結..."
+                  value={editInviteLink}
+                  onChange={(e) => setEditInviteLink(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">系統代碼</label>
+                <div className="text-sm text-slate-500 bg-slate-50 px-4 py-3 rounded-xl font-mono">
+                  {selectedGroup.systemCode}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleDeleteGroup}
+                disabled={fetcher.state === 'submitting'}
+                className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                刪除
+              </button>
+              <button
+                onClick={() => setShowEditGroupModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveGroup}
+                disabled={!editGroupName.trim() || fetcher.state === 'submitting'}
+                className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {fetcher.state === 'submitting' ? '儲存中...' : '儲存'}
+              </button>
+            </div>
           </div>
         </div>
       )}
