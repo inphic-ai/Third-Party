@@ -21,7 +21,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const pendingPayments = await db.select({
       total: sql<number>`COALESCE(SUM(amount), 0)`
     }).from(schema.transactions).where(
-      eq(schema.transactions.status, 'pending_approval')
+      eq(schema.transactions.status, 'PENDING_APPROVAL')
     );
     const approvedAmount = Number(pendingPayments[0]?.total) || 0;
     
