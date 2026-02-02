@@ -1,1112 +1,790 @@
-import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { useLoaderData, useActionData, useNavigation, Form } from "@remix-run/react";
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from 'react';
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
+import { useLoaderData, useActionData, useNavigation, Form, useRevalidator } from '@remix-run/react';
 import { 
-  Search, Filter, Plus, MapPin, ChevronRight, ChevronLeft, 
-  History, X, Camera, Upload, CheckCircle2, Save, Maximize2, Tag, MessageSquare,
-  Check, AlertCircle, Clock, Wrench
-} from "lucide-react";
-import { clsx } from "clsx";
-import type { MaintenanceRecord, MediaItem } from "../types";
-import { MaintenanceStatus } from "../types";
-import { ImageLightbox } from "../components/ImageLightbox";
-import { db, maintenanceRecords, vendors } from "../../db";
-import { desc, eq } from "drizzle-orm";
-import { uploadPhotosToR2 } from "~/services/r2.server";
+  Wrench, 
+  Plus, 
+  Search, 
+  Filter, 
+  ChevronRight, 
+  Clock, 
+  CheckCircle2, 
+  X, 
+  Camera, 
+  MessageSquare,
+  ArrowLeft,
+  Calendar,
+  User,
+  Tag,
+  AlertCircle,
+  Image as ImageIcon,
+  Save,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon,
+  Maximize2,
+  Upload
+} from 'lucide-react';
+import { db } from '~/services/db.server';
+import { maintenanceRecords } from '../../db/schema/operations';
+import { vendors } from '../../db/schema/vendor';
+import { eq, desc } from 'drizzle-orm';
+import { ImageLightbox } from '../components/ImageLightbox';
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: "設備維修紀錄 - PartnerLink Pro" },
-    { name: "description", content: "追蹤設備維修進度與歷史紀錄" },
-  ];
-};
+// ============================================
+// Types
+// ============================================
 
-// 常見產品標籤
-const PRODUCT_TAG_OPTIONS = ['空調', '電力', '水路', '裝修', '家具', '網路', '安控', '結構', '玻璃'];
-
-// Loader: 從資料庫讀取維修記錄
-export async function loader({ request }: LoaderFunctionArgs) {
-  try {
-    const records = await db.select().from(maintenanceRecords).orderBy(desc(maintenanceRecords.createdAt));
-    return json({ records, error: null });
-  } catch (error) {
-    console.error('Failed to load maintenance records:', error);
-    return json({ records: [], error: 'Failed to load records' });
-  }
+interface MediaItem {
+  id: string;
+  url: string;
+  description: string;
+  type: 'image' | 'video';
+  uploadedAt: string;
 }
 
-// Action: 處理新增維修記錄
+// ============================================
+// Loader & Action
+// ============================================
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const records = await db
+    .select()
+    .from(maintenanceRecords)
+    .orderBy(desc(maintenanceRecords.createdAt));
+
+  const vendorList = await db.select().from(vendors);
+
+  return json({ records, vendorList });
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get('intent');
 
   if (intent === 'create') {
-    try {
-      const deviceName = formData.get('deviceName') as string;
-      const deviceNo = formData.get('deviceNo') as string;
-      const description = formData.get('description') as string;
-      const productTags = formData.get('productTags') as string;
-      const vendorName = formData.get('vendorName') as string || '待指派';
-      const beforePhotosJson = formData.get('beforePhotos') as string;
-      
-      // 驗證必填欄位
-      if (!deviceName || !deviceNo || !description) {
-        return json({ 
-          success: false, 
-          error: '請填寫所有必填欄位' 
-        }, { status: 400 });
-      }
+    const deviceName = formData.get('deviceName') as string;
+    const deviceNo = formData.get('deviceNo') as string;
+    const description = formData.get('description') as string;
+    const vendorId = formData.get('vendorId') as string;
+    const status = formData.get('status') as string || 'PENDING';
+    const beforePhotosJson = formData.get('beforePhotos') as string;
+    const afterPhotosJson = formData.get('afterPhotos') as string;
 
-      // 生成案件編號
-      const now = new Date();
-      const dateStr = now.toISOString().slice(0, 7).replace('-', '');
-      const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      const caseId = `CASE-${dateStr}-${randomNum}`;
+    const beforePhotos = beforePhotosJson ? JSON.parse(beforePhotosJson) : [];
+    const afterPhotos = afterPhotosJson ? JSON.parse(afterPhotosJson) : [];
 
-      // 解析產品標籤
-      const tagsArray = productTags ? productTags.split(',').filter(Boolean) : [];
+    const caseId = `CASE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const tags = formData.get('tags') as string;
+    const tagsArray = tags ? tags.split(',').map(t => t.trim()) : [];
 
-      // 解析照片數據並上傳到 R2（階段 C）
-      let beforePhotos: any[] = [];
-      try {
-        if (beforePhotosJson) {
-          const parsed = JSON.parse(beforePhotosJson);
-          // 上傳到 R2 並獲取 URL
-          beforePhotos = await uploadPhotosToR2(parsed);
-        }
-      } catch (error) {
-        console.error('Failed to upload photos to R2:', error);
-        // 如果 R2 上傳失敗，回退到 base64（階段 B）
-        if (beforePhotosJson) {
-          const parsed = JSON.parse(beforePhotosJson);
-          beforePhotos = parsed.map((photo: any, index: number) => ({
-            id: `photo-${Date.now()}-${index}`,
-            url: photo.url,
-            description: photo.description || `施工前 ${index + 1}`,
-            type: 'image' as const,
-            uploadedAt: new Date().toISOString(),
-          }));
-        }
-      }
+    // 獲取廠商名稱
+    const vendor = await db.select().from(vendors).where(eq(vendors.id, vendorId)).limit(1);
+    const vendorName = vendor[0]?.name || '未指定廠商';
 
-      // 查詢或創建測試廠商（階段 A 暫時使用）
-      let firstVendor = await db.select().from(vendors).limit(1);
-      
-      if (firstVendor.length === 0) {
-        // 創建測試廠商
-        const [newVendor] = await db.insert(vendors).values({
-          name: vendorName || '測試廠商',
-          taxId: '00000000',
-          avatarUrl: 'https://via.placeholder.com/150',
-          region: 'TAIWAN',
-          entityType: 'COMPANY',
-          serviceTypes: ['LABOR'],
-          categories: ['HVAC'],
-          priceRange: '$$',
-          address: '測試地址',
-          rating: '5.0',
-          createdBy: '00000000-0000-0000-0000-000000000000',
-        }).returning();
-        firstVendor = [newVendor];
-      }
-      
-      const defaultVendorId = firstVendor[0].id;
+    await db.insert(maintenanceRecords).values({
+      caseId,
+      deviceName,
+      deviceNo,
+      status,
+      description,
+      productTags: tagsArray,
+      beforePhotos,
+      afterPhotos,
+      createdBy: vendorId,
+      vendorId,
+      vendorName,
+      date: new Date(),
+    });
 
-      // 插入資料庫（階段 C：含 R2 URL）
-      await db.insert(maintenanceRecords).values({
-        caseId,
-        date: now,
-        deviceName,
-        deviceNo,
-        vendorName,
-        vendorId: defaultVendorId,
-        status: 'PENDING',
-        description,
-        productTags: tagsArray,
-        beforePhotos: beforePhotos,
-        afterPhotos: [],
-        createdBy: defaultVendorId, // TODO: 從 session 取得使用者 ID
-      });
-
-      return json({ success: true, error: null });
-    } catch (error) {
-      console.error('Failed to create maintenance record:', error);
-      return json({ 
-        success: false, 
-        error: '新增失敗，請稍後再試' 
-      }, { status: 500 });
-    }
+    return json({ success: true });
   }
 
-  if (intent === 'uploadPhoto') {
-    try {
-      const caseId = formData.get('caseId') as string;
-      const photoType = formData.get('photoType') as string;
-      const photoData = formData.get('photoData') as string;
-      
-      if (!caseId || !photoType || !photoData) {
-        return json({ 
-          success: false, 
-          error: '缺少必要參數' 
-        }, { status: 400 });
-      }
+  if (intent === 'updateStatus') {
+    const caseId = formData.get('caseId') as string;
+    const status = formData.get('status') as string;
+    const vendorId = formData.get('vendorId') as string;
+    const vendorName = formData.get('vendorName') as string;
+    const beforePhotosJson = formData.get('beforePhotos') as string;
+    const afterPhotosJson = formData.get('afterPhotos') as string;
 
-      // 上傳到 R2
-      let photoUrl = photoData;
-      try {
-        const r2Url = await uploadPhotosToR2([{ url: photoData, description: `新增照片` }]);
-        if (r2Url.length > 0) {
-          photoUrl = r2Url[0].url;
-        }
-      } catch (error) {
-        console.error('Failed to upload to R2, using base64:', error);
-      }
-
-      // 查詢現有記錄
-      const [record] = await db
-        .select()
-        .from(maintenanceRecords)
-        .where(eq(maintenanceRecords.caseId, caseId))
-        .limit(1);
-      
-      if (!record) {
-        return json({ 
-          success: false, 
-          error: '找不到該維修記錄' 
-        }, { status: 404 });
-      }
-
-      // 更新照片
-      const newPhoto = {
-        id: `photo-${Date.now()}`,
-        url: photoUrl,
-        description: `新增照片`,
-        type: 'image' as const,
-        uploadedAt: new Date().toISOString(),
-      };
-
-      const fieldName = photoType === 'before' ? 'beforePhotos' : 'afterPhotos';
-      const existingPhotos = (record[fieldName] as any[]) || [];
-      const updatedPhotos = [...existingPhotos, newPhoto];
-
-      await db
-        .update(maintenanceRecords)
-        .set({ [fieldName]: updatedPhotos })
-        .where(eq(maintenanceRecords.caseId, caseId));
-
-      return json({ success: true, error: null });
-    } catch (error) {
-      console.error('Failed to upload photo:', error);
-      return json({ 
-        success: false, 
-        error: '上傳失敗，請稍後再試' 
-      }, { status: 500 });
+    const updateData: any = { status, vendorId, vendorName };
+    
+    if (beforePhotosJson) {
+      updateData.beforePhotos = JSON.parse(beforePhotosJson);
     }
+    if (afterPhotosJson) {
+      updateData.afterPhotos = JSON.parse(afterPhotosJson);
+    }
+
+    await db
+      .update(maintenanceRecords)
+      .set(updateData)
+      .where(eq(maintenanceRecords.caseId, caseId));
+
+    return json({ success: true });
   }
 
-  if (intent === 'updatePhotoDescription') {
-    try {
-      const caseId = formData.get('caseId') as string;
-      const photoType = formData.get('photoType') as string;
-      const photoId = formData.get('photoId') as string;
-      const description = formData.get('description') as string;
-      
-      if (!caseId || !photoType || !photoId) {
-        return json({ 
-          success: false, 
-          error: '缺少必要參數' 
-        }, { status: 400 });
-      }
-
-      // 查詢現有記錄
-      const [record] = await db
-        .select()
-        .from(maintenanceRecords)
-        .where(eq(maintenanceRecords.caseId, caseId))
-        .limit(1);
-      
-      if (!record) {
-        return json({ 
-          success: false, 
-          error: '找不到該維修記錄' 
-        }, { status: 404 });
-      }
-
-      // 更新照片描述
-      const fieldName = photoType === 'before' ? 'beforePhotos' : 'afterPhotos';
-      const existingPhotos = (record[fieldName] as any[]) || [];
-      const updatedPhotos = existingPhotos.map((photo: any) => 
-        photo.id === photoId 
-          ? { ...photo, description }
-          : photo
-      );
-
-      await db
-        .update(maintenanceRecords)
-        .set({ [fieldName]: updatedPhotos })
-        .where(eq(maintenanceRecords.caseId, caseId));
-
-      return json({ success: true, error: null });
-    } catch (error) {
-      console.error('Failed to update photo description:', error);
-      return json({ 
-        success: false, 
-        error: '更新失敗，請稍後再試' 
-      }, { status: 500 });
-    }
-  }
-
-  return json({ success: false, error: 'Invalid intent' }, { status: 400 });
+  return json({ success: false });
 }
 
-// 狀態顏色對應
-const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
-  'PENDING': { label: '待處理', color: 'text-amber-600', bgColor: 'bg-amber-50', icon: <Clock className="w-4 h-4" /> },
-  'IN_PROGRESS': { label: '進行中', color: 'text-blue-600', bgColor: 'bg-blue-50', icon: <Wrench className="w-4 h-4" /> },
-  'COMPLETED': { label: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50', icon: <CheckCircle2 className="w-4 h-4" /> },
-  'ARCHIVED': { label: '已歸檔', color: 'text-gray-500', bgColor: 'bg-gray-100', icon: <X className="w-4 h-4" /> },
+// ============================================
+// Component
+// ============================================
+
+const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: any }> = {
+  PENDING: { label: '待處理', color: 'text-amber-600', bgColor: 'bg-amber-50 border-amber-200', icon: Clock },
+  IN_PROGRESS: { label: '處理中', color: 'text-blue-600', bgColor: 'bg-blue-50 border-blue-200', icon: Wrench },
+  COMPLETED: { label: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2 },
 };
 
 export default function MaintenancePage() {
-  const { records, error } = useLoaderData<typeof loader>();
+  const { records, vendorList } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state === 'submitting';
-  
-  // States
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProductTags, setSelectedProductTags] = useState<string[]>([]);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [isPageDropdownOpen, setIsPageDropdownOpen] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | null>(null);
+  const revalidator = useRevalidator();
+  const isSubmitting = navigation.state !== 'idle';
+
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  
-  // 表單狀態
-  const [formData, setFormData] = useState({
-    deviceName: '',
-    deviceNo: '',
-    description: '',
-    vendorName: '',
-    productTags: [] as string[],
-    beforePhotos: [] as { url: string; description?: string }[],
-  });
-  
-  // 相簿燈箱狀態
-  const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
-  const [activePhotoType, setActivePhotoType] = useState<'before' | 'after'>('before');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLDivElement>(null);
+  // 照片上傳 state
+  const [beforePhotos, setBeforePhotos] = useState<MediaItem[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<MediaItem[]>([]);
+  const [editBeforePhotos, setEditBeforePhotos] = useState<MediaItem[]>([]);
+  const [editAfterPhotos, setEditAfterPhotos] = useState<MediaItem[]>([]);
+  const [lightboxOpen, setLightboxOpen] = useState<'before' | 'after' | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  // 當提交成功後關閉 modal 並重置表單
+  // 全端閉環：Action 成功後關閉 Modal 並重新載入
   useEffect(() => {
     if (actionData?.success) {
       setIsFormModalOpen(false);
-      setFormData({
-        deviceName: '',
-        deviceNo: '',
-        description: '',
-        vendorName: '',
-        productTags: [],
-      });
+      setSelectedRecord(null);
+      setBeforePhotos([]);
+      setAfterPhotos([]);
+      setEditBeforePhotos([]);
+      setEditAfterPhotos([]);
+      revalidator.revalidate();
     }
-  }, [actionData]);
+  }, [actionData, revalidator]);
 
-  // Filtering
-  const filteredRecords = useMemo(() => {
-    return records.filter((r: MaintenanceRecord) => {
-      const matchesSearch = 
-        r.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.deviceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.caseId.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesTags = selectedProductTags.length === 0 || 
-        selectedProductTags.some(tag => r.productTags?.includes(tag));
-
-      return matchesSearch && matchesTags;
-    });
-  }, [records, searchTerm, selectedProductTags]);
-
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredRecords.slice(start, start + itemsPerPage);
-  }, [filteredRecords, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
-
-  // Click outside handlers
+  // 編輯時初始化照片 state
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsPageDropdownOpen(false);
-      }
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setIsFilterOpen(false);
+    if (selectedRecord) {
+      setEditBeforePhotos((selectedRecord.beforePhotos as MediaItem[]) || []);
+      setEditAfterPhotos((selectedRecord.afterPhotos as MediaItem[]) || []);
+    }
+  }, [selectedRecord]);
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((record: any) => {
+      const matchesSearch = record.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            record.caseId.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'ALL' || record.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [records, searchTerm, statusFilter]);
+
+  const handleFileUpload = (type: 'before' | 'after', files: FileList | null) => {
+    if (!files) return;
+    
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newPhoto: MediaItem = {
+          id: `${Date.now()}-${Math.random()}`,
+          url: e.target?.result as string,
+          description: file.name,
+          type: 'image',
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        if (type === 'before') {
+          setBeforePhotos(prev => [...prev, newPhoto]);
+        } else {
+          setAfterPhotos(prev => [...prev, newPhoto]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removePhoto = (type: 'before' | 'after', id: string) => {
+    if (type === 'before') {
+      setBeforePhotos(prev => prev.filter(p => p.id !== id));
+    } else {
+      setAfterPhotos(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const removeEditPhoto = (type: 'before' | 'after', id: string) => {
+    if (type === 'before') {
+      setEditBeforePhotos(prev => prev.filter(p => p.id !== id));
+    } else {
+      setEditAfterPhotos(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleEditFileUpload = (type: 'before' | 'after', files: FileList | null) => {
+    if (!files) return;
+    
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const isVideo = file.type.startsWith('video/');
+        const newPhoto: MediaItem = {
+          id: `${Date.now()}-${Math.random()}`,
+          url: e.target?.result as string,
+          description: file.name,
+          type: isVideo ? 'video' : 'image',
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        if (type === 'before') {
+          setEditBeforePhotos(prev => [...prev, newPhoto]);
+        } else {
+          setEditAfterPhotos(prev => [...prev, newPhoto]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLightboxUpload = (type: 'before' | 'after', file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const isVideo = file.type.startsWith('video/');
+      const newPhoto: MediaItem = {
+        id: `${Date.now()}-${Math.random()}`,
+        url: e.target?.result as string,
+        description: file.name,
+        type: isVideo ? 'video' : 'image',
+        uploadedAt: new Date().toISOString(),
+      };
+      
+      if (type === 'before') {
+        setEditBeforePhotos(prev => [...prev, newPhoto]);
+      } else {
+        setEditAfterPhotos(prev => [...prev, newPhoto]);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // 相簿功能
-  const openGallery = (index: number, type: 'before' | 'after') => {
-    setActivePhotoIndex(index);
-    setActivePhotoType(type);
+    reader.readAsDataURL(file);
   };
 
-  const handlePrevPhoto = () => {
-    if (activePhotoIndex !== null && activePhotoIndex > 0) {
-      setActivePhotoIndex(activePhotoIndex - 1);
+  const handleUpdateDescription = (type: 'before' | 'after', photoId: string, description: string) => {
+    if (type === 'before') {
+      setEditBeforePhotos(prev => prev.map(p => p.id === photoId ? { ...p, description } : p));
+    } else {
+      setEditAfterPhotos(prev => prev.map(p => p.id === photoId ? { ...p, description } : p));
     }
   };
-
-  const handleNextPhoto = () => {
-    if (activePhotoIndex !== null && activePhotos.length > 0 && activePhotoIndex < activePhotos.length - 1) {
-      setActivePhotoIndex(activePhotoIndex + 1);
-    }
-  };
-
-  const handleSelectPhoto = (index: number) => {
-    setActivePhotoIndex(index);
-  };
-
-  const activePhotos = useMemo(() => {
-    if (!selectedRecord) return [];
-    return activePhotoType === 'before' ? selectedRecord.beforePhotos : selectedRecord.afterPhotos;
-  }, [selectedRecord, activePhotoType]);
-
-  // 產品標籤切換
-  const toggleProductTag = (tag: string) => {
-    setFormData(prev => ({
-      ...prev,
-      productTags: prev.productTags.includes(tag)
-        ? prev.productTags.filter(t => t !== tag)
-        : [...prev.productTags, tag]
-    }));
-  };
-
-  // 處理照片上傳
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newPhotos: { url: string; description?: string }[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith('image/')) continue;
-
-      // 轉換為 base64
-      const reader = new FileReader();
-      await new Promise<void>((resolve) => {
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            newPhotos.push({
-              url: event.target.result as string,
-              description: file.name
-            });
-          }
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      beforePhotos: [...prev.beforePhotos, ...newPhotos]
-    }));
-  };
-
-  // 刪除照片
-  const removePhoto = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      beforePhotos: prev.beforePhotos.filter((_, i) => i !== index)
-    }));
-  };
-
-  // 統計數據
-  const stats = useMemo(() => {
-    const total = records.length;
-    const pending = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.PENDING).length;
-    const inProgress = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.IN_PROGRESS).length;
-    const completed = records.filter((r: MaintenanceRecord) => r.status === MaintenanceStatus.COMPLETED).length;
-    return { total, pending, inProgress, completed };
-  }, [records]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Wrench className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-800">設備維修紀錄</h1>
-                <p className="text-xs text-slate-500">追蹤設備維修進度與歷史紀錄</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsFormModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-md"
-            >
-              <Plus className="w-4 h-4" />
-              新增維修單
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+              <Wrench className="text-emerald-600" size={40} />
+              設備維修紀錄
+            </h1>
+            <p className="text-gray-400 font-bold mt-2 uppercase tracking-[0.2em] text-xs">Maintenance Record System</p>
           </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                <History className="w-5 h-5 text-slate-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
-                <p className="text-xs text-slate-500">總維修量</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-                <p className="text-xs text-slate-500">待處理</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <Wrench className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-blue-600">{stats.inProgress}</p>
-                <p className="text-xs text-slate-500">進行中</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
-                <p className="text-xs text-slate-500">已完成</p>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={() => setIsFormModalOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            新增維修單
+          </button>
         </div>
 
-        {/* Search & Filter */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 relative">
-              <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Filters */}
+        <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6">
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="relative flex-1 min-w-[300px]">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder="搜尋設備名稱、編號、廠商..."
+                placeholder="搜尋設備名稱、案件編號..."
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-            <div className="relative" ref={filterRef}>
-              <button
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-gray-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500"
               >
-                <Tag className="w-4 h-4 text-slate-600" />
-                產品標籤
-              </button>
-              {isFilterOpen && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50">
-                  <div className="flex flex-wrap gap-2">
-                    {PRODUCT_TAG_OPTIONS.map(tag => (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          setSelectedProductTags(prev =>
-                            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                          );
-                        }}
-                        className={clsx(
-                          "px-3 py-1.5 rounded-full text-sm transition-colors",
-                          selectedProductTags.includes(tag)
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        )}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                <option value="ALL">全部狀態</option>
+                {Object.entries(statusConfig).map(([key, config]) => (
+                  <option key={key} value={key}>{config.label}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">案件編號</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">設備名稱</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">廠商</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">產品標籤</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">狀態</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">維修日期</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">照片</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
-                      {error ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <AlertCircle className="w-8 h-8 text-red-500" />
-                          <p>{error}</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Wrench className="w-8 h-8 text-slate-300" />
-                          <p>尚無維修記錄</p>
-                        </div>
-                      )}
+        <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">案件編號</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">設備名稱</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">狀態</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">施工照片</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredRecords.map((record: any) => {
+                const config = statusConfig[record.status] || statusConfig.PENDING;
+                const Icon = config.icon;
+                return (
+                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm text-gray-600">{record.caseId}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="font-semibold text-gray-900">{record.deviceName}</div>
+                        <div className="text-xs text-gray-500 font-mono">{record.deviceNo}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${config.bgColor} ${config.color}`}>
+                        <Icon className="w-3 h-3" />
+                        {config.label}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex -space-x-2">
+                        {((record.beforePhotos as any[]) || []).slice(0, 3).map((photo, i) => (
+                          <div key={i} className="w-8 h-8 rounded-lg border-2 border-white bg-gray-100 overflow-hidden">
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                        {((record.beforePhotos as any[]) || []).length > 3 && (
+                          <div className="w-8 h-8 rounded-lg border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] font-medium text-gray-500">
+                            +{((record.beforePhotos as any[]) || []).length - 3}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => setSelectedRecord(record)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  paginatedRecords.map((record: MaintenanceRecord) => (
-                    <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-800">{record.caseId}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">{record.deviceName}</p>
-                          <p className="text-xs text-slate-500">{record.deviceNo}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{record.vendorName}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {record.productTags?.slice(0, 2).map((tag, idx) => (
-                            <span key={idx} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs">
-                              {tag}
-                            </span>
-                          ))}
-                          {record.productTags && record.productTags.length > 2 && (
-                            <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs">
-                              +{record.productTags.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={clsx(
-                          "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium",
-                          statusConfig[record.status].bgColor,
-                          statusConfig[record.status].color
-                        )}>
-                          {statusConfig[record.status].icon}
-                          {statusConfig[record.status].label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                        {new Date(record.date).toLocaleDateString('zh-TW')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500">
-                            施工前 ({Array.isArray(record.beforePhotos) ? record.beforePhotos.length : 0})
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            施工後 ({Array.isArray(record.afterPhotos) ? record.afterPhotos.length : 0})
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => setSelectedRecord(record)}
-                          className="text-emerald-600 hover:text-emerald-700 font-medium"
-                        >
-                          查看詳情
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 0 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200">
-              <div className="text-sm text-slate-600">
-                每頁 
-                <div className="relative inline-block ml-2" ref={dropdownRef}>
-                  <button
-                    onClick={() => setIsPageDropdownOpen(!isPageDropdownOpen)}
-                    className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50"
-                  >
-                    {itemsPerPage}
-                  </button>
-                  {isPageDropdownOpen && (
-                    <div className="absolute bottom-full mb-1 left-0 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                      {[10, 20, 50].map(num => (
-                        <button
-                          key={num}
-                          onClick={() => {
-                            setItemsPerPage(num);
-                            setIsPageDropdownOpen(false);
-                            setCurrentPage(1);
-                          }}
-                          className="block w-full px-4 py-2 text-left hover:bg-slate-50 first:rounded-t-lg last:rounded-b-lg"
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                 筆 | 共 {filteredRecords.length} 筆記錄
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-sm text-slate-600">
-                  {currentPage} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+                );
+              })}
+              {filteredRecords.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                    查無維修紀錄
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Detail Modal */}
       {selectedRecord && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">{selectedRecord.deviceName}</h2>
-                <p className="text-sm text-gray-500">{selectedRecord.caseId}</p>
+                <h2 className="text-xl font-bold text-gray-900">{selectedRecord.deviceName}</h2>
+                <p className="text-sm text-gray-500 font-mono mt-1">{selectedRecord.caseId}</p>
               </div>
-              <button
+              <button 
                 onClick={() => setSelectedRecord(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-6 h-6 text-gray-400" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">狀態</p>
-                  <span className={clsx(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium",
-                    statusConfig[selectedRecord.status].bgColor,
-                    statusConfig[selectedRecord.status].color
-                  )}>
-                    {statusConfig[selectedRecord.status].icon}
-                    {statusConfig[selectedRecord.status].label}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">負責廠商</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedRecord.vendorName}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500 mb-1">問題描述</p>
-                <p className="text-sm text-gray-700 leading-relaxed">{selectedRecord.description}</p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500 mb-2">產品標籤</p>
-                <div className="flex flex-wrap gap-2">
-                  {selectedRecord.productTags?.map((tag, idx) => (
-                    <span key={idx} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-sm">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* 施工前照片 */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Camera className="w-4 h-4 text-gray-500" />
-                  <p className="text-sm font-medium text-gray-700">
-                    施工前照片 ({Array.isArray(selectedRecord.beforePhotos) ? selectedRecord.beforePhotos.length : 0})
-                  </p>
-                </div>
-                {Array.isArray(selectedRecord.beforePhotos) && selectedRecord.beforePhotos.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-3">
-                    {selectedRecord.beforePhotos.slice(0, 3).map((photo: MediaItem, idx: number) => (
-                      <button
-                        key={photo.id}
-                        onClick={() => openGallery(idx, 'before')}
-                        className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors group"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={photo.description || `施工前 ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                          <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    ))}
+            
+            <div className="flex-1 overflow-y-auto p-8">
+              <Form method="post" className="space-y-8">
+                <input type="hidden" name="intent" value="updateStatus" />
+                <input type="hidden" name="caseId" value={selectedRecord.caseId} />
+                <input type="hidden" name="beforePhotos" value={JSON.stringify(editBeforePhotos)} />
+                <input type="hidden" name="afterPhotos" value={JSON.stringify(editAfterPhotos)} />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <label className="block text-sm font-semibold text-gray-700">維修狀態</label>
+                    <select 
+                      name="status"
+                      defaultValue={selectedRecord.status}
+                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 transition-all"
+                    >
+                      {Object.entries(statusConfig).map(([key, config]) => (
+                        <option key={key} value={key}>{config.label}</option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-400">尚無照片</p>
-                )}
-              </div>
-
-              {/* 施工後照片 */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <p className="text-sm font-medium text-gray-700">
-                    施工後照片 ({Array.isArray(selectedRecord.afterPhotos) ? selectedRecord.afterPhotos.length : 0})
-                  </p>
-                </div>
-                {Array.isArray(selectedRecord.afterPhotos) && selectedRecord.afterPhotos.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-3">
-                    {selectedRecord.afterPhotos.slice(0, 3).map((photo: MediaItem, idx: number) => (
-                      <button
-                        key={photo.id}
-                        onClick={() => openGallery(idx, 'after')}
-                        className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors group"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={photo.description || `施工後 ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                          <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <label className="w-full py-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:bg-emerald-50 transition-colors flex flex-col items-center justify-center gap-2 group cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 group-hover:text-emerald-600 transition-colors" />
-                    <p className="text-sm text-gray-500 group-hover:text-emerald-600 transition-colors">點擊上傳施工後照片</p>
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        
-                        try {
-                          const reader = new FileReader();
-                          reader.onloadend = async () => {
-                            const base64Data = reader.result as string;
-                            
-                            const formData = new FormData();
-                            formData.append('intent', 'uploadPhoto');
-                            formData.append('caseId', selectedRecord!.caseId);
-                            formData.append('photoType', 'after');
-                            formData.append('photoData', base64Data);
-                            
-                            const response = await fetch('/maintenance', {
-                              method: 'POST',
-                              body: formData,
-                            });
-                            
-                            if (response.ok) {
-                              window.location.reload();
-                            } else {
-                              alert('上傳失敗，請稍後再試');
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        } catch (error) {
-                          console.error('Upload error:', error);
-                          alert('上傳失敗，請稍後再試');
-                        }
+                  
+                  <div className="space-y-4">
+                    <label className="block text-sm font-semibold text-gray-700">負責廠商</label>
+                    <select 
+                      name="vendorId"
+                      defaultValue={selectedRecord.vendorId}
+                      onChange={(e) => {
+                        const name = e.target.options[e.target.selectedIndex].text;
+                        const input = document.getElementById('vendorNameInput') as HTMLInputElement;
+                        if (input) input.value = name;
                       }}
-                    />
-                  </label>
-                )}
-              </div>
-
-              {selectedRecord.aiReport && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <MessageSquare className="w-4 h-4 text-blue-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-blue-900 mb-1">AI 分析報告</p>
-                      <p className="text-sm text-blue-700 leading-relaxed">{selectedRecord.aiReport}</p>
-                    </div>
+                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 transition-all"
+                    >
+                      {vendorList.map((v: any) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                    <input type="hidden" id="vendorNameInput" name="vendorName" defaultValue={selectedRecord.vendorName} />
                   </div>
                 </div>
-              )}
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    問題描述
+                  </h3>
+                  <p className="text-gray-600 bg-gray-50 p-4 rounded-xl leading-relaxed">
+                    {selectedRecord.description}
+                  </p>
+                </div>
+
+                {/* 施工前照片 */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Camera className="w-4 h-4" />
+                      施工前照片
+                    </label>
+                    <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg cursor-pointer transition-colors flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      上傳
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={(e) => handleEditFileUpload('before', e.target.files)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {editBeforePhotos.length > 0 && (
+                    <div className="grid grid-cols-6 gap-2">
+                      {editBeforePhotos.slice(0, 6).map((photo, idx) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('before');
+                            setLightboxIndex(idx);
+                          }}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors"
+                        >
+                          {photo.type === 'video' ? (
+                            <video src={photo.url} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeEditPhoto('before', photo.id);
+                            }}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </button>
+                      ))}
+                      {editBeforePhotos.length > 6 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('before');
+                            setLightboxIndex(0);
+                          }}
+                          className="aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
+                        >
+                          +{editBeforePhotos.length - 6}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 施工後照片 */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Camera className="w-4 h-4" />
+                      施工後照片
+                    </label>
+                    <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg cursor-pointer transition-colors flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      上傳
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={(e) => handleEditFileUpload('after', e.target.files)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {editAfterPhotos.length > 0 && (
+                    <div className="grid grid-cols-6 gap-2">
+                      {editAfterPhotos.slice(0, 6).map((photo, idx) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('after');
+                            setLightboxIndex(idx);
+                          }}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500 transition-colors"
+                        >
+                          {photo.type === 'video' ? (
+                            <video src={photo.url} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeEditPhoto('after', photo.id);
+                            }}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </button>
+                      ))}
+                      {editAfterPhotos.length > 6 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLightboxOpen('after');
+                            setLightboxIndex(0);
+                          }}
+                          className="aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
+                        >
+                          +{editAfterPhotos.length - 6}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                  <button type="button" onClick={() => setSelectedRecord(null)} className="px-6 py-2 text-gray-600 hover:bg-gray-50 rounded-xl transition-all">取消</button>
+                  <button type="submit" disabled={isSubmitting} className="px-8 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all font-bold disabled:opacity-50 flex items-center gap-2">
+                    <Save className="w-4 h-4" />
+                    {isSubmitting ? '儲存中...' : '儲存變更'}
+                  </button>
+                </div>
+              </Form>
             </div>
           </div>
         </div>
       )}
 
-      {/* ImageLightbox */}
-      {activePhotoIndex !== null && selectedRecord && (
-        <ImageLightbox
-          photos={activePhotos}
-          activeIndex={activePhotoIndex}
-          title={`${activePhotoType === 'before' ? '施工前' : '施工後'}照片`}
-          onClose={() => setActivePhotoIndex(null)}
-          onPrev={handlePrevPhoto}
-          onNext={handleNextPhoto}
-          onSelect={handleSelectPhoto}
-          onUpload={async (file) => {
-            try {
-              // 轉換為 base64
-              const reader = new FileReader();
-              reader.onloadend = async () => {
-                const base64Data = reader.result as string;
-                
-                // 提交到後端
-                const formData = new FormData();
-                formData.append('intent', 'uploadPhoto');
-                formData.append('caseId', selectedRecord!.caseId);
-                formData.append('photoType', activePhotoType);
-                formData.append('photoData', base64Data);
-                
-                const response = await fetch('/maintenance', {
-                  method: 'POST',
-                  body: formData,
-                });
-                
-                if (response.ok) {
-                  // 重新載入頁面
-                  window.location.reload();
-                } else {
-                  alert('上傳失敗，請稍後再試');
-                }
-              };
-              reader.readAsDataURL(file);
-            } catch (error) {
-              console.error('Upload error:', error);
-              alert('上傳失敗，請稍後再試');
-            }
-          }}
-          onUpdateDescription={async (photoId, description) => {
-            try {
-              // 提交到後端
-              const formData = new FormData();
-              formData.append('intent', 'updatePhotoDescription');
-              formData.append('caseId', selectedRecord!.caseId);
-              formData.append('photoType', activePhotoType);
-              formData.append('photoId', photoId);
-              formData.append('description', description);
-              
-              const response = await fetch('/maintenance', {
-                method: 'POST',
-                body: formData,
-              });
-              
-              if (response.ok) {
-                // 重新載入頁面
-                window.location.reload();
-              } else {
-                alert('更新失敗，請稍後再試');
-              }
-            } catch (error) {
-              console.error('Update description error:', error);
-              alert('更新失敗，請稍後再試');
-            }
-          }}
-        />
-      )}
-
-      {/* Add Form Modal */}
+      {/* Create Form Modal */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">新增維修單</h2>
-              <button
-                onClick={() => setIsFormModalOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5 text-gray-500" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">新增維修單</h2>
+              <button onClick={() => {
+                setIsFormModalOpen(false);
+                setBeforePhotos([]);
+                setAfterPhotos([]);
+              }} className="p-2 hover:bg-gray-100 rounded-full">
+                <X className="w-6 h-6 text-gray-400" />
               </button>
             </div>
-            <Form method="post" className="p-6 space-y-4">
-              <input type="hidden" name="intent" value="create" />
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">設備名稱 *</label>
-                <input
-                  type="text"
-                  name="deviceName"
-                  value={formData.deviceName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, deviceName: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="輸入設備名稱"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">設備編號 *</label>
-                <input
-                  type="text"
-                  name="deviceNo"
-                  value={formData.deviceNo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, deviceNo: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="輸入設備編號"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">問題描述 *</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 h-24"
-                  placeholder="描述問題..."
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">產品標籤</label>
-                <input type="hidden" name="productTags" value={formData.productTags.join(',')} />
-                <div className="flex flex-wrap gap-2">
-                  {PRODUCT_TAG_OPTIONS.map(tag => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleProductTag(tag)}
-                      className={clsx(
-                        "px-3 py-1.5 rounded-full text-sm transition-colors",
-                        formData.productTags.includes(tag)
-                          ? "bg-emerald-600 text-white"
-                          : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600"
-                      )}
-                    >
-                      {tag}
-                    </button>
-                  ))}
+            <div className="flex-1 overflow-y-auto p-8">
+              <Form method="post" className="space-y-6">
+                <input type="hidden" name="intent" value="create" />
+                <input type="hidden" name="beforePhotos" value={JSON.stringify(beforePhotos)} />
+                <input type="hidden" name="afterPhotos" value={JSON.stringify(afterPhotos)} />
+                
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">設備名稱</label>
+                    <input name="deviceName" required className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">設備編號</label>
+                    <input name="deviceNo" required className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500" />
+                  </div>
                 </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">施工前照片</label>
-                <input
-                  type="hidden"
-                  name="beforePhotos"
-                  value={JSON.stringify(formData.beforePhotos)}
-                />
-                <div className="space-y-3">
-                  {/* 上傳按鈕 */}
-                  <label className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 transition-colors block">
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">維修狀態</label>
+                    <select name="status" defaultValue="PENDING" className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500">
+                      {Object.entries(statusConfig).map(([key, config]) => (
+                        <option key={key} value={key}>{config.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">負責廠商</label>
+                    <select name="vendorId" required className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500">
+                      {vendorList.map((v: any) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">問題描述</label>
+                  <textarea name="description" rows={4} required className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500" />
+                </div>
+
+                {/* 施工前照片上傳 */}
+                <div className="space-y-4">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    施工前照片
+                  </label>
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
                     <input
                       type="file"
+                      id="beforePhotosInput"
                       accept="image/*"
                       multiple
-                      onChange={handlePhotoUpload}
+                      onChange={(e) => handleFileUpload('before', e.target.files)}
                       className="hidden"
                     />
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">點擊或拖曳上傳照片</p>
-                    <p className="text-xs text-gray-400 mt-1">支援多張照片上傳</p>
-                  </label>
-
-                  {/* 照片預覽 */}
-                  {formData.beforePhotos.length > 0 && (
-                    <div className="grid grid-cols-3 gap-3">
-                      {formData.beforePhotos.map((photo, idx) => (
-                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 group">
-                          <img
-                            src={photo.url}
-                            alt={photo.description || `照片 ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+                    <label htmlFor="beforePhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600">點擊上傳施工前照片</span>
+                    </label>
+                  </div>
+                  {beforePhotos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-4">
+                      {beforePhotos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
                           <button
                             type="button"
-                            onClick={() => removePhoto(idx)}
-                            className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                            onClick={() => removePhoto('before', photo.id)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-3 h-3" />
                           </button>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </div>
 
-              {actionData?.error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <p className="text-sm text-red-700">{actionData.error}</p>
+                {/* 施工後照片上傳 */}
+                <div className="space-y-4">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    施工後照片
+                  </label>
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 hover:border-emerald-500 transition-colors">
+                    <input
+                      type="file"
+                      id="afterPhotosInput"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleFileUpload('after', e.target.files)}
+                      className="hidden"
+                    />
+                    <label htmlFor="afterPhotosInput" className="flex flex-col items-center gap-2 cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600">點擊上傳施工後照片</span>
+                    </label>
+                  </div>
+                  {afterPhotos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-4">
+                      {afterPhotos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img src={photo.url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                          <button
+                            type="button"
+                            onClick={() => removePhoto('after', photo.id)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  disabled={isSubmitting}
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Save className="w-4 h-4" />
-                  {isSubmitting ? '儲存中...' : '儲存'}
-                </button>
-              </div>
-            </Form>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                  <button type="button" onClick={() => {
+                    setIsFormModalOpen(false);
+                    setBeforePhotos([]);
+                    setAfterPhotos([]);
+                  }} className="px-6 py-2 text-gray-600 hover:bg-gray-50 rounded-xl transition-all">取消</button>
+                  <button type="submit" disabled={isSubmitting} className="px-8 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all font-bold disabled:opacity-50">
+                    {isSubmitting ? '建立中...' : '建立維修單'}
+                  </button>
+                </div>
+              </Form>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* ImageLightbox for Before Photos */}
+      {lightboxOpen === 'before' && editBeforePhotos.length > 0 && (
+        <ImageLightbox
+          photos={editBeforePhotos}
+          activeIndex={lightboxIndex}
+          title="施工前照片"
+          onClose={() => setLightboxOpen(null)}
+          onPrev={() => setLightboxIndex(prev => Math.max(0, prev - 1))}
+          onNext={() => setLightboxIndex(prev => Math.min(editBeforePhotos.length - 1, prev + 1))}
+          onSelect={(idx) => setLightboxIndex(idx)}
+          onUpload={(file) => handleLightboxUpload('before', file)}
+          onUpdateDescription={(photoId, description) => handleUpdateDescription('before', photoId, description)}
+        />
+      )}
+
+      {/* ImageLightbox for After Photos */}
+      {lightboxOpen === 'after' && editAfterPhotos.length > 0 && (
+        <ImageLightbox
+          photos={editAfterPhotos}
+          activeIndex={lightboxIndex}
+          title="施工後照片"
+          onClose={() => setLightboxOpen(null)}
+          onPrev={() => setLightboxIndex(prev => Math.max(0, prev - 1))}
+          onNext={() => setLightboxIndex(prev => Math.min(editAfterPhotos.length - 1, prev + 1))}
+          onSelect={(idx) => setLightboxIndex(idx)}
+          onUpload={(file) => handleLightboxUpload('after', file)}
+          onUpdateDescription={(photoId, description) => handleUpdateDescription('after', photoId, description)}
+        />
       )}
     </div>
   );

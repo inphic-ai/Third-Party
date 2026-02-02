@@ -76,158 +76,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
-  if (intent === "updateContact") {
-    const contactId = formData.get("contactId") as string;
-    const name = formData.get("name") as string;
-    const role = formData.get("role") as string;
-    const mobile = formData.get("mobile") as string;
-    const email = formData.get("email") as string;
-    const lineId = formData.get("lineId") as string;
-
-    try {
-      await db.update(contactWindows)
-        .set({
-          name: name || null,
-          role: role || null,
-          mobile: mobile || null,
-          email: email || null,
-          lineId: lineId || null,
-          updatedAt: new Date(),
-        })
-        .where(eq(contactWindows.id, contactId));
-
-      return json({ success: true, message: "聯絡人資料已更新" });
-    } catch (error) {
-      console.error("Failed to update contact:", error);
-      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
-    }
-  }
-
-  if (intent === "createTransaction") {
-    const vendorId = params.id;
-    const description = formData.get("description") as string;
-    const date = formData.get("date") as string;
-    const amount = formData.get("amount") as string;
-    const initialQuote = formData.get("initialQuote") as string;
-    const status = formData.get("status") as string || 'IN_PROGRESS';
-
-    try {
-      // 需要先 import transactions 表
-      const { transactions } = await import('../../db/schema/financial');
-      
-      await db.insert(transactions).values({
-        vendorId: vendorId!,
-        customerId: 'system', // 暫時使用 system，實際應該是當前用戶 ID
-        date: new Date(date),
-        description: description || '新合作案件',
-        amount: amount || '0',
-        initialQuote: initialQuote || amount || '0',
-        status: status as any,
-        laborFormStatus: 'N/A' as any,
-        photosBefore: [],
-        photosAfter: [],
-        timeSpentHours: '0',
-        createdBy: 'system', // 暫時使用 system
-      });
-
-      return json({ success: true, message: "合作紀錄已新增" });
-    } catch (error) {
-      console.error("Failed to create transaction:", error);
-      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
-    }
-  }
-
-  if (intent === "createContact") {
-    const vendorId = params.id;
-    const name = formData.get("name") as string;
-    const role = formData.get("role") as string;
-    const mobile = formData.get("mobile") as string;
-    const email = formData.get("email") as string;
-    const lineId = formData.get("lineId") as string;
-    const isMainContact = formData.get("isMainContact") === "true";
-
-    try {
-      await db.insert(contactWindows).values({
-        vendorId: vendorId!,
-        name: name || '未命名聯絡人',
-        role: role || '聯絡人',
-        mobile: mobile || null,
-        email: email || null,
-        lineId: lineId || null,
-        isMainContact: isMainContact,
-      });
-
-      return json({ success: true, message: "聯絡人已新增" });
-    } catch (error) {
-      console.error("Failed to create contact:", error);
-      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
-    }
-  }
-
-  if (intent === "deleteContact") {
-    const contactId = formData.get("contactId") as string;
-
-    try {
-      await db.delete(contactWindows).where(eq(contactWindows.id, contactId));
-      return json({ success: true, message: "聯絡人已刪除" });
-    } catch (error) {
-      console.error("Failed to delete contact:", error);
-      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
-    }
-  }
-
-  if (intent === "createSocialGroup") {
-    const vendorId = params.id;
-    const platform = formData.get("platform") as string;
-    const groupName = formData.get("groupName") as string;
-    const systemCode = formData.get("systemCode") as string;
-    const inviteLink = formData.get("inviteLink") as string;
-
-    try {
-      const { socialGroups } = await import('../../db/schema/vendor');
-      
-      await db.insert(socialGroups).values({
-        vendorId: vendorId!,
-        platform: platform as any,
-        groupName: groupName || '未命名群組',
-        systemCode: systemCode || `GRP-${Date.now()}`,
-        inviteLink: inviteLink || null,
-      });
-
-      return json({ success: true, message: "群組已新增" });
-    } catch (error) {
-      console.error("Failed to create social group:", error);
-      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
-    }
-  }
-
-  if (intent === "createContactLog") {
-    const vendorId = params.id;
-    const contactId = formData.get("contactId") as string;
-    const date = formData.get("date") as string;
-    const status = formData.get("status") as string;
-    const note = formData.get("note") as string;
-    const isReservation = formData.get("isReservation") === "true";
-    const reservationTime = formData.get("reservationTime") as string;
-
-    try {
-      const { contactLogs } = await import('../../db/schema/operations');
-      
-      await db.insert(contactLogs).values({
-        vendorId: vendorId!,
-        contactId: contactId || null,
-        date: new Date(date || Date.now()),
-        status: status as any,
-        note: note || '無備註',
-        isReservation: isReservation,
-        reservationTime: reservationTime ? new Date(reservationTime) : null,
-        createdBy: 'system', // 暫時使用 system
-      });
-
-      return json({ success: true, message: "聯繫紀錄已新增" });
-    } catch (error) {
-      console.error("Failed to create contact log:", error);
-      return json({ success: false, message: "新增失敗，請稍後再試" }, { status: 500 });
     }
   }
 
@@ -260,19 +108,12 @@ export async function loader({ params }: LoaderFunctionArgs) {
       ...vendor,
       region: vendor.region === 'TAIWAN' ? '台灣' : vendor.region === 'CHINA' ? '大陸' : vendor.region,
       entityType: vendor.entityType === 'COMPANY' ? '公司行號' : vendor.entityType === 'INDIVIDUAL' ? '個人接案' : vendor.entityType,
+      serviceArea: vendor.serviceArea || '',
+      companyAddress: vendor.companyAddress || '',
+      taxId: vendor.taxId || '',
+      mainPhone: vendor.mainPhone || '',
+      priceRange: vendor.priceRange || '$$',
       contacts: contacts,
-      contactLogs: vendorContactLogs.map(log => ({
-        ...log,
-        date: log.date.toISOString().split('T')[0],
-        reservationTime: log.reservationTime ? log.reservationTime.toISOString() : null,
-      })),
-      transactions: vendorTransactions.map(tx => ({
-        ...tx,
-        date: tx.date.toISOString().split('T')[0],
-        completionDate: tx.completionDate ? tx.completionDate.toISOString().split('T')[0] : null,
-      })),
-      laborForms: [],
-      socialGroups: vendorSocialGroups,
     };
     
     return json({ vendor: vendorWithMapping });
@@ -368,7 +209,7 @@ export default function VendorDetail() {
   const isSubmitting = navigation.state === "submitting";
   const [isFavorite, setIsFavorite] = useState(vendor.isFavorite || false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'logs' | 'transactions' | 'docs'>('info');
-  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(true);
   const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -376,13 +217,13 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
-  const [showEditContactModal, setShowEditContactModal] = useState(false);
-  const [editingContact, setEditingContact] = useState<ContactWindow | null>(null);
-  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
-  const [showAddContactModal, setShowAddContactModal] = useState(false);
-  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
-  const [showAddLogModal, setShowAddLogModal] = useState(false);
   const [vendorDetails, setVendorDetails] = useState({
+    name: vendor.name,
+    entityType: vendor.entityType,
+    region: vendor.region,
+    taxId: vendor.taxId || '',
+    mainPhone: vendor.mainPhone || '',
+    priceRange: vendor.priceRange || '$$',
     serviceArea: vendor.serviceArea || '',
     companyAddress: vendor.companyAddress || vendor.address || ''
   });
@@ -391,9 +232,18 @@ export default function VendorDetail() {
     if (actionData?.success) {
       if (actionData.vendor) {
         setVendorDetails({
+          name: actionData.vendor.name,
+          entityType: actionData.vendor.entityType,
+          region: actionData.vendor.region,
+          taxId: actionData.vendor.taxId || '',
+          mainPhone: actionData.vendor.mainPhone || '',
+          priceRange: actionData.vendor.priceRange || '$$',
           serviceArea: actionData.vendor.serviceArea || '',
           companyAddress: actionData.vendor.companyAddress || actionData.vendor.address || ''
         });
+      }
+      if (actionData.avatarUrl) {
+        setAvatarUrl(actionData.avatarUrl);
       }
       setShowEditModal(false);
       setShowEditContactModal(false);
@@ -452,7 +302,15 @@ export default function VendorDetail() {
     const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
     if (mainContact) {
       handleContactClick(mainContact, 'reservation');
+    } else {
+      // If no contact, show a message or open a general reservation modal
+      alert("請先新增聯繫窗口以進行預約");
     }
+  };
+
+  const handleToggleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    // In a real app, this would trigger an action to update the DB
   };
 
   const serviceAreas = vendorDetails.serviceArea?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
@@ -504,7 +362,7 @@ export default function VendorDetail() {
             {/* Avatar */}
             <div className="flex-shrink-0">
               <img 
-                src={vendor.avatarUrl} 
+                src={avatarUrl} 
                 alt={vendor.name} 
                 className="w-24 h-24 rounded-full object-cover border-4 border-slate-100" 
               />
@@ -513,7 +371,7 @@ export default function VendorDetail() {
             {/* Main Info */}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-slate-800">{vendor.name}</h1>
+                <h1 className="text-2xl font-bold text-slate-800">{vendorDetails.name}</h1>
                 <button 
                   onClick={() => setShowEditModal(true)}
                   className="flex items-center gap-2 text-sm font-bold text-white bg-yellow-500 border border-yellow-600 hover:bg-yellow-600 px-4 py-2 rounded-xl transition shadow-md"
@@ -522,32 +380,31 @@ export default function VendorDetail() {
                 </button>
                 <span className="font-mono text-slate-400 text-sm">#{vendor.id}</span>
                 <span className={`px-2 py-1 text-xs rounded-full font-medium flex items-center gap-1 ${
-                  vendor.entityType === EntityType.COMPANY ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
+                  vendorDetails.entityType === '公司行號' ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
                 }`}>
-                  {vendor.entityType === EntityType.COMPANY ? <Building2 size={12}/> : <User size={12}/>}
-                  {vendor.entityType}
+                  {vendorDetails.entityType === '公司行號' ? <Building2 size={12}/> : <User size={12}/>}
+                  {vendorDetails.entityType}
                 </span>
               </div>
               
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-600 mb-4">
                 <span className="flex items-center gap-1">
                   <MapPin size={14} className="text-slate-400" /> 
-                  註冊地：{vendor.region}
+                  註冊地：{vendorDetails.region}
                 </span>
-                {vendor.taxId && (
+                {vendorDetails.taxId && (
                   <span className="flex items-center gap-1">
                     <Building2 size={14} className="text-slate-400" />
-                    統編：<span className="font-mono">{vendor.taxId}</span>
+                    統編：<span className="font-mono">{vendorDetails.taxId}</span>
                   </span>
                 )}
-                {vendor.mainPhone && (
+                {vendorDetails.mainPhone && (
                   <span 
                     className="flex items-center gap-1 cursor-pointer hover:text-blue-600 group" 
                     onClick={() => toggleRevealPhone('main')}
-                    title="點擊查看完整號碼"
                   >
                     <Phone size={14} className="text-slate-400" /> 
-                    <span className="font-mono">{getDisplayPhone('main', vendor.mainPhone)}</span>
+                    <span className="font-mono">{getDisplayPhone('main', vendorDetails.mainPhone)}</span>
                     {revealedPhones['main'] ? <EyeOff size={12} className="text-slate-400"/> : <Eye size={12} className="text-slate-400 group-hover:text-blue-500"/>}
                   </span>
                 )}
@@ -576,16 +433,16 @@ export default function VendorDetail() {
                     <div className="text-4xl font-bold text-slate-800">{vendor.rating}</div>
                     <div className="text-xs text-slate-400">基於 {vendor.ratingCount} 次評分</div>
                   </div>
-                  <button 
-                     onClick={() => setIsFavorite(!isFavorite)}
-                     className="p-1"
-                     title={isFavorite ? "取消收藏" : "加入最愛"}
-                  >
-                     <Heart 
-                       size={24} 
-                       className={isFavorite ? "fill-red-500 text-red-500" : "text-slate-300 hover:text-red-300"} 
-                     />
-                  </button>
+                <button 
+                   onClick={handleToggleFavorite}
+                   className="p-1"
+                   title={isFavorite ? "取消收藏" : "加入最愛"}
+                >
+                   <Heart 
+                     size={24} 
+                     className={isFavorite ? "fill-red-500 text-red-500" : "text-slate-300 hover:text-red-300"} 
+                   />
+                </button>
                </div>
                
                <div className="flex flex-col gap-2 w-full">
@@ -744,161 +601,153 @@ export default function VendorDetail() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-base font-bold text-slate-800 mb-4">名片預覽</h3>
-                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
-                    <Camera size={32} className="text-slate-300 mb-3" />
-                    <span className="text-slate-400 text-sm">點擊上傳名片</span>
-                  </div>
+                  <label htmlFor="businessCardUpload" className="block">
+                    {avatarUrl && avatarUrl !== 'https://api.dicebear.com/7.x/initials/svg?seed=12' ? (
+                      <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer group">
+                        <img src={avatarUrl} alt="Business Card" className="w-full h-auto object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                          <div className="text-white text-center">
+                            <Upload size={32} className="mx-auto mb-2" />
+                            <span className="text-sm font-medium">更換名片</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
+                        <Camera size={32} className="text-slate-300 mb-3" />
+                        <span className="text-slate-400 text-sm">點擊上傳名片</span>
+                      </div>
+                    )}
+                  </label>
+                  <input 
+                    id="businessCardUpload" 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          const formData = new FormData();
+                          formData.append('intent', 'uploadBusinessCard');
+                          formData.append('avatarUrl', reader.result as string);
+                          const form = e.target.closest('form') || document.createElement('form');
+                          form.method = 'post';
+                          Array.from(formData.entries()).forEach(([key, value]) => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = value as string;
+                            form.appendChild(input);
+                          });
+                          if (!e.target.closest('form')) {
+                            document.body.appendChild(form);
+                          }
+                          form.requestSubmit();
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'contacts' && (
-            <div className="space-y-6">
-              {/* Contacts Section */}
+            <div className="space-y-8">
+              {/* Social Groups Section (Line Groups) */}
               <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-slate-800">聯繫窗口</h3>
-                  <button 
-                    onClick={() => setShowAddContactModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
-                  >
-                    <Plus size={16} /> 新增窗口
                   </button>
                 </div>
                 
-                {vendor.contacts && vendor.contacts.length > 0 ? (
+                {vendor.socialGroups && vendor.socialGroups.length > 0 ? (
                   <div className="grid md:grid-cols-2 gap-4">
-                    {vendor.contacts.map((contact: ContactWindow, idx: number) => (
-                      <div key={idx} className={`p-4 rounded-xl border ${contact.isMainContact ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-white'} relative`}>
-                        <div className="absolute top-3 right-3 flex gap-2">
-                          <button
-                            onClick={() => handleEditContact(contact)}
-                            className="p-2 rounded-lg bg-white hover:bg-slate-100 transition border border-slate-200"
-                            title="編輯聯絡人"
-                          >
-                            <Pencil size={14} className="text-slate-600" />
-                          </button>
-                          <Form method="post" onSubmit={(e) => {
-                            if (!confirm('確定要刪除這個聯絡人嗎？')) {
-                              e.preventDefault();
-                            }
-                          }}>
-                            <input type="hidden" name="intent" value="deleteContact" />
-                            <input type="hidden" name="contactId" value={contact.id} />
-                            <button
-                              type="submit"
-                              className="p-2 rounded-lg bg-white hover:bg-red-50 transition border border-slate-200"
-                              title="刪除聯絡人"
-                            >
-                              <X size={14} className="text-red-600" />
-                            </button>
-                          </Form>
                         </div>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
-                              {contact.name?.charAt(0) || '?'}
-                            </div>
-                            <div>
-                              <div className="font-bold text-slate-800 flex items-center gap-2">
-                                {contact.name}
-                                {contact.isMainContact && (
-                                  <span className="px-2 py-0.5 bg-emerald-500 text-white text-xs rounded-full">主要</span>
-                                )}
-                              </div>
-                              <div className="text-sm text-slate-500">{contact.role || '聯絡人'}</div>
-                            </div>
+                        <div className="flex items-start gap-4">
+                          <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                            {group.platform === 'LINE' ? (
+                               <div className="text-center">
+                                  <MessageSquare size={24} className="text-slate-400" />
+                                  <div className="text-[8px] font-bold text-slate-400 mt-0.5">LINE</div>
+                               </div>
+                            ) : <Users size={24} className="text-slate-400" />}
                           </div>
-                        </div>
-                        
-                        <div className="space-y-2 text-sm">
-                          {contact.mobile && (
-                            <div 
-                              className="flex items-center gap-2 cursor-pointer hover:text-blue-600"
-                              onClick={() => toggleRevealPhone(contact.id)}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                               <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded uppercase tracking-wider">
+                                  {group.systemCode}
+                               </span>
+                               <span className="text-[10px] text-slate-400">系統代碼</span>
+                            </div>
+                            <div className="font-bold text-slate-800 flex items-center gap-1.5 mb-3">
+                               {group.platform === 'LINE' && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                               <span className="truncate">{group.groupName}</span>
+                            </div>
+                            
+                            <a 
+                              href={group.inviteLink || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 hover:text-indigo-600 transition border border-slate-100"
                             >
-                              <Phone size={14} className="text-slate-400" />
-                              <span className="font-mono">{getDisplayPhone(contact.id, contact.mobile)}</span>
-                              {revealedPhones[contact.id] ? <EyeOff size={12} /> : <Eye size={12} />}
-                            </div>
-                          )}
-                          {contact.lineId && (
-                            <div className="flex items-center gap-2">
-                              <MessageCircle size={14} className="text-green-500" />
-                              <span className="font-mono">{getDisplayLineId(contact.lineId)}</span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                          <button 
-                            onClick={() => handleContactClick(contact, 'log')}
-                            className="flex-1 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition"
-                          >
-                            新增紀錄
-                          </button>
-                          <button 
-                            onClick={() => handleContactClick(contact, 'reservation')}
-                            className="flex-1 px-3 py-2 bg-orange-100 text-orange-600 rounded-lg text-sm hover:bg-orange-200 transition"
-                          >
-                            預約服務
-                          </button>
+                               <ExternalLink size={14} /> 點擊加入
+                            </a>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-slate-400">
-                    <Users size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>尚無聯繫窗口資料</p>
+                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
+                     <MessageSquare size={48} className="mx-auto mb-4 text-slate-300" />
+                     <p className="text-slate-400 font-medium">尚未建立任何專案通訊群組</p>
+                     <button className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition shadow-sm">
+                        立即建立第一個群組
+                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Social Groups Section */}
-              <div className="mt-8">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-slate-800">通訊群組</h3>
-                  <button 
-                    onClick={() => setShowAddGroupModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium"
-                  >
-                    <MessageCircle size={16} /> 新增群組
-                  </button>
-                </div>
-                {vendor.socialGroups && vendor.socialGroups.length > 0 ? (
-                  <div className="space-y-3">
-                    {vendor.socialGroups.map((group: any, idx: number) => (
-                      <div key={idx} className="p-4 rounded-xl border border-slate-100 bg-white flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            group.platform === 'LINE' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                          }`}>
-                            <MessageCircle size={20} />
                           </div>
-                          <div>
-                            <div className="font-medium text-slate-800">{group.groupName}</div>
-                            <div className="text-xs text-slate-400">{group.platform} • {group.systemCode}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                               <div className="font-bold text-slate-800 text-lg truncate">{contact.name}</div>
+                               {contact.isMainContact && (
+                                  <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">主要窗口</span>
+                               )}
+                            </div>
+                            <div className="text-sm text-slate-400 mb-4">{contact.role || '聯絡窗口'}</div>
+                            
+                            <div className="space-y-3">
+                               <div 
+                                 className="flex items-center justify-between group/phone cursor-pointer"
+                                 onClick={() => toggleRevealPhone(contact.id)}
+                               >
+                                  <div className="flex items-center gap-2 text-slate-600">
+                                     <Phone size={14} className="text-slate-400" />
+                                     <span className="text-sm font-mono">{getDisplayPhone(contact.id, contact.mobile)}</span>
+                                  </div>
+                                  <div className="text-slate-300 group-hover/phone:text-indigo-500 transition">
+                                     {revealedPhones[contact.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                  </div>
+                               </div>
+                               
+                               <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-slate-400">
+                                     <span className="text-[10px] font-bold uppercase tracking-widest">Line ID:</span>
+                                     <span className="text-sm font-mono text-slate-200">{getDisplayLineId(contact.lineId) || '無'}</span>
+                                  </div>
+                                  <div className="text-slate-200 italic text-[10px]">無 WeChat</div>
+                               </div>
+                            </div>
                           </div>
                         </div>
-                        {group.inviteLink && (
-                          <a 
-                            href={group.inviteLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1"
-                          >
-                            加入群組 <ExternalLink size={12} />
-                          </a>
-                        )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-slate-400">
-                    <MessageCircle size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>尚無通訊群組資料</p>
                   </div>
                 )}
               </div>
@@ -2219,20 +2068,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
   isSubmitting,
   actionData
 }) => {
-  const [formData, setFormData] = useState({
-    name: vendor.name,
-    entityType: vendor.entityType,
-    region: vendor.region,
-    taxId: vendor.taxId || '',
-    mainPhone: vendor.mainPhone || '',
-    priceRange: vendor.priceRange || '$$',
-    serviceArea: vendor.serviceArea || '',
-    companyAddress: vendor.companyAddress || vendor.address || ''
-  });
-
-  const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
@@ -2246,9 +2081,9 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
           </button>
         </div>
         
-        <Form method="post">
+        <Form method="post" className="flex flex-col flex-1 overflow-hidden">
           <input type="hidden" name="intent" value="updateVendor" />
-          <div className="p-6 space-y-6 overflow-y-auto">
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
             <div className="space-y-4">
               <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide">基本資料</h4>
               {actionData && !actionData.success && (
@@ -2263,8 +2098,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="name"
-                    value={formData.name} 
-                    onChange={e => handleChange('name', e.target.value)} 
+                    defaultValue={vendor.name} 
                   />
                 </div>
                 <div>
@@ -2272,8 +2106,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
                     name="entityType"
-                    value={formData.entityType} 
-                    onChange={e => handleChange('entityType', e.target.value)}
+                    defaultValue={vendor.entityType}
                   >
                     <option value="公司行號">公司行號</option>
                     <option value="個人接案">個人接案</option>
@@ -2284,8 +2117,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="taxId"
-                    value={formData.taxId} 
-                    onChange={e => handleChange('taxId', e.target.value)} 
+                    defaultValue={vendor.taxId || ''} 
                   />
                 </div>
                 <div>
@@ -2293,8 +2125,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="mainPhone"
-                    value={formData.mainPhone} 
-                    onChange={e => handleChange('mainPhone', e.target.value)} 
+                    defaultValue={vendor.mainPhone || ''} 
                   />
                 </div>
                 <div>
@@ -2302,8 +2133,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
                     name="region"
-                    value={formData.region} 
-                    onChange={e => handleChange('region', e.target.value)}
+                    defaultValue={vendor.region}
                   >
                     <option value="台灣">台灣</option>
                     <option value="大陸">大陸</option>
@@ -2314,8 +2144,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
                     name="priceRange"
-                    value={formData.priceRange} 
-                    onChange={e => handleChange('priceRange', e.target.value)}
+                    defaultValue={vendor.priceRange || '$$'}
                   >
                     <option value="$">$ (平價)</option>
                     <option value="$$">$$ (中等)</option>
@@ -2328,8 +2157,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <textarea
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
                     name="serviceArea"
-                    value={formData.serviceArea}
-                    onChange={e => handleChange('serviceArea', e.target.value)}
+                    defaultValue={vendor.serviceArea || ''}
                     placeholder="例如：北部、雙北、桃園"
                   />
                 </div>
@@ -2338,8 +2166,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   <textarea
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
                     name="companyAddress"
-                    value={formData.companyAddress}
-                    onChange={e => handleChange('companyAddress', e.target.value)}
+                    defaultValue={vendor.companyAddress || vendor.address || ''}
                     placeholder="例如：台北市○○區○○路○○號"
                   />
                 </div>
