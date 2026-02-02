@@ -4,6 +4,7 @@ import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { vendors, contactWindows, socialGroups } from '../../db/schema/vendor';
+import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
 import { 
   ArrowLeft, MapPin, Star, Phone, Mail, Globe, 
@@ -197,6 +198,61 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  // 切換黑名單狀態
+  if (intent === "toggleBlacklist") {
+    const id = params.id;
+
+    try {
+      const [currentVendor] = await db.select().from(vendors).where(eq(vendors.id, id!));
+      
+      if (!currentVendor) {
+        return json({ success: false, message: "找不到廠商" }, { status: 404 });
+      }
+
+      const newBlacklistStatus = !currentVendor.isBlacklisted;
+
+      await db.update(vendors)
+        .set({
+          isBlacklisted: newBlacklistStatus,
+          updatedAt: new Date(),
+        })
+        .where(eq(vendors.id, id!));
+
+      return json({ 
+        success: true, 
+        message: newBlacklistStatus ? "已標記為黑名單" : "已移除黑名單標記",
+        isBlacklisted: newBlacklistStatus
+      });
+    } catch (error) {
+      console.error('Failed to toggle blacklist:', error);
+      return json({ success: false, message: "操作失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 驗收交易
+  if (intent === "acceptTransaction") {
+    const transactionId = formData.get("transactionId") as string;
+
+    if (!transactionId) {
+      return json({ success: false, message: "缺少交易 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.update(transactions)
+        .set({
+          status: 'COMPLETED' as any,
+          completionDate: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(transactions.id, transactionId));
+
+      return json({ success: true, message: "驗收完成，交易狀態已更新" });
+    } catch (error) {
+      console.error('Failed to accept transaction:', error);
+      return json({ success: false, message: "驗收失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -318,6 +374,7 @@ export default function VendorDetail() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const [isFavorite, setIsFavorite] = useState(vendor.isFavorite || false);
+  const [isBlacklisted, setIsBlacklisted] = useState(vendor.isBlacklisted || false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'logs' | 'transactions' | 'docs'>('info');
   const [isAdminMode, setIsAdminMode] = useState(true);
   const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
@@ -359,6 +416,9 @@ export default function VendorDetail() {
       }
       if (actionData.avatarUrl) {
         setAvatarUrl(actionData.avatarUrl);
+      }
+      if (actionData.isBlacklisted !== undefined) {
+        setIsBlacklisted(actionData.isBlacklisted);
       }
       setShowEditModal(false);
     }
@@ -483,6 +543,21 @@ export default function VendorDetail() {
                 >
                    <Pencil size={14} /> 編輯資料
                 </button>
+                <Form method="post">
+                  <input type="hidden" name="intent" value="toggleBlacklist" />
+                  <button 
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl transition shadow-md ${
+                      isBlacklisted 
+                        ? "text-white bg-red-600 border border-red-700 hover:bg-red-700" 
+                        : "text-red-600 bg-white border border-red-300 hover:bg-red-50"
+                    }`}
+                  >
+                    <AlertCircle size={14} /> 
+                    {isBlacklisted ? '移除黑名單' : '標記為黑名單'}
+                  </button>
+                </Form>
                 <span className="font-mono text-slate-400 text-sm">#{vendor.id}</span>
                 <span className={`px-2 py-1 text-xs rounded-full font-medium flex items-center gap-1 ${
                   vendorDetails.entityType === '公司行號' ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
@@ -1061,10 +1136,18 @@ export default function VendorDetail() {
                             >
                               查看詳情
                             </button>
-                            {tx.status === TransactionStatus.PENDING_APPROVAL && (
-                              <button className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-sm hover:bg-emerald-600 transition">
-                                驗收
-                              </button>
+                            {tx.status === TransactionStatus.IN_PROGRESS && (
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="acceptTransaction" />
+                                <input type="hidden" name="transactionId" value={tx.id} />
+                                <button 
+                                  type="submit"
+                                  disabled={isSubmitting}
+                                  className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-sm hover:bg-emerald-600 transition disabled:opacity-50"
+                                >
+                                  驗收
+                                </button>
+                              </Form>
                             )}
                           </div>
                         </div>
