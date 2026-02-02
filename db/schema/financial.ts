@@ -45,6 +45,7 @@ export const transactions = pgTable('transactions', {
   
   status: transactionStatusEnum('status').notNull(),
   laborFormStatus: laborFormStatusEnum('labor_form_status').notNull().default('N/A'),
+  laborFormDocumentUrl: text('labor_form_document_url'),
   
   // 使用 JSONB 儲存 MediaItem 陣列
   photosBefore: jsonb('photos_before').notNull(), // MediaItem[]
