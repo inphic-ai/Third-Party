@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
-import { useLoaderData, Link } from '@remix-run/react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useLoaderData, Link, useFetcher, useActionData } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { knowledgeBaseItems } from '../../db/schema/system';
-import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar } from 'lucide-react';
+import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar, Plus, X, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 
 import { ClientOnly } from '~/components/ClientOnly';
@@ -16,6 +16,41 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "累積專案經驗，傳承驗收標準與異常處理技巧" },
   ];
 };
+
+// Action 函數處理新增知識
+export async function action({ request }: any) {
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  if (intent === 'createKnowledge') {
+    try {
+      const question = formData.get('question') as string;
+      const answer = formData.get('answer') as string;
+      const tags = (formData.get('tags') as string || '')
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
+
+      if (!question || !answer) {
+        return json({ success: false, error: '問題與答案為必填欄位' }, { status: 400 });
+      }
+
+      await db.insert(knowledgeBaseItems).values({
+        question,
+        answer,
+        tags,
+        sourceTransactionId: null,
+      });
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to create knowledge:', error);
+      return json({ success: false, error: '建立失敗' }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, error: 'Invalid intent' }, { status: 400 });
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
@@ -43,9 +78,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 function KnowledgeContent() {
   const { knowledgeItems: dbKnowledgeItems } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const fetcher = useFetcher();
+  const formRef = useRef<HTMLFormElement>(null);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // 監聽表單提交成功後關閉 Modal
+  useEffect(() => {
+    if (!actionData) return;
+    if (actionData.success) {
+      setShowAddModal(false);
+      formRef.current?.reset();
+    }
+  }, [actionData]);
 
   // Extract all unique tags
   const allTags = useMemo(() => {
@@ -73,7 +122,16 @@ function KnowledgeContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto relative">
+      {/* 新增知識浮動按鈕 */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-8 right-8 bg-blue-600 text-white p-4 rounded-full shadow-2xl hover:bg-blue-700 transition-all hover:scale-110 z-50 flex items-center gap-2"
+        title="新增知識"
+      >
+        <Plus size={24} />
+        <span className="font-bold pr-2">新增知識</span>
+      </button>
       {/* Hero Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
@@ -180,6 +238,93 @@ function KnowledgeContent() {
            </div>
         )}
       </div>
+
+      {/* 新增知識 Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                  <BookOpen size={28} className="text-blue-600" />
+                  新增知識條目
+                </h2>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition"
+                >
+                  <X size={24} className="text-slate-400" />
+                </button>
+              </div>
+
+              <fetcher.Form method="post" ref={formRef} className="space-y-6">
+                <input type="hidden" name="intent" value="createKnowledge" />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    問題 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="question"
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例：大陸地區報關流程是否需要提供原產地證明？"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    答案 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    name="answer"
+                    required
+                    rows={6}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="請詳細描述答案、流程或解決方案..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    標籤 (以逗號分隔)
+                  </label>
+                  <input
+                    type="text"
+                    name="tags"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例：大陸, 報關, 物流"
+                  />
+                </div>
+
+                {actionData?.error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
+                    {actionData.error}
+                  </div>
+                )}
+
+                <div className="flex gap-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                  >
+                    <Save size={20} />
+                    儲存知識
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </fetcher.Form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

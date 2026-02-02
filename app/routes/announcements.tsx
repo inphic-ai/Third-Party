@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { useLoaderData, Link } from '@remix-run/react';
+import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { announcements } from '../../db/schema/system';
+import { eq } from 'drizzle-orm';
 import { 
   Megaphone, Calendar, Bell, 
-  Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight
+  Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight,
+  Pencil, Trash2, X, Save
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -20,6 +22,58 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "即時掌握平台政策更新、兩岸物流波動與系統維護重要通知" },
   ];
 };
+
+// Action 函數處理編輯與刪除
+export async function action({ request }: any) {
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  if (intent === 'updateAnnouncement') {
+    try {
+      const id = formData.get('id') as string;
+      const title = formData.get('title') as string;
+      const content = formData.get('content') as string;
+      const priority = formData.get('priority') as string;
+
+      if (!id || !title || !content) {
+        return json({ success: false, error: '缺少必填欄位' }, { status: 400 });
+      }
+
+      await db.update(announcements)
+        .set({ 
+          title, 
+          content, 
+          priority: priority === 'High' ? 'HIGH' : 'NORMAL',
+          updatedAt: new Date()
+        })
+        .where(eq(announcements.id, id));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to update announcement:', error);
+      return json({ success: false, error: '更新失敗' }, { status: 500 });
+    }
+  }
+
+  if (intent === 'deleteAnnouncement') {
+    try {
+      const id = formData.get('id') as string;
+
+      if (!id) {
+        return json({ success: false, error: '缺少公告 ID' }, { status: 400 });
+      }
+
+      await db.delete(announcements).where(eq(announcements.id, id));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to delete announcement:', error);
+      return json({ success: false, error: '刪除失敗' }, { status: 500 });
+    }
+  }
+
+  return json({ success: false, error: 'Invalid intent' }, { status: 400 });
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
@@ -49,6 +103,39 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 function AnnouncementsContent() {
   const { announcements: dbAnnouncements } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', content: '', priority: 'Normal' });
+
+  const handleEdit = (announcement: any) => {
+    setEditingId(announcement.id);
+    setEditForm({
+      title: announcement.title,
+      content: announcement.content,
+      priority: announcement.priority
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingId) return;
+    const formData = new FormData();
+    formData.append('intent', 'updateAnnouncement');
+    formData.append('id', editingId);
+    formData.append('title', editForm.title);
+    formData.append('content', editForm.content);
+    formData.append('priority', editForm.priority);
+    fetcher.submit(formData, { method: 'post' });
+    setEditingId(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm('確定要刪除這個公告嗎？')) return;
+    const formData = new FormData();
+    formData.append('intent', 'deleteAnnouncement');
+    formData.append('id', id);
+    fetcher.submit(formData, { method: 'post' });
+  };
+
   const getIdentityIcon = (st: ServiceType) => {
     switch (st) {
       case ServiceType.LABOR: return <Hammer size={12} />;
@@ -124,20 +211,83 @@ function AnnouncementsContent() {
                 )}
               </div>
               <div className="flex gap-2">
-                 <ShieldCheck size={28} className={clsx(announcement.priority === 'High' ? "text-red-500" : "text-blue-500 opacity-20")} />
+                {editingId === announcement.id ? (
+                  <>
+                    <button
+                      onClick={handleSaveEdit}
+                      className="p-2 rounded-xl bg-green-100 text-green-700 hover:bg-green-200 transition"
+                      title="儲存"
+                    >
+                      <Save size={18} />
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="p-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                      title="取消"
+                    >
+                      <X size={18} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleEdit(announcement)}
+                      className="p-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                      title="編輯"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(announcement.id)}
+                      className="p-2 rounded-xl bg-red-100 text-red-700 hover:bg-red-200 transition"
+                      title="刪除"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             
-            <h3 className={clsx(
-              "text-2xl font-black mb-4 transition-colors tracking-tight", 
-              announcement.priority === 'High' ? "text-red-900" : "text-slate-800 group-hover:text-blue-600"
-            )}>
-              {announcement.title}
-            </h3>
-            
-            <p className="text-slate-600 leading-relaxed font-bold text-base mb-10 max-w-3xl">
-              {announcement.content}
-            </p>
+            {editingId === announcement.id ? (
+              <div className="space-y-4 mb-10">
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold text-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="公告標題"
+                />
+                <textarea
+                  value={editForm.content}
+                  onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl font-medium text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={4}
+                  placeholder="公告內容"
+                />
+                <select
+                  value={editForm.priority}
+                  onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
+                  className="px-4 py-2 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Normal">一般優先</option>
+                  <option value="High">高優先</option>
+                </select>
+              </div>
+            ) : (
+              <>
+                <h3 className={clsx(
+                  "text-2xl font-black mb-4 transition-colors tracking-tight", 
+                  announcement.priority === 'High' ? "text-red-900" : "text-slate-800 group-hover:text-blue-600"
+                )}>
+                  {announcement.title}
+                </h3>
+                
+                <p className="text-slate-600 leading-relaxed font-bold text-base mb-10 max-w-3xl">
+                  {announcement.content}
+                </p>
+              </>
+            )}
             
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-8 border-t border-slate-50">
               <div className="flex flex-wrap gap-3">

@@ -4,6 +4,7 @@ import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remi
 import { json, redirect } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { vendors, contactWindows } from '../../db/schema/vendor';
+import { eq } from 'drizzle-orm';
 import { 
   Search, MapPin, Star, ChevronRight, LayoutGrid, 
   LayoutList, Plus, Sparkles, X, Heart, 
@@ -100,6 +101,30 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ 
         success: false, 
         error: '建立失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
+  if (intent === 'toggleFavorite') {
+    try {
+      const vendorId = formData.get('vendorId') as string;
+      const isFavorite = formData.get('isFavorite') === 'true';
+
+      if (!vendorId) {
+        return json({ success: false, error: '缺少廠商 ID' }, { status: 400 });
+      }
+
+      // 更新收藏狀態
+      await db.update(vendors)
+        .set({ isFavorite: !isFavorite })
+        .where(eq(vendors.id, vendorId));
+
+      return json({ success: true, error: null });
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      return json({ 
+        success: false, 
+        error: '更新失敗，請稍後再試' 
       }, { status: 500 });
     }
   }
@@ -231,18 +256,18 @@ function VendorDirectoryContent() {
 
   const totalPages = Math.ceil(filteredVendors.length / itemsPerPage);
 
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const favoriteFetcher = useFetcher();
 
   const handleToggleFavorite = (vendorId: string) => {
-    setFavorites(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(vendorId)) {
-        newSet.delete(vendorId);
-      } else {
-        newSet.add(vendorId);
-      }
-      return newSet;
-    });
+    const vendor = allVendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+
+    const formData = new FormData();
+    formData.append('intent', 'toggleFavorite');
+    formData.append('vendorId', vendorId);
+    formData.append('isFavorite', String(vendor.isFavorite));
+
+    favoriteFetcher.submit(formData, { method: 'post' });
   };
 
   // 重置分頁當篩選條件變更
@@ -392,10 +417,10 @@ function VendorDirectoryContent() {
                      onClick={(e) => { e.preventDefault(); handleToggleFavorite(vendor.id); }} 
                      className={clsx(
                        "p-2 rounded-full transition bg-white/80 backdrop-blur", 
-                       favorites.has(vendor.id) ? "text-red-500 shadow-inner" : "text-gray-300 hover:text-red-300 shadow-sm"
+                       vendor.isFavorite ? "text-red-500 shadow-inner" : "text-gray-300 hover:text-red-300 shadow-sm"
                      )}
                    >
-                     <Heart size={20} className={clsx(favorites.has(vendor.id) && "fill-current")} />
+                     <Heart size={20} className={clsx(vendor.isFavorite && "fill-current")} />
                    </button>
                 </div>
 
