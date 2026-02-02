@@ -293,6 +293,58 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  // 編輯合作紀錄
+  if (intent === "editTransaction") {
+    const transactionId = formData.get("transactionId") as string;
+    const description = formData.get("description") as string;
+    const amount = formData.get("amount") as string;
+    const initialQuote = formData.get("initialQuote") as string;
+    const date = formData.get("date") as string;
+    const timeSpentHours = formData.get("timeSpentHours") as string;
+    const status = formData.get("status") as string;
+
+    if (!transactionId || !description || !amount || !initialQuote || !date || !timeSpentHours) {
+      return json({ success: false, message: "請填寫所有必填欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.update(transactions)
+        .set({
+          description: description.trim(),
+          amount: amount,
+          initialQuote: initialQuote,
+          date: new Date(date),
+          timeSpentHours: timeSpentHours,
+          status: status as any,
+          updatedAt: new Date()
+        })
+        .where(eq(transactions.id, transactionId));
+
+      return json({ success: true, message: "合作紀錄已更新" });
+    } catch (error) {
+      console.error('Failed to edit transaction:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 刪除合作紀錄
+  if (intent === "deleteTransaction") {
+    const transactionId = formData.get("transactionId") as string;
+
+    if (!transactionId) {
+      return json({ success: false, message: "缺少交易 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(transactions).where(eq(transactions.id, transactionId));
+
+      return json({ success: true, message: "合作紀錄已刪除" });
+    } catch (error) {
+      console.error('Failed to delete transaction:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -430,6 +482,7 @@ export default function VendorDetail() {
   const [showEditContactModal, setShowEditContactModal] = useState(false);
   const [selectedEditContact, setSelectedEditContact] = useState<ContactWindow | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [selectedEditTransaction, setSelectedEditTransaction] = useState<Transaction | null>(null);
   const [avatarUrl, setAvatarUrl] = useState(vendor.avatarUrl);
   const [vendorDetails, setVendorDetails] = useState({
     name: vendor.name,
@@ -463,6 +516,8 @@ export default function VendorDetail() {
         setIsBlacklisted(actionData.isBlacklisted);
       }
       setShowEditModal(false);
+      setShowAddTransactionModal(false);
+      setSelectedEditTransaction(null);
     }
   }, [actionData]);
 
@@ -1181,6 +1236,12 @@ export default function VendorDetail() {
                             >
                               查看詳情
                             </button>
+                            <button 
+                              onClick={() => setSelectedEditTransaction(tx)}
+                              className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-sm hover:bg-blue-200 transition flex items-center gap-1"
+                            >
+                              <Edit2 size={14} /> 編輯
+                            </button>
                             {tx.status === TransactionStatus.IN_PROGRESS && (
                               <Form method="post">
                                 <input type="hidden" name="intent" value="acceptTransaction" />
@@ -1568,6 +1629,13 @@ export default function VendorDetail() {
             isOpen={showAddTransactionModal}
             vendorId={vendor.id}
             onClose={() => setShowAddTransactionModal(false)}
+          />
+        )}
+
+        {selectedEditTransaction && (
+          <EditTransactionModal
+            transaction={selectedEditTransaction}
+            onClose={() => setSelectedEditTransaction(null)}
           />
         )}
       </div>
@@ -2135,10 +2203,6 @@ const AddTransactionModal = ({ isOpen, onClose, vendorId }: { isOpen: boolean; o
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -2152,7 +2216,7 @@ const AddTransactionModal = ({ isOpen, onClose, vendorId }: { isOpen: boolean; o
           </button>
         </div>
 
-        <Form method="post" className="p-6" onSubmit={handleSubmit}>
+        <Form method="post" className="p-6">
           <input type="hidden" name="intent" value="createTransaction" />
           <input type="hidden" name="vendorId" value={vendorId} />
 
@@ -2281,6 +2345,191 @@ const AddTransactionModal = ({ isOpen, onClose, vendorId }: { isOpen: boolean; o
               className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '建立中...' : '建立合作紀錄'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+{/* Edit Transaction Modal */}
+const EditTransactionModal = ({ transaction, onClose }: { transaction: Transaction; onClose: () => void }) => {
+  const [description, setDescription] = useState(transaction.description);
+  const [amount, setAmount] = useState(transaction.amount.toString());
+  const [initialQuote, setInitialQuote] = useState(transaction.initialQuote.toString());
+  const [date, setDate] = useState(new Date(transaction.date).toISOString().split('T')[0]);
+  const [timeSpentHours, setTimeSpentHours] = useState(transaction.timeSpentHours.toString());
+  const [status, setStatus] = useState(transaction.status);
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  const handleDelete = () => {
+    if (confirm('確定要刪除這筆合作紀錄嗎？此操作無法復原。')) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      
+      const intentInput = document.createElement('input');
+      intentInput.type = 'hidden';
+      intentInput.name = 'intent';
+      intentInput.value = 'deleteTransaction';
+      form.appendChild(intentInput);
+      
+      const idInput = document.createElement('input');
+      idInput.type = 'hidden';
+      idInput.name = 'transactionId';
+      idInput.value = transaction.id;
+      form.appendChild(idInput);
+      
+      document.body.appendChild(form);
+      form.submit();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-slate-800">編輯合作紀錄</h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post" className="p-6">
+          <input type="hidden" name="intent" value="editTransaction" />
+          <input type="hidden" name="transactionId" value={transaction.id} />
+
+          <div className="space-y-4">
+            {/* 項目名稱 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                項目名稱 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="description"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                placeholder="例如：辦公室水電維修"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* 金額與報價 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  初始報價 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="initialQuote"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  placeholder="0"
+                  value={initialQuote}
+                  onChange={(e) => setInitialQuote(e.target.value)}
+                  required
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  實際金額 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="amount"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  placeholder="0"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            {/* 日期與工時 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  施工日期 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  name="date"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  工時（小時） <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="timeSpentHours"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  placeholder="0"
+                  value={timeSpentHours}
+                  onChange={(e) => setTimeSpentHours(e.target.value)}
+                  required
+                  min="0"
+                  step="0.5"
+                />
+              </div>
+            </div>
+
+            {/* 狀態 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                狀態 <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="status"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="IN_PROGRESS">進行中</option>
+                <option value="COMPLETED">已完成</option>
+                <option value="CANCELLED">已取消</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSubmitting}
+              className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Trash2 size={16} />
+              刪除
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!description.trim() || !amount || !initialQuote || !timeSpentHours || isSubmitting}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '儲存中...' : '儲存'}
             </button>
           </div>
         </Form>
