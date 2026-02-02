@@ -2646,6 +2646,10 @@ const EditPaymentModal = ({ transaction, onClose }: { transaction: Transaction; 
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(amount);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -2751,6 +2755,10 @@ const UploadLaborFormModal = ({ transaction, onClose }: { transaction: Transacti
   const [fileUrl, setFileUrl] = useState('');
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(amount);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
