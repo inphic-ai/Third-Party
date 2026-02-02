@@ -1407,14 +1407,6 @@ export default function VendorDetail() {
               {/* Header with Actions */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800">勞報/請款管理</h3>
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
-                    <Upload size={16} /> 上傳勞報單
-                  </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium">
-                    <Receipt size={16} /> 新增請款
-                  </button>
-                </div>
               </div>
 
               {/* Labor Form Status Summary */}
