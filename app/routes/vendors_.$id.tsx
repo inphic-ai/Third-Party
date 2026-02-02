@@ -3,7 +3,7 @@ import { useLoaderData, useNavigate, useActionData, useNavigation, Form } from '
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from '../services/db.server';
-import { vendors, contactWindows } from '../../db/schema/vendor';
+import { vendors, contactWindows, socialGroups } from '../../db/schema/vendor';
 import { eq } from 'drizzle-orm';
 import { 
   ArrowLeft, MapPin, Star, Phone, Mail, Globe, 
@@ -11,7 +11,7 @@ import {
   TrendingUp, Clock, CheckCircle, AlertCircle, Tag, Users, Briefcase,
   Crown, EyeOff, Eye, CalendarCheck, X, Info, MessageSquare, Camera,
   ExternalLink, Settings, Pencil, Plus, Calendar, DollarSign, Image,
-  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download, Sparkles, Edit2
+  ThumbsUp, ThumbsDown, FileCheck, Receipt, Upload, Download, Sparkles, Edit2, Trash2
 } from 'lucide-react';
 
 import { CATEGORY_GROUPS } from '~/constants';
@@ -102,6 +102,98 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } catch (error) {
       console.error("Failed to upload business card:", error);
       return json({ success: false, message: "上傳失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 編輯通訊群組
+  if (intent === "editGroup") {
+    const groupId = formData.get("groupId") as string;
+    const groupName = formData.get("groupName") as string;
+    const platform = formData.get("platform") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+
+    if (!groupId || !groupName) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.update(socialGroups)
+        .set({
+          groupName: groupName.trim(),
+          platform: platform as any,
+          inviteLink: inviteLink?.trim() || null,
+          updatedAt: new Date()
+        })
+        .where(eq(socialGroups.id, groupId));
+
+      return json({ success: true, message: "群組資料已更新" });
+    } catch (error) {
+      console.error('Failed to update group:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 刪除通訊群組
+  if (intent === "deleteGroup") {
+    const groupId = formData.get("groupId") as string;
+
+    if (!groupId) {
+      return json({ success: false, message: "缺少群組 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(socialGroups).where(eq(socialGroups.id, groupId));
+      return json({ success: true, message: "群組已刪除" });
+    } catch (error) {
+      console.error('Failed to delete group:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 編輯聯絡窗口
+  if (intent === "editContact") {
+    const contactId = formData.get("contactId") as string;
+    const name = formData.get("name") as string;
+    const role = formData.get("role") as string;
+    const mobile = formData.get("mobile") as string;
+    const lineId = formData.get("lineId") as string;
+
+    if (!contactId || !name) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.update(contactWindows)
+        .set({
+          name: name.trim(),
+          role: role?.trim() || null,
+          mobile: mobile?.trim() || null,
+          lineId: lineId?.trim() || null,
+          updatedAt: new Date()
+        })
+        .where(eq(contactWindows.id, contactId));
+
+      return json({ success: true, message: "聯絡窗口已更新" });
+    } catch (error) {
+      console.error('Failed to update contact:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 刪除聯絡窗口
+  if (intent === "deleteContact") {
+    const contactId = formData.get("contactId") as string;
+
+    if (!contactId) {
+      return json({ success: false, message: "缺少聯絡窗口 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(contactWindows).where(eq(contactWindows.id, contactId));
+      return json({ success: true, message: "聯絡窗口已刪除" });
+    } catch (error) {
+      console.error('Failed to delete contact:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
     }
   }
 
@@ -235,6 +327,10 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+  const [showEditContactModal, setShowEditContactModal] = useState(false);
+  const [selectedEditContact, setSelectedEditContact] = useState<ContactWindow | null>(null);
   const [avatarUrl, setAvatarUrl] = useState(vendor.avatarUrl);
   const [vendorDetails, setVendorDetails] = useState({
     name: vendor.name,
@@ -683,7 +779,14 @@ export default function VendorDetail() {
                     {vendor.socialGroups.map((group: any, idx: number) => (
                       <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition">
-                           <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                           <button 
+                             onClick={() => {
+                               setSelectedGroup(group);
+                               setShowEditGroupModal(true);
+                             }}
+                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
+                             title="編輯群組"
+                           >
                               <Settings size={14} />
                            </button>
                         </div>
@@ -744,7 +847,19 @@ export default function VendorDetail() {
                 {vendor.contacts && vendor.contacts.length > 0 ? (
                   <div className="grid md:grid-cols-2 gap-4">
                     {vendor.contacts.map((contact: ContactWindow, idx: number) => (
-                      <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition relative">
+                      <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition">
+                           <button 
+                             onClick={() => {
+                               setSelectedEditContact(contact);
+                               setShowEditContactModal(true);
+                             }}
+                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
+                             title="編輯聯絡窗口"
+                           >
+                              <Settings size={14} />
+                           </button>
+                        </div>
                         <div className="flex items-start gap-4">
                           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-500 text-xl font-bold shrink-0">
                             {contact.name?.charAt(0) || '?'}
@@ -1294,6 +1409,28 @@ export default function VendorDetail() {
             </div>
           </div>
         )}
+
+        {/* 編輯群組模態框 */}
+        {showEditGroupModal && selectedGroup && (
+          <EditGroupModal
+            group={selectedGroup}
+            onClose={() => {
+              setShowEditGroupModal(false);
+              setSelectedGroup(null);
+            }}
+          />
+        )}
+
+        {/* 編輯聯絡窗口模態框 */}
+        {showEditContactModal && selectedEditContact && (
+          <EditContactModal
+            contact={selectedEditContact}
+            onClose={() => {
+              setShowEditContactModal(false);
+              setSelectedEditContact(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -1591,6 +1728,254 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
               className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '儲存中...' : '儲存變更'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+
+// 編輯群組模態框
+const EditGroupModal = ({ group, onClose }: { group: any; onClose: () => void }) => {
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+  const [groupName, setGroupName] = useState(group.groupName || '');
+  const [platform, setPlatform] = useState(group.platform || 'LINE');
+  const [inviteLink, setInviteLink] = useState(group.inviteLink || '');
+
+  const handleDelete = () => {
+    if (!confirm(`確定要刪除群組「${group.groupName}」嗎？`)) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'deleteGroup');
+    formData.append('groupId', group.id);
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    for (const [key, value] of formData.entries()) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value as string;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-slate-800">編輯群組</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post">
+          <input type="hidden" name="intent" value="editGroup" />
+          <input type="hidden" name="groupId" value={group.id} />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">群組名稱 *</label>
+              <input
+                type="text"
+                name="groupName"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入群組名稱..."
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">平台</label>
+              <select
+                name="platform"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+              >
+                <option value="LINE">LINE</option>
+                <option value="WECHAT">WeChat</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">邀請連結</label>
+              <input
+                type="text"
+                name="inviteLink"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入邀請連結..."
+                value={inviteLink}
+                onChange={(e) => setInviteLink(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">系統代碼</label>
+              <div className="text-sm text-slate-500 bg-slate-50 px-4 py-3 rounded-xl font-mono">
+                {group.systemCode}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSubmitting}
+              className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Trash2 size={16} />
+              刪除
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!groupName.trim() || isSubmitting}
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '儲存中...' : '儲存'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+// 編輯聯絡窗口模態框
+const EditContactModal = ({ contact, onClose }: { contact: ContactWindow; onClose: () => void }) => {
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+  const [name, setName] = useState(contact.name || '');
+  const [role, setRole] = useState(contact.role || '');
+  const [mobile, setMobile] = useState(contact.mobile || '');
+  const [lineId, setLineId] = useState(contact.lineId || '');
+
+  const handleDelete = () => {
+    if (!confirm(`確定要刪除聯絡窗口「${contact.name}」嗎？`)) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'deleteContact');
+    formData.append('contactId', contact.id);
+    
+    const form = document.createElement('form');
+    form.method = 'post';
+    for (const [key, value] of formData.entries()) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value as string;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-slate-800">編輯聯絡窗口</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post">
+          <input type="hidden" name="intent" value="editContact" />
+          <input type="hidden" name="contactId" value={contact.id} />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">姓名 *</label>
+              <input
+                type="text"
+                name="name"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入姓名..."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">職位</label>
+              <input
+                type="text"
+                name="role"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="例如：業務經理"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
+              <input
+                type="tel"
+                name="mobile"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="例如：0912-345-678"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">LINE ID</label>
+              <input
+                type="text"
+                name="lineId"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入 LINE ID..."
+                value={lineId}
+                onChange={(e) => setLineId(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSubmitting}
+              className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Trash2 size={16} />
+              刪除
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || isSubmitting}
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '儲存中...' : '儲存'}
             </button>
           </div>
         </Form>
