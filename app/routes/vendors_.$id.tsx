@@ -345,6 +345,64 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  // 編輯勞報/請款資訊
+  if (intent === "editPayment") {
+    const transactionId = formData.get("transactionId") as string;
+    const laborFormStatus = formData.get("laborFormStatus") as string;
+    const qualityRating = formData.get("qualityRating") as string;
+    const managerFeedback = formData.get("managerFeedback") as string;
+
+    if (!transactionId || !laborFormStatus) {
+      return json({ success: false, message: "請填寫所有必填欄位" }, { status: 400 });
+    }
+
+    try {
+      const updateData: any = {
+        laborFormStatus: laborFormStatus as any,
+        managerFeedback: managerFeedback || null,
+        updatedAt: new Date()
+      };
+
+      if (qualityRating) {
+        updateData.qualityRating = parseInt(qualityRating);
+      }
+
+      await db.update(transactions)
+        .set(updateData)
+        .where(eq(transactions.id, transactionId));
+
+      return json({ success: true, message: "勞報/請款資訊已更新" });
+    } catch (error) {
+      console.error('Failed to edit payment:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 上傳勞報單
+  if (intent === "uploadLaborForm") {
+    const transactionId = formData.get("transactionId") as string;
+    const documentUrl = formData.get("documentUrl") as string;
+
+    if (!transactionId || !documentUrl) {
+      return json({ success: false, message: "請上傳檔案" }, { status: 400 });
+    }
+
+    try {
+      await db.update(transactions)
+        .set({
+          laborFormStatus: 'PENDING' as any,
+          laborFormDocumentUrl: documentUrl,
+          updatedAt: new Date()
+        })
+        .where(eq(transactions.id, transactionId));
+
+      return json({ success: true, message: "勞報單已上傳" });
+    } catch (error) {
+      console.error('Failed to upload labor form:', error);
+      return json({ success: false, message: "上傳失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -483,6 +541,8 @@ export default function VendorDetail() {
   const [selectedEditContact, setSelectedEditContact] = useState<ContactWindow | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [selectedEditTransaction, setSelectedEditTransaction] = useState<Transaction | null>(null);
+  const [selectedEditPayment, setSelectedEditPayment] = useState<Transaction | null>(null);
+  const [selectedUploadPayment, setSelectedUploadPayment] = useState<Transaction | null>(null);
   const [avatarUrl, setAvatarUrl] = useState(vendor.avatarUrl);
   const [vendorDetails, setVendorDetails] = useState({
     name: vendor.name,
@@ -518,6 +578,8 @@ export default function VendorDetail() {
       setShowEditModal(false);
       setShowAddTransactionModal(false);
       setSelectedEditTransaction(null);
+      setSelectedEditPayment(null);
+      setSelectedUploadPayment(null);
     }
   }, [actionData]);
 
@@ -1420,8 +1482,17 @@ export default function VendorDetail() {
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex gap-2 justify-end">
+                                <button 
+                                  onClick={() => setSelectedEditPayment(tx)}
+                                  className="px-3 py-1.5 bg-indigo-100 text-indigo-600 rounded-lg text-xs hover:bg-indigo-200 transition flex items-center gap-1"
+                                >
+                                  <Edit2 size={12} /> 編輯
+                                </button>
                                 {tx.laborFormStatus === 'N/A' && (
-                                  <button className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs hover:bg-blue-200 transition">
+                                  <button 
+                                    onClick={() => setSelectedUploadPayment(tx)}
+                                    className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs hover:bg-blue-200 transition"
+                                  >
                                     上傳勞報
                                   </button>
                                 )}
@@ -1430,9 +1501,24 @@ export default function VendorDetail() {
                                     提交審核
                                   </button>
                                 )}
-                                <button className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200 transition">
-                                  <Download size={14} />
-                                </button>
+                                {tx.laborFormDocumentUrl ? (
+                                  <a 
+                                    href={tx.laborFormDocumentUrl}
+                                    download
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 bg-green-100 text-green-600 rounded-lg text-xs hover:bg-green-200 transition flex items-center gap-1"
+                                  >
+                                    <Download size={14} /> 下載
+                                  </a>
+                                ) : (
+                                  <button 
+                                    disabled
+                                    className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-lg text-xs cursor-not-allowed"
+                                  >
+                                    <Download size={14} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1636,6 +1722,20 @@ export default function VendorDetail() {
           <EditTransactionModal
             transaction={selectedEditTransaction}
             onClose={() => setSelectedEditTransaction(null)}
+          />
+        )}
+
+        {selectedEditPayment && (
+          <EditPaymentModal
+            transaction={selectedEditPayment}
+            onClose={() => setSelectedEditPayment(null)}
+          />
+        )}
+
+        {selectedUploadPayment && (
+          <UploadLaborFormModal
+            transaction={selectedUploadPayment}
+            onClose={() => setSelectedUploadPayment(null)}
           />
         )}
       </div>
@@ -2530,6 +2630,231 @@ const EditTransactionModal = ({ transaction, onClose }: { transaction: Transacti
               className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '儲存中...' : '儲存'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+{/* Edit Payment Modal */}
+const EditPaymentModal = ({ transaction, onClose }: { transaction: Transaction; onClose: () => void }) => {
+  const [laborFormStatus, setLaborFormStatus] = useState(transaction.laborFormStatus);
+  const [managerFeedback, setManagerFeedback] = useState(transaction.managerFeedback || '');
+  const [qualityRating, setQualityRating] = useState(transaction.qualityRating?.toString() || '');
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-slate-800">編輯勞報/請款資訊</h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post" className="p-6">
+          <input type="hidden" name="intent" value="editPayment" />
+          <input type="hidden" name="transactionId" value={transaction.id} />
+
+          <div className="space-y-4">
+            {/* 案件資訊（唯讀） */}
+            <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="text-sm font-bold text-slate-700 mb-2">案件資訊</div>
+              <div className="text-sm text-slate-600">{transaction.description}</div>
+              <div className="text-xs text-slate-400 mt-1">#{transaction.id}</div>
+              <div className="text-lg font-bold text-slate-800 mt-2">{formatCurrency(transaction.amount)}</div>
+            </div>
+
+            {/* 勞報狀態 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                勞報狀態 <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="laborFormStatus"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                value={laborFormStatus}
+                onChange={(e) => setLaborFormStatus(e.target.value)}
+              >
+                <option value="N/A">N/A（未上傳）</option>
+                <option value="PENDING">待處理</option>
+                <option value="SUBMITTED">已提交</option>
+                <option value="PAID">已付款</option>
+              </select>
+            </div>
+
+            {/* 品質評分 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                品質評分（1-5）
+              </label>
+              <input
+                type="number"
+                name="qualityRating"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="1-5"
+                value={qualityRating}
+                onChange={(e) => setQualityRating(e.target.value)}
+                min="1"
+                max="5"
+              />
+            </div>
+
+            {/* 管理者備註 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                管理者備註
+              </label>
+              <textarea
+                name="managerFeedback"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入備註..."
+                rows={4}
+                value={managerFeedback}
+                onChange={(e) => setManagerFeedback(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '儲存中...' : '儲存'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+{/* Upload Labor Form Modal */}
+const UploadLaborFormModal = ({ transaction, onClose }: { transaction: Transaction; onClose: () => void }) => {
+  const [uploading, setUploading] = useState(false);
+  const [fileUrl, setFileUrl] = useState('');
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      // TODO: 實際上傳到 S3 或其他儲存服務
+      // 這裡暫時使用假的 URL
+      const fakeUrl = `https://example.com/labor-forms/${transaction.id}/${file.name}`;
+      setFileUrl(fakeUrl);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('上傳失敗，請稍後再試');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-slate-800">上傳勞報單</h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post" className="p-6">
+          <input type="hidden" name="intent" value="uploadLaborForm" />
+          <input type="hidden" name="transactionId" value={transaction.id} />
+          <input type="hidden" name="documentUrl" value={fileUrl} />
+
+          <div className="space-y-4">
+            {/* 案件資訊 */}
+            <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="text-sm font-bold text-slate-700 mb-2">案件資訊</div>
+              <div className="text-sm text-slate-600">{transaction.description}</div>
+              <div className="text-xs text-slate-400 mt-1">#{transaction.id}</div>
+              <div className="text-lg font-bold text-slate-800 mt-2">{formatCurrency(transaction.amount)}</div>
+            </div>
+
+            {/* 檔案上傳 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                勞報單檔案 <span className="text-red-500">*</span>
+              </label>
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 transition">
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  className="hidden"
+                  id="labor-form-upload"
+                  disabled={uploading}
+                />
+                <label
+                  htmlFor="labor-form-upload"
+                  className="cursor-pointer flex flex-col items-center"
+                >
+                  <Upload size={48} className="text-slate-400 mb-3" />
+                  <div className="text-sm font-medium text-slate-700">
+                    {uploading ? '上傳中...' : '點擊上傳檔案'}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    支援 PDF, DOC, DOCX, JPG, PNG 格式
+                  </div>
+                  {fileUrl && (
+                    <div className="mt-3 text-sm text-green-600 font-medium">
+                      ✓ 檔案已上傳
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+              <div className="flex items-start gap-2">
+                <div className="text-blue-600 mt-0.5">ℹ️</div>
+                <div className="text-sm text-blue-700">
+                  上傳後，勞報狀態將自動更新為「待處理」
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!fileUrl || isSubmitting}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '提交中...' : '確認上傳'}
             </button>
           </div>
         </Form>
