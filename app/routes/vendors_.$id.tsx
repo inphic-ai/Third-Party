@@ -76,6 +76,33 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "updateContact") {
+    const contactId = formData.get("contactId") as string;
+    const name = formData.get("name") as string;
+    const role = formData.get("role") as string;
+    const mobile = formData.get("mobile") as string;
+    const email = formData.get("email") as string;
+    const lineId = formData.get("lineId") as string;
+
+    try {
+      await db.update(contactWindows)
+        .set({
+          name: name || null,
+          role: role || null,
+          mobile: mobile || null,
+          email: email || null,
+          lineId: lineId || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(contactWindows.id, contactId));
+
+      return json({ success: true, message: "聯絡人資料已更新" });
+    } catch (error) {
+      console.error("Failed to update contact:", error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -201,6 +228,8 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactWindow | null>(null);
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
+  const [showEditContactModal, setShowEditContactModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<ContactWindow | null>(null);
   const [vendorDetails, setVendorDetails] = useState({
     serviceArea: vendor.serviceArea || '',
     companyAddress: vendor.companyAddress || vendor.address || ''
@@ -215,8 +244,14 @@ export default function VendorDetail() {
         });
       }
       setShowEditModal(false);
+      setShowEditContactModal(false);
     }
   }, [actionData]);
+
+  const handleEditContact = (contact: ContactWindow) => {
+    setEditingContact(contact);
+    setShowEditContactModal(true);
+  };
 
   // Helper functions
   const getCategoryLabel = (category: string) => {
@@ -582,7 +617,14 @@ export default function VendorDetail() {
                 {vendor.contacts && vendor.contacts.length > 0 ? (
                   <div className="grid md:grid-cols-2 gap-4">
                     {vendor.contacts.map((contact: ContactWindow, idx: number) => (
-                      <div key={idx} className={`p-4 rounded-xl border ${contact.isMainContact ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-white'}`}>
+                      <div key={idx} className={`p-4 rounded-xl border ${contact.isMainContact ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-white'} relative`}>
+                        <button
+                          onClick={() => handleEditContact(contact)}
+                          className="absolute top-3 right-3 p-2 rounded-lg bg-white hover:bg-slate-100 transition border border-slate-200"
+                          title="編輯聯絡人"
+                        >
+                          <Pencil size={14} className="text-slate-600" />
+                        </button>
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
@@ -1081,6 +1123,131 @@ export default function VendorDetail() {
             isSubmitting={isSubmitting}
             actionData={actionData}
           />
+        )}
+
+        {/* Edit Contact Modal */}
+        {showEditContactModal && editingContact && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditContactModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <User size={24} className="text-blue-600" />
+                    編輯聯絡人
+                  </h3>
+                  <button
+                    onClick={() => setShowEditContactModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+              </div>
+
+              <Form method="post" className="p-6 space-y-4">
+                <input type="hidden" name="intent" value="updateContact" />
+                <input type="hidden" name="contactId" value={editingContact.id} />
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={editingContact.name || ''}
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="聯絡人姓名"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    職稱/角色
+                  </label>
+                  <input
+                    type="text"
+                    name="role"
+                    defaultValue={editingContact.role || ''}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例：業務經理、工程師"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    手機號碼
+                  </label>
+                  <input
+                    type="tel"
+                    name="mobile"
+                    defaultValue={editingContact.mobile || ''}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0912-345-678"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={editingContact.email || ''}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="example@company.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    LINE ID
+                  </label>
+                  <input
+                    type="text"
+                    name="lineId"
+                    defaultValue={editingContact.lineId || ''}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="LINE ID"
+                  />
+                </div>
+
+                {actionData?.message && (
+                  <div className={`px-4 py-3 rounded-xl ${
+                    actionData.success 
+                      ? 'bg-green-50 border border-green-200 text-green-700' 
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {actionData.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? '儲存中...' : (
+                      <>
+                        <Edit size={18} />
+                        儲存修改
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditContactModal(false)}
+                    className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </div>
         )}
 
         {/* Transaction Detail Modal */}
