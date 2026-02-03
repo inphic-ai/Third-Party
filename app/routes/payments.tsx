@@ -125,7 +125,45 @@ function PaymentsContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(15);
+  
+  // 智慧分頁：根據視窗高度自動計算每頁項目數
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  
+  useEffect(() => {
+    const calculateItemsPerPage = () => {
+      // 取得視窗高度
+      const windowHeight = window.innerHeight;
+      
+      // 扣除固定元素的高度
+      const headerHeight = 80;  // 頁面標題區域
+      const statsHeight = 120;  // 統計卡片區域
+      const filtersHeight = 80; // 篩選器區域
+      const paginationHeight = 80; // 分頁控制區域
+      const padding = 100;      // 額外的 padding 和 margin
+      
+      // 計算可用高度
+      const availableHeight = windowHeight - headerHeight - statsHeight - filtersHeight - paginationHeight - padding;
+      
+      // 每個項目的預估高度（包含 border 和 padding）
+      const itemHeight = 60;
+      
+      // 計算可顯示的項目數（最少 5 筆，最多 50 筆）
+      const calculatedItems = Math.floor(availableHeight / itemHeight);
+      const items = Math.max(5, Math.min(50, calculatedItems));
+      
+      setItemsPerPage(items);
+    };
+    
+    // 初始計算
+    calculateItemsPerPage();
+    
+    // 監聽視窗大小變化
+    window.addEventListener('resize', calculateItemsPerPage);
+    
+    return () => {
+      window.removeEventListener('resize', calculateItemsPerPage);
+    };
+  }, []);
   const [currency, setCurrency] = useState<Currency>('TWD');
   
   // 日期範圍 state
