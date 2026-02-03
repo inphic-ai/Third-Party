@@ -92,10 +92,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       status: user.status,
       createdAt: user.createdAt.toISOString(),
       rejectionReason: user.rejectionReason,
-      isActive: user.isActive,
-      ipWhitelist: user.ipWhitelist,
-      timeRestrictionEnabled: user.timeRestrictionEnabled,
-      permissions: user.permissions
+      isActive: user.isActive ?? true,
+      ipWhitelist: user.ipWhitelist ?? null,
+      timeRestrictionEnabled: user.timeRestrictionEnabled ?? false,
+      permissions: user.permissions ?? null
     }));
     
     const departmentsList = allDepartments.map(dept => ({
