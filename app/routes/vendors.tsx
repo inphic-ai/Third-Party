@@ -109,7 +109,10 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       // 取得表單資料
       const projectType = formData.get('projectType') as string;
-      const budget = formData.get('budget') as string;
+      const budgetMinStr = formData.get('budgetMin') as string;
+      const budgetMaxStr = formData.get('budgetMax') as string;
+      const budgetMin = budgetMinStr ? parseInt(budgetMinStr) : null;
+      const budgetMax = budgetMaxStr ? parseInt(budgetMaxStr) : null;
       const regionPreferences = formData.getAll('regionPreference') as string[];
       const serviceTypePreferences = formData.getAll('serviceTypePreference') as string[];
       const requirements = formData.get('requirements') as string;
@@ -140,9 +143,21 @@ export async function action({ request }: ActionFunctionArgs) {
           if (!hasMatchingServiceType) return false;
         }
         
-        // 預算篩選
-        if (budget && vendor.priceRange !== budget) {
-          return false;
+        // 預算篩選（根據 priceRange 轉換為估計金額）
+        if (budgetMin !== null || budgetMax !== null) {
+          // priceRange 轉換為估計金額範圍
+          const priceRangeMap: Record<string, { min: number; max: number }> = {
+            '$': { min: 0, max: 50000 },
+            '$$': { min: 50000, max: 200000 },
+            '$$$': { min: 200000, max: 1000000 },
+            '$$$$': { min: 1000000, max: Infinity }
+          };
+          
+          const vendorPriceRange = priceRangeMap[vendor.priceRange] || { min: 0, max: Infinity };
+          
+          // 檢查是否有交集
+          if (budgetMin !== null && vendorPriceRange.max < budgetMin) return false;
+          if (budgetMax !== null && vendorPriceRange.min > budgetMax) return false;
         }
         
         return true;
@@ -153,12 +168,22 @@ export async function action({ request }: ActionFunctionArgs) {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
+      // 準備預算描述
+      let budgetDescription = '不限';
+      if (budgetMin !== null && budgetMax !== null) {
+        budgetDescription = `${budgetMin.toLocaleString()} - ${budgetMax.toLocaleString()} 元`;
+      } else if (budgetMin !== null) {
+        budgetDescription = `${budgetMin.toLocaleString()} 元以上`;
+      } else if (budgetMax !== null) {
+        budgetDescription = `${budgetMax.toLocaleString()} 元以下`;
+      }
+
       // 準備提示詞
       const prompt = `你是一個廠商推薦專家。根據以下需求和廠商列表，請推薦最適合的 3-5 家廠商，並說明推薦理由。
 
 需求條件：
 - 專案類型：${projectType}
-- 預算範圍：${budget || '不限'}
+- 預算範圍：${budgetDescription}
 - 地區偏好：${regionPreferences.join(', ') || '不限'}
 - 身分屬性：${serviceTypePreferences.join(', ') || '不限'}
 - 其他需求：${requirements || '無'}
@@ -1059,13 +1084,29 @@ function VendorDirectoryContent() {
                 {/* 預算範圍 */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">預算範圍</label>
-                  <div className="flex gap-4">
-                    {['$', '$$', '$$$', '$$$$'].map(budget => (
-                      <label key={budget} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
-                        <input type="radio" name="budget" value={budget} className="w-4 h-4 text-indigo-600" />
-                        <span className="text-sm font-bold text-slate-700">{budget}</span>
-                      </label>
-                    ))}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">最低預算（元）</label>
+                      <input 
+                        type="number"
+                        name="budgetMin"
+                        min="0"
+                        step="1000"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">最高預算（元）</label>
+                      <input 
+                        type="number"
+                        name="budgetMax"
+                        min="0"
+                        step="1000"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                        placeholder="不限"
+                      />
+                    </div>
                   </div>
                 </div>
 
