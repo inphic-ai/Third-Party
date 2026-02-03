@@ -8,6 +8,7 @@ import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
 import { eq } from 'drizzle-orm';
+import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
@@ -132,6 +133,19 @@ export async function action({ request }: ActionFunctionArgs) {
           return json({ success: false, error: '缺少必要參數' }, { status: 400 });
         }
 
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 獲取部門資料
+        const [dept] = await db.select().from(departments).where(eq(departments.id, departmentId)).limit(1);
+        if (!dept) {
+          return json({ success: false, error: '部門不存在' }, { status: 404 });
+        }
+
+        // 更新用戶狀態
         await db.update(users)
           .set({
             status: 'approved',
@@ -142,9 +156,10 @@ export async function action({ request }: ActionFunctionArgs) {
           })
           .where(eq(users.id, userId));
 
-        // TODO: Send approval email notification
+        // 發送批准郵件
+        await sendApprovalEmail(user.email, user.name, dept.name);
 
-        return json({ success: true, message: '用戶已批准' });
+        return json({ success: true, message: '用戶已批准，通知郵件已發送' });
       }
 
       case 'rejectUser': {
@@ -155,6 +170,13 @@ export async function action({ request }: ActionFunctionArgs) {
           return json({ success: false, error: '缺少必要參數' }, { status: 400 });
         }
 
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 更新用戶狀態
         await db.update(users)
           .set({
             status: 'rejected',
@@ -163,9 +185,10 @@ export async function action({ request }: ActionFunctionArgs) {
           })
           .where(eq(users.id, userId));
 
-        // TODO: Send rejection email notification
+        // 發送拒絕郵件
+        await sendRejectionEmail(user.email, user.name, reason);
 
-        return json({ success: true, message: '用戶已拒絕' });
+        return json({ success: true, message: '用戶已拒絕，通知郵件已發送' });
       }
 
       case 'unblockUser': {
