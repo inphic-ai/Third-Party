@@ -6,7 +6,7 @@ import { db } from '../services/db.server';
 import { invoiceRecords } from '../../db/schema/financial';
 import { vendors } from '../../db/schema/vendor';
 import { eq, desc } from 'drizzle-orm';
-import { requireUser } from '~/services/auth.server';zle-orm';
+import { requireUser } from '~/services/auth.server';
 import { 
   Search, FilePlus, DollarSign, Download, Trash2, 
   X, Maximize2, Camera, Edit3, FileText, 

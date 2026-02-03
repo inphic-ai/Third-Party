@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
 import { useLoaderData, useActionData, useNavigation, Form, useRevalidator } from '@remix-run/react';
-import { requireUser } from '~/services/auth.server';;
+import { requireUser } from '~/services/auth.server';
 import { 
   Wrench, 
   Plus, 

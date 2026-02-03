@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
 import { vendors, socialGroups, contactWindows } from '../../db/schema/vendor';
-import { requireUser } from '~/services/auth.server';/vendor';
+import { requireUser } from '~/services/auth.server';
 import { 
   MessageCircle, 
   Search, 

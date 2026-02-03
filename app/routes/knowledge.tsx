@@ -4,7 +4,7 @@ import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { knowledgeBaseItems } from '../../db/schema/system';
-import { requireUser } from '~/services/auth.server';/system';
+import { requireUser } from '~/services/auth.server';
 import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar, Plus, X, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 
