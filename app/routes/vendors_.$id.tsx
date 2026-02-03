@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useLoaderData, useNavigate, useActionData, useNavigation, Form } from '@remix-run/react';
+import { useLoaderData, useNavigate, useActionData, useNavigation, Form, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { vendors, contactWindows, socialGroups } from '../../db/schema/vendor';
+import { contactLogs } from '../../db/schema/operations';
 import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
 import { 
@@ -400,6 +401,51 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } catch (error) {
       console.error('Failed to upload labor form:', error);
       return json({ success: false, message: "上傳失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 建立聯繫紀錄
+  if (intent === "createContactLog") {
+    const vendorId = formData.get("vendorId") as string;
+    const contactId = formData.get("contactId") as string;
+    const note = formData.get("note") as string;
+    const isReservation = formData.get("isReservation") === "true";
+    const resDate = formData.get("resDate") as string;
+    const resTime = formData.get("resTime") as string;
+    const quoteAmount = formData.get("quoteAmount") as string;
+    const productId = formData.get("productId") as string;
+
+    if (!vendorId || !note) {
+      return json({ success: false, message: "請填寫聯繫筆記" }, { status: 400 });
+    }
+
+    try {
+      const logData: any = {
+        vendorId,
+        contactId: contactId || null,
+        date: new Date(),
+        status: 'IN_PROGRESS' as any,
+        note: note.trim(),
+        isReservation,
+        createdBy: 'system-user-id' // TODO: 從 session 獲取
+      };
+
+      if (isReservation && resDate && resTime) {
+        logData.reservationTime = new Date(`${resDate}T${resTime}:00`);
+        if (quoteAmount) {
+          logData.quoteAmount = quoteAmount;
+        }
+        if (productId) {
+          logData.relatedProductId = productId;
+        }
+      }
+
+      await db.insert(contactLogs).values(logData);
+
+      return json({ success: true, message: "聯繫紀錄已儲存" });
+    } catch (error) {
+      console.error('Failed to create contact log:', error);
+      return json({ success: false, message: "儲存失敗，請稍後再試" }, { status: 500 });
     }
   }
 
@@ -1225,9 +1271,6 @@ export default function VendorDetail() {
                   <div className="text-center py-12 text-slate-400">
                     <MessageSquare size={48} className="mx-auto mb-4 opacity-50" />
                     <p>尚無聯繫紀錄</p>
-                    <button className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
-                      新增第一筆紀錄
-                    </button>
                   </div>
                 )
               )}
@@ -1770,10 +1813,14 @@ const ContactLogModal: React.FC<{
     setNote(prev => prev ? `${prev} ${tag}` : tag);
   };
 
-  const handleSave = () => {
-    alert('聯繫紀錄已儲存（模擬）');
-    onClose();
-  };
+  const fetcher = useFetcher();
+
+  // 關閉模態框當提交成功
+  React.useEffect(() => {
+    if (fetcher.data?.success) {
+      onClose();
+    }
+  }, [fetcher.data, onClose]);
 
   const contactPhone = contact.mobile || vendor.mainPhone;
 
@@ -1885,15 +1932,29 @@ const ContactLogModal: React.FC<{
                </div>
              )}
 
-             <div className="flex gap-3 pt-2">
-                <button onClick={onClose} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg">取消</button>
+             <fetcher.Form method="post" className="flex gap-3 pt-2">
+                <input type="hidden" name="intent" value="createContactLog" />
+                <input type="hidden" name="vendorId" value={vendor.id} />
+                <input type="hidden" name="contactId" value={contact.id} />
+                <input type="hidden" name="note" value={note} />
+                <input type="hidden" name="isReservation" value={isReservation.toString()} />
+                {isReservation && (
+                  <>
+                    <input type="hidden" name="resDate" value={resDate} />
+                    <input type="hidden" name="resTime" value={resTime} />
+                    <input type="hidden" name="quoteAmount" value={quoteAmount} />
+                    <input type="hidden" name="productId" value={productId} />
+                  </>
+                )}
+                <button type="button" onClick={onClose} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg">取消</button>
                 <button 
-                  onClick={handleSave}
-                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2"
+                  type="submit"
+                  disabled={fetcher.state === "submitting"}
+                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                   <CheckCircle size={16} /> {isReservation ? "建立預約並儲存" : "儲存紀錄"}
+                   <CheckCircle size={16} /> {fetcher.state === "submitting" ? "儲存中..." : (isReservation ? "建立預約並儲存" : "儲存紀錄")}
                 </button>
-             </div>
+             </fetcher.Form>
            </div>
          </div>
        </div>
