@@ -3,7 +3,7 @@ import { useLoaderData, useNavigate, useActionData, useNavigation, Form, useFetc
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from '../services/db.server';
-import { vendors, contactWindows, socialGroups } from '../../db/schema/vendor';
+import { vendors, contactWindows, socialGroups, vendorRatings } from '../../db/schema/vendor';
 import { contactLogs } from '../../db/schema/operations';
 import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
@@ -182,7 +182,45 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
-  // 建立新聯絡窗口
+  // 建立廠商評分
+  if (intent === "createRating") {
+    const vendorId = formData.get("vendorId") as string;
+    const rating = parseInt(formData.get("rating") as string);
+    const comment = formData.get("comment") as string;
+
+    if (!vendorId || !rating) {
+      return json({ success: false, message: "缺少必填欄位" }, { status: 400 });
+    }
+
+    try {
+      // 插入評分紀錄
+      await db.insert(vendorRatings).values({
+        vendorId,
+        rating,
+        comment: comment?.trim() || null,
+        createdBy: session.user.id
+      });
+
+      // 重新計算廠商的平均評分
+      const allRatings = await db.select().from(vendorRatings).where(eq(vendorRatings.vendorId, vendorId));
+      const avgRating = allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length;
+
+      // 更新廠商的評分和評分次數
+      await db.update(vendors)
+        .set({
+          rating: avgRating.toFixed(1),
+          ratingCount: allRatings.length,
+          updatedAt: new Date()
+        })
+        .where(eq(vendors.id, vendorId));
+
+      return json({ success: true, message: "評分已提交" });
+    } catch (error) {
+      console.error('Failed to create rating:', error);
+      return json({ success: false, message: "提交失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   if (intent === "createContact") {
     const vendorId = formData.get("vendorId") as string;
     const name = formData.get("name") as string;
@@ -654,6 +692,7 @@ export default function VendorDetail() {
   const [selectedEditContact, setSelectedEditContact] = useState<ContactWindow | null>(null);
   const [showCreateContactModal, setShowCreateContactModal] = useState(false);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
   const [selectedEditTransaction, setSelectedEditTransaction] = useState<Transaction | null>(null);
   const [selectedEditPayment, setSelectedEditPayment] = useState<Transaction | null>(null);
   const [selectedUploadPayment, setSelectedUploadPayment] = useState<Transaction | null>(null);
@@ -905,9 +944,12 @@ export default function VendorDetail() {
                  >
                    <CalendarCheck size={16} /> 立即預約
                  </button>
-                 <button className="bg-slate-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-700 transition w-full">
-                   給予評分
-                 </button>
+                <button 
+                  onClick={() => setShowRatingModal(true)}
+                  className="bg-slate-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-700 transition w-full"
+                >
+                  給予評分
+                </button>
                </div>
             </div>
           </div>
@@ -1849,6 +1891,14 @@ export default function VendorDetail() {
           <CreateContactModal
             vendorId={vendor.id}
             onClose={() => setShowCreateContactModal(false)}
+          />
+        )}
+
+        {/* 廠商評分模態框 */}
+        {showRatingModal && (
+          <VendorRatingModal
+            vendor={vendor}
+            onClose={() => setShowRatingModal(false)}
           />
         )}
 
@@ -3322,6 +3372,110 @@ const UploadLaborFormModal = ({ transaction, onClose }: { transaction: Transacti
             </button>
           </div>
         </Form>
+      </div>
+    </div>
+  );
+};
+
+
+// ============================================
+// VendorRatingModal - 廠商評分模態框
+// ============================================
+
+const VendorRatingModal: React.FC<{
+  vendor: any;
+  onClose: () => void;
+}> = ({ vendor, onClose }) => {
+  const [rating, setRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Star size={20} /> 給予評分
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24}/></button>
+        </div>
+
+        <div className="p-6">
+          <div className="mb-6 text-center">
+            <p className="text-sm text-slate-500 mb-1">正在評分</p>
+            <h3 className="text-2xl font-bold text-slate-800">{vendor.name}</h3>
+            <p className="text-xs text-slate-400 mt-1">分享您的使用體驗</p>
+          </div>
+
+          <Form method="post">
+            <input type="hidden" name="intent" value="createRating" />
+            <input type="hidden" name="vendorId" value={vendor.id} />
+            <input type="hidden" name="rating" value={rating} />
+
+            <div className="space-y-6">
+              {/* 整體評分 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">整體評分 *</label>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      className="transition-transform hover:scale-110"
+                    >
+                      <Star
+                        size={40}
+                        className={`transition-colors ${
+                          star <= (hoverRating || rating)
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-slate-300'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-center text-2xl font-bold text-slate-800">{rating}.0 分</p>
+              </div>
+
+              {/* 評論內容 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">評論內容（選填）</label>
+                <textarea
+                  name="comment"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                  placeholder="請分享您的使用體驗..."
+                  rows={4}
+                  maxLength={500}
+                />
+                <p className="text-xs text-slate-400 mt-1 text-right">{comment.length}/500</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? '提交中...' : '提交評分'}
+              </button>
+            </div>
+          </Form>
+        </div>
       </div>
     </div>
   );
