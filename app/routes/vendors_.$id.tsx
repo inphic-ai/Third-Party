@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLoaderData, useNavigate, useActionData, useNavigation, Form, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
@@ -7,6 +7,7 @@ import { vendors, contactWindows, socialGroups, vendorRatings } from '../../db/s
 import { contactLogs } from '../../db/schema/operations';
 import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
+import { requireUser } from '~/services/auth.server';
 import { 
   ArrowLeft, MapPin, Star, Phone, Mail, Globe, 
   Building2, Package, User, Edit, Heart, MessageCircle, FileText,
@@ -556,7 +557,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
+  
   try {
     const [vendor] = await db.select().from(vendors).where(eq(vendors.id, params.id!));
     

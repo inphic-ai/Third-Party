@@ -1,7 +1,8 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link } from "@remix-run/react";
+import { useLoaderData, Link, Form } from "@remix-run/react";
 import { db, schema } from "../services/db.server";
 import { count, eq, sql } from 'drizzle-orm';
+import { requireUser } from "~/services/auth.server";
 import { 
   Globe, Megaphone, Zap, LayoutGrid, Package, Wallet, ShieldAlert,
   ArrowUpRight, Activity, TrendingUp, Bot, Sparkles, Hammer, Factory
@@ -9,6 +10,9 @@ import {
 import { clsx } from "clsx";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入，否則跳轉到登入頁
+  const user = await requireUser(request);
+  
   try {
     // 從資料庫讀取公告
     const announcements = await db.select().from(schema.announcements).limit(5);
@@ -64,7 +68,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         riskCount,
         identityMix
       },
-      dbConnected: true
+      dbConnected: true,
+      user
     });
   } catch (error) {
     console.error('Database error:', error);
@@ -83,13 +88,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
           { name: '製造商品', value: 10 }
         ]
       },
-      dbConnected: false
+      dbConnected: false,
+      user
     });
   }
 }
 
 export default function WarRoomPage() {
-  const { announcements, stats, dbConnected } = useLoaderData<typeof loader>();
+  const { announcements, stats, dbConnected, user } = useLoaderData<typeof loader>();
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 max-w-[1600px] mx-auto">
@@ -118,6 +124,26 @@ export default function WarRoomPage() {
           <p className="text-slate-500 font-medium">Postgres Real-time Supply Chain Analysis</p>
         </div>
         <div className="flex items-center gap-3">
+           {/* 用戶資訊 */}
+           <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-2xl border border-slate-200 shadow-sm">
+             {user.avatarUrl && (
+               <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full" />
+             )}
+             <div className="text-left">
+               <p className="text-sm font-bold text-slate-800">{user.name}</p>
+               <p className="text-xs text-slate-500">{user.email}</p>
+             </div>
+           </div>
+           {/* 登出按鈕 */}
+           <Form action="/logout" method="post">
+             <button
+               type="submit"
+               className="px-4 py-2 bg-slate-800 text-white rounded-2xl hover:bg-slate-700 transition text-sm font-bold"
+             >
+               登出
+             </button>
+           </Form>
+           {/* 資料庫狀態 */}
            <div className={clsx(
              "px-4 py-2 rounded-2xl border text-xs font-black shadow-sm flex items-center gap-2",
              dbConnected 

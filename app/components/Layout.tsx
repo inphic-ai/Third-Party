@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from '@remix-run/react';
+import { Link, useLocation, useRouteLoaderData } from '@remix-run/react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -17,40 +17,33 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-// 暫時使用靜態使用者資料（後續會從資料庫讀取）
-const currentUser = {
-  id: '1',
-  name: '系統管理員',
-  role: 'System Admin',
-  avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop',
-  permissions: {
-    viewWarRoom: true,
-    viewVendors: true,
-    viewTasks: true,
-    viewCommunication: true,
-    viewPayments: true,
-    viewKnowledge: true,
-    viewAnnouncements: true,
-    accessAdminPanel: true,
-  }
-};
-
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
+  
+  // 嘗試從 root loader 取得用戶資料
+  const rootData = useRouteLoaderData('root') as { user?: any } | undefined;
+  const currentUser = rootData?.user || {
+    id: '1',
+    name: '系統管理員',
+    role: 'admin',
+    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop',
+  };
+  
+  const isAdmin = currentUser.role === 'admin';
 
   const navItems = [
     { 
       name: '統計儀表板', 
       path: '/', 
       icon: <LayoutDashboard size={18} />, 
-      permission: currentUser.permissions.viewWarRoom 
+      permission: true 
     },
     { 
       name: '廠商名錄', 
       path: '/vendors', 
       icon: <Users size={18} />, 
-      permission: currentUser.permissions.viewVendors 
+      permission: true 
     },
     { 
       name: '設備維修紀錄', 
@@ -62,37 +55,37 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       name: '日常任務', 
       path: '/tasks', 
       icon: <Briefcase size={18} />, 
-      permission: currentUser.permissions.viewTasks 
+      permission: true 
     },
     { 
       name: '通訊中心', 
       path: '/communication', 
       icon: <MessageCircle size={18} />, 
-      permission: currentUser.permissions.viewCommunication 
+      permission: true 
     },
     { 
       name: '請款與發票管理', 
       path: '/payments', 
       icon: <CreditCard size={18} />, 
-      permission: currentUser.permissions.viewPayments 
+      permission: true 
     },
     { 
       name: '知識庫', 
       path: '/knowledge', 
       icon: <BookOpen size={18} />, 
-      permission: currentUser.permissions.viewKnowledge 
+      permission: true 
     },
     { 
       name: '系統公告', 
       path: '/announcements', 
       icon: <Megaphone size={18} />, 
-      permission: currentUser.permissions.viewAnnouncements 
+      permission: true 
     }, 
     { 
       name: '系統管理', 
       path: '/admin', 
       icon: <Settings size={18} />, 
-      permission: currentUser.permissions.accessAdminPanel 
+      permission: isAdmin  // 只有管理員可以看到
     }, 
   ];
 
@@ -182,7 +175,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
-              <p className="text-xs text-gray-400 truncate">{currentUser.role}</p>
+              <div className="flex items-center gap-1.5">
+                {isAdmin && (
+                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded uppercase tracking-wider">
+                    Admin
+                  </span>
+                )}
+                <p className="text-xs text-gray-400 truncate">{currentUser.email || ''}</p>
+              </div>
             </div>
             <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600"/>
           </div>

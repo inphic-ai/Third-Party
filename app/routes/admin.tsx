@@ -4,6 +4,7 @@ import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
+import { requireAdmin } from '~/services/auth.server';
 import { 
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
@@ -27,6 +28,9 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求管理員權限
+  await requireAdmin(request);
+  
   try {
     console.log('[Admin Loader] Loading admin data...');
     

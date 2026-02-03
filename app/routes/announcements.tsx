@@ -5,6 +5,7 @@ import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { announcements } from '../../db/schema/system';
 import { eq } from 'drizzle-orm';
+import { requireUser } from '~/services/auth.server';
 import { 
   Megaphone, Calendar, Bell, 
   Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight,
@@ -76,6 +77,9 @@ export async function action({ request }: any) {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
+  
   try {
     console.log('[Announcements Loader] Loading announcements...');
     

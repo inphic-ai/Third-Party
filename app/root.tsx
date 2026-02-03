@@ -6,9 +6,12 @@ import {
   ScrollRestoration,
   useRouteError,
   isRouteErrorResponse,
+  useLocation,
 } from "@remix-run/react";
-import type { LinksFunction } from "@remix-run/node";
+import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { Layout } from "./components/Layout";
+import { getUser } from "~/services/auth.server";
 import stylesheet from "./tailwind.css?url";
 
 export const links: LinksFunction = () => [
@@ -17,6 +20,12 @@ export const links: LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
   { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" },
 ];
+
+// Loader 提供用戶資料給所有子路由
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await getUser(request);
+  return json({ user });
+}
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -67,6 +76,9 @@ export function ErrorBoundary() {
 }
 
 export default function App() {
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
+
   return (
     <html lang="zh-TW">
       <head>
@@ -77,9 +89,13 @@ export default function App() {
         <Links />
       </head>
       <body className="bg-slate-50 font-sans">
-        <Layout>
+        {isLoginPage ? (
           <Outlet />
-        </Layout>
+        ) : (
+          <Layout>
+            <Outlet />
+          </Layout>
+        )}
         <ScrollRestoration />
         <Scripts />
       </body>
