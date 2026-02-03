@@ -1199,12 +1199,10 @@ export default function VendorDetail() {
                 <button 
                   onClick={() => {
                     const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                    if (mainContact) {
-                      handleContactClick(mainContact, 'log');
-                    } else {
-                      // 如果沒有聯絡人，提示使用者先新增聯絡窗口
-                      alert("請先在「聯繫窗口 & 群組」Tab 中新增聯絡窗口，才能建立聯繫紀錄");
-                    }
+                    // 即使沒有聯絡人也能建立紀錄
+                    setSelectedContact(mainContact || null);
+                    setModalInitialState('log');
+                    setShowContactModal(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
                 >
@@ -1791,7 +1789,7 @@ const MOCK_SYSTEM_TAGS = {
 };
 
 const ContactLogModal: React.FC<{ 
-  contact: ContactWindow; 
+  contact: ContactWindow | null; 
   vendor: any;
   initialIsReservation?: boolean;
   onClose: () => void; 
@@ -1827,7 +1825,7 @@ const ContactLogModal: React.FC<{
     }
   }, [fetcher.data, onClose]);
 
-  const contactPhone = contact.mobile || vendor.mainPhone;
+  const contactPhone = contact?.mobile || vendor.mainPhone;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
@@ -1842,13 +1840,15 @@ const ContactLogModal: React.FC<{
          <div className="p-6">
            <div className="mb-6 text-center">
              <p className="text-sm text-slate-500 mb-1">正在聯繫</p>
-             <h3 className="text-2xl font-bold text-slate-800">{contact.name} ({contact.role})</h3>
+             <h3 className="text-2xl font-bold text-slate-800">
+               {contact ? `${contact.name} (${contact.role})` : vendor.name}
+             </h3>
              
              <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-mono font-bold text-xl border border-blue-200">
                 {contactPhone || "無號碼"}
                 <Phone size={16} className="animate-pulse" />
              </div>
-             <p className="text-[10px] text-slate-400 mt-1">系統將自動記錄此次聯繫意圖</p>
+             <p className="text-[10px] text-slate-400 mt-1">{contact ? "系統將自動記錄此次聯繫意圖" : "建立廠商聯繫紀錄"}</p>
            </div>
 
            <div className="space-y-4">
@@ -1940,7 +1940,7 @@ const ContactLogModal: React.FC<{
              <fetcher.Form method="post" className="flex gap-3 pt-2">
                 <input type="hidden" name="intent" value="createContactLog" />
                 <input type="hidden" name="vendorId" value={vendor.id} />
-                <input type="hidden" name="contactId" value={contact.id} />
+                <input type="hidden" name="contactId" value={contact?.id || ''} />
                 <input type="hidden" name="note" value={note} />
                 <input type="hidden" name="isReservation" value={isReservation.toString()} />
                 {isReservation && (
