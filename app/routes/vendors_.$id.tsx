@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useLoaderData, useNavigate, useActionData, useNavigation, Form } from '@remix-run/react';
+import { useLoaderData, useNavigate, useActionData, useNavigation, Form, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { vendors, contactWindows, socialGroups } from '../../db/schema/vendor';
+import { contactLogs } from '../../db/schema/operations';
 import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
 import { 
@@ -106,6 +107,36 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  // 建立新群組
+  if (intent === "createGroup") {
+    const vendorId = formData.get("vendorId") as string;
+    const groupName = formData.get("groupName") as string;
+    const platform = formData.get("platform") as string;
+    const systemCode = formData.get("systemCode") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+    const note = formData.get("note") as string;
+
+    if (!vendorId || !groupName || !platform || !systemCode) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.insert(socialGroups).values({
+        vendorId,
+        groupName: groupName.trim(),
+        platform: platform as any,
+        systemCode: systemCode.trim(),
+        inviteLink: inviteLink?.trim() || null,
+        note: note?.trim() || null
+      });
+
+      return json({ success: true, message: "群組已建立" });
+    } catch (error) {
+      console.error('Failed to create group:', error);
+      return json({ success: false, message: "建立失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   // 編輯通訊群組
   if (intent === "editGroup") {
     const groupId = formData.get("groupId") as string;
@@ -148,6 +179,42 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } catch (error) {
       console.error('Failed to delete group:', error);
       return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
+  // 建立新聯絡窗口
+  if (intent === "createContact") {
+    const vendorId = formData.get("vendorId") as string;
+    const name = formData.get("name") as string;
+    const role = formData.get("role") as string;
+    const mobile = formData.get("mobile") as string;
+    const email = formData.get("email") as string;
+    const lineId = formData.get("lineId") as string;
+    const wechatId = formData.get("wechatId") as string;
+    const contactAddress = formData.get("contactAddress") as string;
+    const isMainContact = formData.get("isMainContact") === "on";
+
+    if (!vendorId || !name || !role) {
+      return json({ success: false, message: "缺少必要欄位" }, { status: 400 });
+    }
+
+    try {
+      await db.insert(contactWindows).values({
+        vendorId,
+        name: name.trim(),
+        role: role.trim(),
+        mobile: mobile?.trim() || null,
+        email: email?.trim() || null,
+        lineId: lineId?.trim() || null,
+        wechatId: wechatId?.trim() || null,
+        contactAddress: contactAddress?.trim() || null,
+        isMainContact
+      });
+
+      return json({ success: true, message: "聯絡窗口已建立" });
+    } catch (error) {
+      console.error('Failed to create contact:', error);
+      return json({ success: false, message: "建立失敗，請稍後再試" }, { status: 500 });
     }
   }
 
@@ -403,6 +470,51 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
+  // 建立聯繫紀錄
+  if (intent === "createContactLog") {
+    const vendorId = formData.get("vendorId") as string;
+    const contactId = formData.get("contactId") as string;
+    const note = formData.get("note") as string;
+    const isReservation = formData.get("isReservation") === "true";
+    const resDate = formData.get("resDate") as string;
+    const resTime = formData.get("resTime") as string;
+    const quoteAmount = formData.get("quoteAmount") as string;
+    const productId = formData.get("productId") as string;
+
+    if (!vendorId || !note) {
+      return json({ success: false, message: "請填寫聯繫筆記" }, { status: 400 });
+    }
+
+    try {
+      const logData: any = {
+        vendorId,
+        contactId: contactId || null,
+        date: new Date(),
+        status: 'IN_PROGRESS' as any,
+        note: note.trim(),
+        isReservation,
+        createdBy: 'system-user-id' // TODO: 從 session 獲取
+      };
+
+      if (isReservation && resDate && resTime) {
+        logData.reservationTime = new Date(`${resDate}T${resTime}:00`);
+        if (quoteAmount) {
+          logData.quoteAmount = quoteAmount;
+        }
+        if (productId) {
+          logData.relatedProductId = productId;
+        }
+      }
+
+      await db.insert(contactLogs).values(logData);
+
+      return json({ success: true, message: "聯繫紀錄已儲存" });
+    } catch (error) {
+      console.error('Failed to create contact log:', error);
+      return json({ success: false, message: "儲存失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -537,8 +649,10 @@ export default function VendorDetail() {
   const [modalInitialState, setModalInitialState] = useState<'log' | 'reservation'>('log');
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showEditContactModal, setShowEditContactModal] = useState(false);
   const [selectedEditContact, setSelectedEditContact] = useState<ContactWindow | null>(null);
+  const [showCreateContactModal, setShowCreateContactModal] = useState(false);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [selectedEditTransaction, setSelectedEditTransaction] = useState<Transaction | null>(null);
   const [selectedEditPayment, setSelectedEditPayment] = useState<Transaction | null>(null);
@@ -1003,7 +1117,10 @@ export default function VendorDetail() {
                     <span className="text-xl font-bold text-indigo-600">#</span>
                     <h3 className="text-lg font-bold text-slate-800">專案群組 (Group Code)</h3>
                   </div>
-                  <button className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold">
+                  <button 
+                    onClick={() => setShowCreateGroupModal(true)}
+                    className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold"
+                  >
                     <Plus size={16} /> 建立新群組
                   </button>
                 </div>
@@ -1073,7 +1190,10 @@ export default function VendorDetail() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-bold text-slate-800">聯繫人列表</h3>
-                  <button className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold">
+                  <button 
+                    onClick={() => setShowCreateContactModal(true)}
+                    className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition text-sm font-bold"
+                  >
                     <Plus size={16} /> 新增窗口
                   </button>
                 </div>
@@ -1129,6 +1249,20 @@ export default function VendorDetail() {
                                   <div className="text-slate-200 italic text-[10px]">無 WeChat</div>
                                </div>
                             </div>
+                            
+                            {/* 聯繫此人按鈕 */}
+                            <div className="mt-4 pt-4 border-t border-slate-100">
+                              <button
+                                onClick={() => {
+                                  setSelectedContact(contact);
+                                  setModalInitialState('log');
+                                  setShowContactModal(true);
+                                }}
+                                className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2"
+                              >
+                                <Phone size={14} /> 聯繫此人
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1153,7 +1287,10 @@ export default function VendorDetail() {
                 <button 
                   onClick={() => {
                     const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                    if (mainContact) handleContactClick(mainContact, 'log');
+                    // 即使沒有聯絡人也能建立紀錄
+                    setSelectedContact(mainContact || null);
+                    setModalInitialState('log');
+                    setShowContactModal(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
                 >
@@ -1225,9 +1362,6 @@ export default function VendorDetail() {
                   <div className="text-center py-12 text-slate-400">
                     <MessageSquare size={48} className="mx-auto mb-4 opacity-50" />
                     <p>尚無聯繫紀錄</p>
-                    <button className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
-                      新增第一筆紀錄
-                    </button>
                   </div>
                 )
               )}
@@ -1407,14 +1541,6 @@ export default function VendorDetail() {
               {/* Header with Actions */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800">勞報/請款管理</h3>
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium">
-                    <Upload size={16} /> 上傳勞報單
-                  </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition text-sm font-medium">
-                    <Receipt size={16} /> 新增請款
-                  </button>
-                </div>
               </div>
 
               {/* Labor Form Status Summary */}
@@ -1699,6 +1825,14 @@ export default function VendorDetail() {
           />
         )}
 
+        {/* 建立新群組模態框 */}
+        {showCreateGroupModal && (
+          <CreateGroupModal
+            vendorId={vendor.id}
+            onClose={() => setShowCreateGroupModal(false)}
+          />
+        )}
+
         {/* 編輯聯絡窗口模態框 */}
         {showEditContactModal && selectedEditContact && (
           <EditContactModal
@@ -1707,6 +1841,14 @@ export default function VendorDetail() {
               setShowEditContactModal(false);
               setSelectedEditContact(null);
             }}
+          />
+        )}
+
+        {/* 建立新聯絡窗口模態框 */}
+        {showCreateContactModal && (
+          <CreateContactModal
+            vendorId={vendor.id}
+            onClose={() => setShowCreateContactModal(false)}
           />
         )}
 
@@ -1751,11 +1893,15 @@ const MOCK_SYSTEM_TAGS = {
 };
 
 const ContactLogModal: React.FC<{ 
-  contact: ContactWindow; 
+  contact: ContactWindow | null; 
   vendor: any;
   initialIsReservation?: boolean;
   onClose: () => void; 
 }> = ({ contact, vendor, initialIsReservation = false, onClose }) => {
+  // 聯絡人選擇器 state
+  const [selectedContactId, setSelectedContactId] = useState(contact?.id || vendor.contacts?.[0]?.id || '');
+  const selectedContact = vendor.contacts?.find((c: ContactWindow) => c.id === selectedContactId) || contact;
+  
   const [note, setNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [generatedSummary, setGeneratedSummary] = useState('');
@@ -1778,12 +1924,16 @@ const ContactLogModal: React.FC<{
     setNote(prev => prev ? `${prev} ${tag}` : tag);
   };
 
-  const handleSave = () => {
-    alert('聯繫紀錄已儲存（模擬）');
-    onClose();
-  };
+  const fetcher = useFetcher();
 
-  const contactPhone = contact.mobile || vendor.mainPhone;
+  // 關閉模態框當提交成功
+  React.useEffect(() => {
+    if (fetcher.data?.success) {
+      onClose();
+    }
+  }, [fetcher.data, onClose]);
+
+  const contactPhone = selectedContact?.mobile || vendor.mainPhone;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
@@ -1796,15 +1946,39 @@ const ContactLogModal: React.FC<{
          </div>
 
          <div className="p-6">
+           {/* 聯絡人選擇器 */}
+           {vendor.contacts && vendor.contacts.length > 1 && (
+             <div className="mb-6">
+               <label className="block text-sm font-bold text-slate-700 mb-2">
+                 選擇聯絡窗口 *
+               </label>
+               <select 
+                 value={selectedContactId}
+                 onChange={(e) => setSelectedContactId(e.target.value)}
+                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition bg-white"
+               >
+                 {vendor.contacts.map((c: ContactWindow) => (
+                   <option key={c.id} value={c.id}>
+                     👤 {c.name} ({c.role})
+                     {c.isMainContact && ' - 主要聯絡人'}
+                     {c.mobile && ` - ${c.mobile}`}
+                   </option>
+                 ))}
+               </select>
+             </div>
+           )}
+
            <div className="mb-6 text-center">
              <p className="text-sm text-slate-500 mb-1">正在聯繫</p>
-             <h3 className="text-2xl font-bold text-slate-800">{contact.name} ({contact.role})</h3>
+             <h3 className="text-2xl font-bold text-slate-800">
+               {selectedContact ? `${selectedContact.name} (${selectedContact.role})` : vendor.name}
+             </h3>
              
              <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-mono font-bold text-xl border border-blue-200">
                 {contactPhone || "無號碼"}
                 <Phone size={16} className="animate-pulse" />
              </div>
-             <p className="text-[10px] text-slate-400 mt-1">系統將自動記錄此次聯繫意圖</p>
+             <p className="text-[10px] text-slate-400 mt-1">{selectedContact ? "系統將自動記錄此次聯繫意圖" : "建立廠商聯繫紀錄"}</p>
            </div>
 
            <div className="space-y-4">
@@ -1893,15 +2067,29 @@ const ContactLogModal: React.FC<{
                </div>
              )}
 
-             <div className="flex gap-3 pt-2">
-                <button onClick={onClose} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg">取消</button>
+             <fetcher.Form method="post" className="flex gap-3 pt-2">
+                <input type="hidden" name="intent" value="createContactLog" />
+                <input type="hidden" name="vendorId" value={vendor.id} />
+                <input type="hidden" name="contactId" value={selectedContactId || ''} />
+                <input type="hidden" name="note" value={note} />
+                <input type="hidden" name="isReservation" value={isReservation.toString()} />
+                {isReservation && (
+                  <>
+                    <input type="hidden" name="resDate" value={resDate} />
+                    <input type="hidden" name="resTime" value={resTime} />
+                    <input type="hidden" name="quoteAmount" value={quoteAmount} />
+                    <input type="hidden" name="productId" value={productId} />
+                  </>
+                )}
+                <button type="button" onClick={onClose} className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg">取消</button>
                 <button 
-                  onClick={handleSave}
-                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2"
+                  type="submit"
+                  disabled={fetcher.state === "submitting"}
+                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                   <CheckCircle size={16} /> {isReservation ? "建立預約並儲存" : "儲存紀錄"}
+                   <CheckCircle size={16} /> {fetcher.state === "submitting" ? "儲存中..." : (isReservation ? "建立預約並儲存" : "儲存紀錄")}
                 </button>
-             </div>
+             </fetcher.Form>
            </div>
          </div>
        </div>
@@ -2165,6 +2353,122 @@ const EditGroupModal = ({ group, onClose }: { group: any; onClose: () => void })
   );
 };
 
+// 建立新群組模態框
+const CreateGroupModal = ({ vendorId, onClose }: { vendorId: string; onClose: () => void }) => {
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+  const [groupName, setGroupName] = useState('');
+  const [platform, setPlatform] = useState('LINE');
+  const [inviteLink, setInviteLink] = useState('');
+  const [note, setNote] = useState('');
+
+  // 自動生成系統代碼
+  const generateSystemCode = () => {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `GRP-${date}-${random}`;
+  };
+
+  const [systemCode] = useState(generateSystemCode());
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-slate-800">建立新群組</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post">
+          <input type="hidden" name="intent" value="createGroup" />
+          <input type="hidden" name="vendorId" value={vendorId} />
+          <input type="hidden" name="systemCode" value={systemCode} />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">群組名稱 *</label>
+              <input
+                type="text"
+                name="groupName"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入群組名稱..."
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">平台 *</label>
+              <select
+                name="platform"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+              >
+                <option value="LINE">LINE</option>
+                <option value="WECHAT">WeChat</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">邀請連結</label>
+              <input
+                type="text"
+                name="inviteLink"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入邀請連結..."
+                value={inviteLink}
+                onChange={(e) => setInviteLink(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">備註</label>
+              <textarea
+                name="note"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
+                placeholder="輸入備註..."
+                rows={3}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">系統代碼</label>
+              <div className="text-sm text-slate-500 bg-slate-50 px-4 py-3 rounded-xl font-mono">
+                {systemCode}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">系統自動生成，唯一識別碼</p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!groupName.trim() || isSubmitting}
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '建立中...' : '建立'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
 // 編輯聯絡窗口模態框
 const EditContactModal = ({ contact, onClose }: { contact: ContactWindow; onClose: () => void }) => {
   const navigation = useNavigation();
@@ -2283,6 +2587,158 @@ const EditContactModal = ({ contact, onClose }: { contact: ContactWindow; onClos
               className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '儲存中...' : '儲存'}
+            </button>
+          </div>
+        </Form>
+      </div>
+    </div>
+  );
+};
+
+// 建立新聯絡窗口模態框
+const CreateContactModal = ({ vendorId, onClose }: { vendorId: string; onClose: () => void }) => {
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
+  const [lineId, setLineId] = useState('');
+  const [wechatId, setWechatId] = useState('');
+  const [contactAddress, setContactAddress] = useState('');
+  const [isMainContact, setIsMainContact] = useState(false);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-slate-800">新增聯絡窗口</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        <Form method="post">
+          <input type="hidden" name="intent" value="createContact" />
+          <input type="hidden" name="vendorId" value={vendorId} />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">姓名 *</label>
+              <input
+                type="text"
+                name="name"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入姓名..."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">職位 *</label>
+              <input
+                type="text"
+                name="role"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="例如：業務經理"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
+              <input
+                type="tel"
+                name="mobile"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="例如：0912-345-678"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Email</label>
+              <input
+                type="email"
+                name="email"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="例如：example@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">LINE ID</label>
+              <input
+                type="text"
+                name="lineId"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入 LINE ID..."
+                value={lineId}
+                onChange={(e) => setLineId(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">WeChat ID</label>
+              <input
+                type="text"
+                name="wechatId"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                placeholder="輸入 WeChat ID..."
+                value={wechatId}
+                onChange={(e) => setWechatId(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">聯絡地址</label>
+              <textarea
+                name="contactAddress"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
+                placeholder="輸入實體地址..."
+                rows={2}
+                value={contactAddress}
+                onChange={(e) => setContactAddress(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="isMainContact"
+                id="isMainContact"
+                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                checked={isMainContact}
+                onChange={(e) => setIsMainContact(e.target.checked)}
+              />
+              <label htmlFor="isMainContact" className="text-sm font-bold text-slate-700 cursor-pointer">
+                設為主要聯絡人
+              </label>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || !role.trim() || isSubmitting}
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '新增中...' : '新增'}
             </button>
           </div>
         </Form>
