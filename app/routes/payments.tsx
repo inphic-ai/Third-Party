@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLoaderData, useActionData, useNavigation, Form, useSubmit, useRevalidator } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -6,6 +6,7 @@ import { db } from '../services/db.server';
 import { invoiceRecords } from '../../db/schema/financial';
 import { vendors } from '../../db/schema/vendor';
 import { eq, desc } from 'drizzle-orm';
+import { requireUser } from '~/services/auth.server';zle-orm';
 import { 
   Search, FilePlus, DollarSign, Download, Trash2, 
   X, Maximize2, Camera, Edit3, FileText, 
@@ -26,6 +27,9 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
+  
   try {
     const allInvoices = await db.select().from(invoiceRecords).orderBy(desc(invoiceRecords.date));
     const vendorList = await db.select({ id: vendors.id, name: vendors.name }).from(vendors);

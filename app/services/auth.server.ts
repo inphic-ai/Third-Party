@@ -46,7 +46,11 @@ const googleStrategy = new GoogleStrategy(
 
         return updatedUser;
       } else {
-        // 建立新用戶
+        // 檢查是否為第一個用戶
+        const allUsers = await db.select().from(users);
+        const isFirstUser = allUsers.length === 0;
+        
+        // 建立新用戶，第一個用戶設為管理員
         const [newUser] = await db
           .insert(users)
           .values({
@@ -54,6 +58,7 @@ const googleStrategy = new GoogleStrategy(
             name,
             avatarUrl,
             googleId,
+            role: isFirstUser ? 'admin' : 'user',
             isActive: true,
             lastLoginAt: new Date(),
           })
@@ -82,4 +87,15 @@ export async function requireUser(request: Request) {
 // 輔助函數：檢查用戶是否已登入（不重新導向）
 export async function getUser(request: Request) {
   return await authenticator.isAuthenticated(request);
+}
+
+// 輔助函數：要求管理員權限
+export async function requireAdmin(request: Request) {
+  const user = await requireUser(request);
+  
+  if (user.role !== 'admin') {
+    throw new Response("無權訪問：需要管理員權限", { status: 403 });
+  }
+  
+  return user;
 }

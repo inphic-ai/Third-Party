@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
 import { vendors, socialGroups, contactWindows } from '../../db/schema/vendor';
+import { requireUser } from '~/services/auth.server';/vendor';
 import { 
   MessageCircle, 
   Search, 
@@ -42,6 +43,9 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
+  
   try {
     console.log('[Communication Loader] Loading contact logs and vendors...');
     

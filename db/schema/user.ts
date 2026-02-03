@@ -10,6 +10,9 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   googleId: text("google_id").unique(),
   
+  // 用戶角色：admin 或 user
+  role: text("role").default("user").notNull(),
+  
   // 用戶狀態
   isActive: boolean("is_active").default(true).notNull(),
   

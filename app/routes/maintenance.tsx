@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
 import { useLoaderData, useActionData, useNavigation, Form, useRevalidator } from '@remix-run/react';
+import { requireUser } from '~/services/auth.server';;
 import { 
   Wrench, 
   Plus, 
@@ -48,6 +49,8 @@ interface MediaItem {
 // ============================================
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
   const records = await db
     .select()
     .from(maintenanceRecords)

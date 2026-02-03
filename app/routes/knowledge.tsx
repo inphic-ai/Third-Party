@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLoaderData, Link, useFetcher, useActionData } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { knowledgeBaseItems } from '../../db/schema/system';
+import { requireUser } from '~/services/auth.server';/system';
 import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar, Plus, X, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -53,6 +54,9 @@ export async function action({ request }: any) {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // 要求用戶必須登入
+  await requireUser(request);
+  
   try {
     console.log('[Knowledge Loader] Loading knowledge base items...');
     
