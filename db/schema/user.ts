@@ -13,6 +13,17 @@ export const users = pgTable("users", {
   // 用戶角色：admin 或 user
   role: text("role").default("user").notNull(),
   
+  // 審核狀態：pending（待審核）、approved（已批准）、rejected（已拒絕）
+  status: text("status").default("pending").notNull(),
+  
+  // 部門
+  department: text("department"),
+  
+  // 審核資訊
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  
   // 用戶狀態
   isActive: boolean("is_active").default(true).notNull(),
   

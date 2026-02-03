@@ -50,7 +50,9 @@ const googleStrategy = new GoogleStrategy(
         const allUsers = await db.select().from(users);
         const isFirstUser = allUsers.length === 0;
         
-        // 建立新用戶，第一個用戶設為管理員
+        // 建立新用戶
+        // 第一個用戶：自動批准為 admin
+        // 其他用戶：預設為 pending 狀態，等待管理員審核
         const [newUser] = await db
           .insert(users)
           .values({
@@ -59,8 +61,10 @@ const googleStrategy = new GoogleStrategy(
             avatarUrl,
             googleId,
             role: isFirstUser ? 'admin' : 'user',
+            status: isFirstUser ? 'approved' : 'pending',
             isActive: true,
             lastLoginAt: new Date(),
+            approvedAt: isFirstUser ? new Date() : undefined,
           })
           .returning();
 
@@ -81,6 +85,22 @@ export async function requireUser(request: Request) {
   const user = await authenticator.isAuthenticated(request, {
     failureRedirect: "/login",
   });
+  
+  // 檢查用戶審核狀態
+  if (user.status === 'pending') {
+    throw new Response(null, {
+      status: 302,
+      headers: { Location: '/waiting-approval' },
+    });
+  }
+  
+  if (user.status === 'rejected') {
+    throw new Response(null, {
+      status: 302,
+      headers: { Location: '/access-denied' },
+    });
+  }
+  
   return user;
 }
 

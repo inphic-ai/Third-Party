@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { useLoaderData } from '@remix-run/react';
-import type { MetaFunction, LoaderFunctionArgs } from "@remix-run/node";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
+import { users } from '../../db/schema/user';
+import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
+import { eq } from 'drizzle-orm';
+// 郵件服務暫時停用
+// import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
@@ -14,6 +19,7 @@ import {
 import { clsx } from 'clsx';
 
 import { ClientOnly } from '~/components/ClientOnly';
+import { UserManager } from '~/components/UserManager';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, MOCK_LOGIN_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
@@ -34,11 +40,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     console.log('[Admin Loader] Loading admin data...');
     
-    // 只讀取已有資料表的數據
-    const [allSystemLogs, allAdminUsers, allAnnouncements] = await Promise.all([
+    // 讀取資料
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
-      db.select().from(announcements)
+      db.select().from(announcements),
+      db.select().from(users), // 用戶審核系統
+      db.select().from(departments) // 部門管理
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -74,25 +82,147 @@ export async function loader({ request }: LoaderFunctionArgs) {
       priority: ann.priority === 'HIGH' ? 'High' : 'Normal',
     }));
     
+    // 處理 users 和 departments
+    const usersForApproval = allUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      department: user.department,
+      role: user.role,
+      status: user.status,
+      createdAt: user.createdAt.toISOString(),
+      rejectionReason: user.rejectionReason
+    }));
+    
+    const departmentsList = allDepartments.map(dept => ({
+      id: dept.id,
+      name: dept.name,
+      description: dept.description
+    }));
+    
     return json({ 
       systemLogs: logsWithMapping,
       adminUsers: usersWithMapping,
-      announcements: announcementsWithMapping
+      announcements: announcementsWithMapping,
+      users: usersForApproval,
+      departments: departmentsList
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
     return json({ 
       systemLogs: [],
       adminUsers: [],
+      users: [],
+      departments: [],
       announcements: []
     });
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const adminUser = await requireAdmin(request);
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  try {
+    switch (intent) {
+      case 'approveUser': {
+        const userId = formData.get('userId') as string;
+        const departmentId = formData.get('departmentId') as string;
+
+        if (!userId || !departmentId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 獲取部門資料
+        const [dept] = await db.select().from(departments).where(eq(departments.id, departmentId)).limit(1);
+        if (!dept) {
+          return json({ success: false, error: '部門不存在' }, { status: 404 });
+        }
+
+        // 更新用戶狀態
+        await db.update(users)
+          .set({
+            status: 'approved',
+            department: departmentId,
+            approvedBy: adminUser.id,
+            approvedAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        // 發送批准郵件（暫時停用）
+        // await sendApprovalEmail(user.email, user.name, dept.name);
+
+        return json({ success: true, message: '用戶已批准' });
+      }
+
+      case 'rejectUser': {
+        const userId = formData.get('userId') as string;
+        const reason = formData.get('reason') as string;
+
+        if (!userId || !reason) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 更新用戶狀態
+        await db.update(users)
+          .set({
+            status: 'rejected',
+            rejectionReason: reason,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        // 發送拒絕郵件（暫時停用）
+        // await sendRejectionEmail(user.email, user.name, reason);
+
+        return json({ success: true, message: '用戶已拒絕' });
+      }
+
+      case 'unblockUser': {
+        const userId = formData.get('userId') as string;
+
+        if (!userId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        await db.update(users)
+          .set({
+            status: 'pending',
+            rejectionReason: null,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶已解除封鎖，狀態改為待審核' });
+      }
+
+      default:
+        return json({ success: false, error: '未知操作' }, { status: 400 });
+    }
+  } catch (error) {
+    console.error('Action error:', error);
+    return json({ success: false, error: '操作失敗' }, { status: 500 });
   }
 }
 
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
   const navItems = [
@@ -142,13 +272,13 @@ function AdminContent() {
 
       <div className="min-h-[600px] py-4">
         {activeTab === 'dashboard' && <DashboardSummary />}
-        {activeTab === 'logs' && <LogCenter />}
+        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} />}
         {activeTab === 'categories' && <CategoryManager />}
         {activeTab === 'tags' && <TagManager />}
         {activeTab === 'ai' && <AiConfig />}
-        {activeTab === 'users' && <UserManager />}
+        {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
         {activeTab === 'departments' && <DepartmentManager />}
-        {activeTab === 'announcements' && <AnnouncementManager />}
+        {activeTab === 'announcements' && <AnnouncementManager announcements={dbAnnouncements} />}
         {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
       </div>
     </div>
@@ -201,7 +331,7 @@ const DashboardSummary = () => (
   </div>
 );
 
-const LogCenter = () => {
+const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
   const [logType, setLogType] = useState<'operation' | 'login'>('operation');
 
   return (
@@ -241,7 +371,7 @@ const LogCenter = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {dbSystemLogs.map((l: any) => (
+                {systemLogs.map((l: any) => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
@@ -380,69 +510,6 @@ const AiConfig = () => (
   </div>
 );
 
-const UserManager = () => (
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">人員權限管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增人員
-      </button>
-    </div>
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 border-b border-slate-100">
-          <tr className="text-slate-500 font-bold">
-            <th className="px-6 py-4 text-left">人員</th>
-            <th className="px-6 py-4 text-left">部門</th>
-            <th className="px-6 py-4 text-left">角色</th>
-            <th className="px-6 py-4 text-center">狀態</th>
-            <th className="px-6 py-4 text-center">操作</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {dbAdminUsers.map((user: any) => (
-            <tr key={user.id} className="hover:bg-slate-50/50 transition">
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm">
-                    {user.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800">{user.name}</p>
-                    <p className="text-xs text-slate-400">{user.email}</p>
-                  </div>
-                </div>
-              </td>
-              <td className="px-6 py-4 text-slate-600">{user.department}</td>
-              <td className="px-6 py-4">
-                <span className={clsx(
-                  "px-2 py-1 rounded text-xs font-bold",
-                  user.role === 'Admin' ? "bg-red-100 text-red-700" :
-                  user.role === 'Manager' ? "bg-blue-100 text-blue-700" :
-                  "bg-slate-100 text-slate-600"
-                )}>
-                  {user.role}
-                </span>
-              </td>
-              <td className="px-6 py-4 text-center">
-                <span className={clsx(
-                  "px-2 py-1 rounded-full text-xs font-bold",
-                  user.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
-                )}>
-                  {user.status === 'active' ? '啟用' : '停用'}
-                </span>
-              </td>
-              <td className="px-6 py-4 text-center">
-                <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
-
 const DepartmentManager = () => (
   <div className="space-y-4">
     <div className="flex justify-between items-center">
@@ -469,7 +536,7 @@ const DepartmentManager = () => (
   </div>
 );
 
-const AnnouncementManager = () => (
+const AnnouncementManager = ({ announcements }: { announcements: any[] }) => (
   <div className="space-y-4">
     <div className="flex justify-between items-center">
       <h2 className="text-lg font-bold text-slate-800">系統公告管理</h2>
@@ -488,7 +555,7 @@ const AnnouncementManager = () => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {dbAnnouncements.map((ann: any) => (
+          {announcements.map((ann: any) => (
             <tr key={ann.id} className="hover:bg-slate-50/50 transition">
               <td className="px-6 py-4 font-bold text-slate-800">{ann.title}</td>
               <td className="px-6 py-4 text-slate-500">{ann.date}</td>

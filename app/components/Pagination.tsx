@@ -8,7 +8,7 @@ interface PaginationProps {
   totalItems: number;
   itemsPerPage: number;
   onPageChange: (page: number) => void;
-  onItemsPerPageChange: (items: number) => void;
+  onItemsPerPageChange?: (items: number) => void;
   itemsPerPageOptions?: number[];
 }
 
@@ -21,6 +21,8 @@ export function Pagination({
   onItemsPerPageChange,
   itemsPerPageOptions = [10, 20, 50]
 }: PaginationProps) {
+  // 智慧分頁模式：如果沒有提供 onItemsPerPageChange，則不顯示選擇器
+  const isSmartPagination = !onItemsPerPageChange;
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +66,7 @@ export function Pagination({
   return (
     <div className="flex flex-col sm:flex-row justify-between items-center gap-8 px-6 py-4 bg-white/30 backdrop-blur rounded-[2.5rem] border border-white/50">
       <div className="flex items-center gap-8">
+        {!isSmartPagination && (
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -94,6 +97,7 @@ export function Pagination({
             </div>
           )}
         </div>
+        )}
         <div className="text-sm font-bold text-slate-400 tracking-tight">
            共 <span className="text-slate-800">{totalItems}</span> 筆紀錄
         </div>
