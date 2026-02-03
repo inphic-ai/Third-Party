@@ -329,7 +329,7 @@ export default function MaintenancePage() {
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="w-full px-8 space-y-8">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
