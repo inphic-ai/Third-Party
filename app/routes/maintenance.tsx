@@ -29,6 +29,7 @@ import { maintenanceRecords } from '../../db/schema/operations';
 import { vendors } from '../../db/schema/vendor';
 import { eq, desc } from 'drizzle-orm';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { Pagination } from '~/components/Pagination';
 
 // ============================================
 // Types
@@ -149,6 +150,38 @@ export default function MaintenancePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20); // 預設 20，會在 useEffect 中自動調整
+
+  // 自動選擇最佳筆數（10/20/30）
+  useEffect(() => {
+    const calculateOptimalPageSize = () => {
+      const screenHeight = window.innerHeight;
+      const rowHeight = 80; // 每筆資料約 80px（設備維修紀錄比廠商列表高）
+      const headerHeight = 200; // 頂部導航和標題
+      const paginationHeight = 80; // 底部分頁控制
+      
+      const availableHeight = screenHeight - headerHeight - paginationHeight;
+      const optimalRows = Math.floor(availableHeight / rowHeight);
+      
+      // 對應到 10/20/30
+      if (optimalRows >= 25) return 30;
+      if (optimalRows >= 15) return 20;
+      return 10;
+    };
+    
+    setItemsPerPage(calculateOptimalPageSize());
+    
+    // 監聽視窗大小變化
+    const handleResize = () => {
+      setItemsPerPage(calculateOptimalPageSize());
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // 照片上傳 state
   const [beforePhotos, setBeforePhotos] = useState<MediaItem[]>([]);
   const [afterPhotos, setAfterPhotos] = useState<MediaItem[]>([]);
@@ -186,6 +219,19 @@ export default function MaintenancePage() {
       return matchesSearch && matchesStatus;
     });
   }, [records, searchTerm, statusFilter]);
+
+  // 分頁邏輯
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+  const paginatedRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredRecords.slice(startIndex, endIndex);
+  }, [filteredRecords, currentPage, itemsPerPage]);
+
+  // 當篩選條件變化時，重置到第一頁
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   const handleFileUpload = (type: 'before' | 'after', files: FileList | null) => {
     if (!files) return;
@@ -282,7 +328,7 @@ export default function MaintenancePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex justify-between items-center">
@@ -332,7 +378,8 @@ export default function MaintenancePage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="flex-1 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-y-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -344,7 +391,7 @@ export default function MaintenancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredRecords.map((record: any) => {
+              {paginatedRecords.map((record: any) => {
                 const config = statusConfig[record.status] || statusConfig.PENDING;
                 const Icon = config.icon;
                 return (
@@ -389,7 +436,7 @@ export default function MaintenancePage() {
                   </tr>
                 );
               })}
-              {filteredRecords.length === 0 && (
+              {paginatedRecords.length === 0 && filteredRecords.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                     查無維修紀錄
@@ -398,7 +445,19 @@ export default function MaintenancePage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
+
+        {/* 分頁控制 */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredRecords.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={setItemsPerPage}
+          itemsPerPageOptions={[10, 20, 30]}
+        />
       </div>
 
       {/* Detail Modal */}
