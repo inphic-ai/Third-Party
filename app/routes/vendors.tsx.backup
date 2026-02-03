@@ -1,0 +1,6 @@
+// 備份標記：準備新增 AI 推薦功能
+// 需要新增的 state:
+// - showAiRecommendModal: boolean
+// - aiRecommendStep: 'form' | 'result'
+// - aiRecommendData: { projectType, budget, region, serviceTypes, requirements }
+// - aiRecommendResults: array of recommended vendors
