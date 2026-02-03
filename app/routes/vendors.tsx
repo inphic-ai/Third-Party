@@ -204,7 +204,35 @@ function VendorDirectoryContent() {
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(9);
+  const [itemsPerPage, setItemsPerPage] = useState(20); // 預設 20，會在 useEffect 中自動調整
+
+  // 自動選擇最佳筆數（10/20/30）
+  useEffect(() => {
+    const calculateOptimalPageSize = () => {
+      const screenHeight = window.innerHeight;
+      const rowHeight = 60; // 每筆資料約 60px
+      const headerHeight = 200; // 頂部導航和標題
+      const paginationHeight = 80; // 底部分頁控制
+      
+      const availableHeight = screenHeight - headerHeight - paginationHeight;
+      const optimalRows = Math.floor(availableHeight / rowHeight);
+      
+      // 對應到 10/20/30
+      if (optimalRows >= 25) return 30;
+      if (optimalRows >= 15) return 20;
+      return 10;
+    };
+    
+    setItemsPerPage(calculateOptimalPageSize());
+    
+    // 監聽視窗大小變化
+    const handleResize = () => {
+      setItemsPerPage(calculateOptimalPageSize());
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 監聽 URL 變化
   useEffect(() => {
@@ -317,7 +345,7 @@ function VendorDirectoryContent() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-700">
+    <div className="flex flex-col h-screen space-y-6 animate-in fade-in duration-700">
       {/* 頂部標題與操作 */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
@@ -407,7 +435,7 @@ function VendorDirectoryContent() {
       </div>
 
       {/* 廠商列表 - 卡片視圖 */}
-      <div className="min-h-[400px]">
+      <div className="flex-1 overflow-y-auto">
         {viewMode === 'card' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {paginatedVendors.map(vendor => (
@@ -567,7 +595,7 @@ function VendorDirectoryContent() {
         itemsPerPage={itemsPerPage}
         onPageChange={setCurrentPage}
         onItemsPerPageChange={setItemsPerPage}
-        itemsPerPageOptions={[9, 18, 36]}
+        itemsPerPageOptions={[10, 20, 30]}
       />
 
       {/* 新增廠商 Modal */}
