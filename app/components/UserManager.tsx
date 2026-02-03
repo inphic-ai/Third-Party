@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFetcher } from "@remix-run/react";
 import { Plus, Check, X, UserCheck, Clock, ShieldX, Edit2 } from "lucide-react";
 import clsx from "clsx";
+import { EditUserModal } from "~/components/EditUserModal";
 
 type User = {
   id: string;
@@ -12,6 +13,9 @@ type User = {
   status: string;
   createdAt: string;
   rejectionReason: string | null;
+  isActive: boolean;
+  ipWhitelist?: string | null;
+  timeRestrictionEnabled?: boolean | null;
 };
 
 type Department = {
@@ -31,6 +35,7 @@ export function UserManager({ users, departments }: UserManagerProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
@@ -221,7 +226,13 @@ export function UserManager({ users, departments }: UserManagerProps) {
                         </button>
                       )}
                       {activeTab === 'approved' && (
-                        <button className="text-slate-400 hover:text-slate-600">
+                        <button 
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowEditModal(true);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 transition"
+                        >
                           <Edit2 size={16} />
                         </button>
                       )}
@@ -337,6 +348,18 @@ export function UserManager({ users, departments }: UserManagerProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 編輯用戶 Modal */}
+      {showEditModal && selectedUser && (
+        <EditUserModal
+          user={selectedUser}
+          departments={departments}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedUser(null);
+          }}
+        />
       )}
     </div>
   );
