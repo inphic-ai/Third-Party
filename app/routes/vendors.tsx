@@ -196,7 +196,7 @@ function VendorDirectoryContent() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showAddModal, setShowAddModal] = useState(false);
   const [serviceScopeInput, setServiceScopeInput] = useState('');
   const [serviceScopes, setServiceScopes] = useState<string[]>([]);
