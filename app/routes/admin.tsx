@@ -142,13 +142,13 @@ function AdminContent() {
 
       <div className="min-h-[600px] py-4">
         {activeTab === 'dashboard' && <DashboardSummary />}
-        {activeTab === 'logs' && <LogCenter />}
+        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} />}
         {activeTab === 'categories' && <CategoryManager />}
         {activeTab === 'tags' && <TagManager />}
         {activeTab === 'ai' && <AiConfig />}
-        {activeTab === 'users' && <UserManager />}
+        {activeTab === 'users' && <UserManager users={dbAdminUsers} />}
         {activeTab === 'departments' && <DepartmentManager />}
-        {activeTab === 'announcements' && <AnnouncementManager />}
+        {activeTab === 'announcements' && <AnnouncementManager announcements={dbAnnouncements} />}
         {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
       </div>
     </div>
@@ -201,7 +201,7 @@ const DashboardSummary = () => (
   </div>
 );
 
-const LogCenter = () => {
+const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
   const [logType, setLogType] = useState<'operation' | 'login'>('operation');
 
   return (
@@ -241,7 +241,7 @@ const LogCenter = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {dbSystemLogs.map((l: any) => (
+                {systemLogs.map((l: any) => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
@@ -380,7 +380,7 @@ const AiConfig = () => (
   </div>
 );
 
-const UserManager = () => (
+const UserManager = ({ users }: { users: any[] }) => (
   <div className="space-y-4">
     <div className="flex justify-between items-center">
       <h2 className="text-lg font-bold text-slate-800">人員權限管理</h2>
@@ -400,7 +400,7 @@ const UserManager = () => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {dbAdminUsers.map((user: any) => (
+          {users.map((user: any) => (
             <tr key={user.id} className="hover:bg-slate-50/50 transition">
               <td className="px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -469,7 +469,7 @@ const DepartmentManager = () => (
   </div>
 );
 
-const AnnouncementManager = () => (
+const AnnouncementManager = ({ announcements }: { announcements: any[] }) => (
   <div className="space-y-4">
     <div className="flex justify-between items-center">
       <h2 className="text-lg font-bold text-slate-800">系統公告管理</h2>
@@ -488,7 +488,7 @@ const AnnouncementManager = () => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {dbAnnouncements.map((ann: any) => (
+          {announcements.map((ann: any) => (
             <tr key={ann.id} className="hover:bg-slate-50/50 transition">
               <td className="px-6 py-4 font-bold text-slate-800">{ann.title}</td>
               <td className="px-6 py-4 text-slate-500">{ann.date}</td>
