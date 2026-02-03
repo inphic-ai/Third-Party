@@ -105,6 +105,174 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === 'aiRecommend') {
+    try {
+      // 取得表單資料
+      const projectType = formData.get('projectType') as string;
+      const budgetMinStr = formData.get('budgetMin') as string;
+      const budgetMaxStr = formData.get('budgetMax') as string;
+      const budgetMin = budgetMinStr ? parseInt(budgetMinStr) : null;
+      const budgetMax = budgetMaxStr ? parseInt(budgetMaxStr) : null;
+      const regionPreferences = formData.getAll('regionPreference') as string[];
+      const serviceTypePreferences = formData.getAll('serviceTypePreference') as string[];
+      const requirements = formData.get('requirements') as string;
+
+      // 表單驗證
+      if (!projectType) {
+        return json({ 
+          success: false, 
+          error: '請填寫專案類型' 
+        }, { status: 400 });
+      }
+
+      // 從資料庫讀取所有廠商
+      const allVendors = await db.select().from(vendors);
+
+      // 篩選符合條件的廠商
+      let filteredVendors = allVendors.filter(vendor => {
+        // 地區篩選
+        if (regionPreferences.length > 0 && !regionPreferences.includes('ALL')) {
+          if (!regionPreferences.includes(vendor.region)) return false;
+        }
+        
+        // 身分屬性篩選
+        if (serviceTypePreferences.length > 0) {
+          const hasMatchingServiceType = serviceTypePreferences.some(pref => 
+            vendor.serviceTypes.includes(pref)
+          );
+          if (!hasMatchingServiceType) return false;
+        }
+        
+        // 預算篩選（根據 priceRange 轉換為估計金額）
+        if (budgetMin !== null || budgetMax !== null) {
+          // priceRange 轉換為估計金額範圍
+          const priceRangeMap: Record<string, { min: number; max: number }> = {
+            '$': { min: 0, max: 50000 },
+            '$$': { min: 50000, max: 200000 },
+            '$$$': { min: 200000, max: 1000000 },
+            '$$$$': { min: 1000000, max: Infinity }
+          };
+          
+          const vendorPriceRange = priceRangeMap[vendor.priceRange] || { min: 0, max: Infinity };
+          
+          // 檢查是否有交集
+          if (budgetMin !== null && vendorPriceRange.max < budgetMin) return false;
+          if (budgetMax !== null && vendorPriceRange.min > budgetMax) return false;
+        }
+        
+        return true;
+      });
+
+      // 使用 Gemini API 進行智能分析和排序
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+      // 準備預算描述
+      let budgetDescription = '不限';
+      if (budgetMin !== null && budgetMax !== null) {
+        budgetDescription = `${budgetMin.toLocaleString()} - ${budgetMax.toLocaleString()} 元`;
+      } else if (budgetMin !== null) {
+        budgetDescription = `${budgetMin.toLocaleString()} 元以上`;
+      } else if (budgetMax !== null) {
+        budgetDescription = `${budgetMax.toLocaleString()} 元以下`;
+      }
+
+      // 準備提示詞
+      const prompt = `你是一個廠商推薦專家。根據以下需求和廠商列表，請推薦最適合的 3-5 家廠商，並說明推薦理由。
+
+需求條件：
+- 專案類型：${projectType}
+- 預算範圍：${budgetDescription}
+- 地區偏好：${regionPreferences.join(', ') || '不限'}
+- 身分屬性：${serviceTypePreferences.join(', ') || '不限'}
+- 其他需求：${requirements || '無'}
+
+廠商列表（JSON 格式）：
+${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
+  id: v.id,
+  name: v.name,
+  region: v.region,
+  serviceTypes: v.serviceTypes,
+  categories: v.categories,
+  rating: v.rating,
+  priceRange: v.priceRange,
+  tags: v.tags
+})), null, 2)}
+
+請以以下 JSON 格式回傳：
+{
+  "recommendations": [
+    {
+      "vendorId": "廠商 ID",
+      "matchScore": 95,
+      "reason": "推薦理由（繁體中文，50 字以內）"
+    }
+  ]
+}
+
+注意：
+1. 推薦 3-5 家最適合的廠商
+2. matchScore 為 0-100 的匹配度分數
+3. reason 要簡潔有力，說明為什麼推薦這家廠商
+4. 只回傳 JSON，不要其他文字`;
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      
+      // 解析 AI 回應
+      let aiResponse;
+      try {
+        // 移除可能的 markdown 代碼區塊標記
+        const cleanedText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        aiResponse = JSON.parse(cleanedText);
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', responseText);
+        // 如果 AI 回應解析失敗，使用預設推薦
+        aiResponse = {
+          recommendations: filteredVendors.slice(0, 3).map((v, i) => ({
+            vendorId: v.id,
+            matchScore: 90 - i * 5,
+            reason: `符合您的${projectType}需求，評分 ${v.rating} 星`
+          }))
+        };
+      }
+
+      // 組合推薦結果
+      const recommendations = aiResponse.recommendations.map((rec: any) => {
+        const vendor = allVendors.find(v => v.id === rec.vendorId);
+        if (!vendor) return null;
+        
+        return {
+          vendor: {
+            id: vendor.id,
+            name: vendor.name,
+            avatarUrl: vendor.avatarUrl,
+            region: vendor.region,
+            serviceTypes: vendor.serviceTypes,
+            categories: vendor.categories,
+            rating: vendor.rating,
+            priceRange: vendor.priceRange
+          },
+          matchScore: rec.matchScore,
+          reason: rec.reason
+        };
+      }).filter(Boolean);
+
+      return json({ 
+        success: true, 
+        error: null,
+        recommendations 
+      });
+    } catch (error) {
+      console.error('Failed to generate AI recommendations:', error);
+      return json({ 
+        success: false, 
+        error: 'AI 推薦失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
   if (intent === 'toggleFavorite') {
     try {
       const vendorId = formData.get('vendorId') as string;
@@ -200,6 +368,12 @@ function VendorDirectoryContent() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [serviceScopeInput, setServiceScopeInput] = useState('');
   const [serviceScopes, setServiceScopes] = useState<string[]>([]);
+  
+  // AI 推薦功能狀態
+  const [showAiRecommendModal, setShowAiRecommendModal] = useState(false);
+  const [aiRecommendStep, setAiRecommendStep] = useState<'form' | 'result'>('form');
+  const [aiRecommending, setAiRecommending] = useState(false);
+  const [aiRecommendResults, setAiRecommendResults] = useState<any[]>([]);
 
   
   // 分頁狀態
@@ -251,11 +425,24 @@ function VendorDirectoryContent() {
   useEffect(() => {
     if (!actionData) return;
     if (actionData.success) {
-      setShowAddModal(false);
-      setServiceScopeInput('');
-      setServiceScopes([]);
-      formRef.current?.reset();
+      // 處理新增廠商
+      if ('vendorId' in actionData && actionData.vendorId) {
+        setShowAddModal(false);
+        setServiceScopeInput('');
+        setServiceScopes([]);
+        formRef.current?.reset();
+      }
+      // 處理 AI 推薦
+      if ('recommendations' in actionData && actionData.recommendations) {
+        setAiRecommendResults(actionData.recommendations as any[]);
+        setAiRecommendStep('result');
+        setAiRecommending(false);
+      }
       // Remix 會自動重新驗證 loader，無需手動重新載入
+    }
+    // 處理錯誤
+    if (!actionData.success && actionData.error) {
+      setAiRecommending(false);
     }
   }, [actionData]);
 
@@ -376,7 +563,10 @@ function VendorDirectoryContent() {
                 <LayoutList size={18} />
               </button>
            </div>
-           <button className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition font-bold flex items-center gap-2 shadow-md">
+           <button 
+             onClick={() => setShowAiRecommendModal(true)}
+             className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition font-bold flex items-center gap-2 shadow-md"
+           >
              <Sparkles size={18} /> AI 智能推薦
            </button>
            <button 
@@ -831,6 +1021,243 @@ function VendorDirectoryContent() {
                 </button>
               </div>
             </fetcher.Form>
+          </div>
+        </div>
+      )}
+
+      {/* AI 智能推薦 Modal */}
+      {showAiRecommendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl">
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-800">AI 智能推薦廠商</h3>
+                  <p className="text-sm text-slate-400">告訴我您的需求，AI 將為您推薦最適合的廠商</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowAiRecommendModal(false);
+                  setAiRecommendStep('form');
+                  setAiRecommendResults([]);
+                }} 
+                className="p-3 text-slate-300 hover:text-slate-800 hover:bg-slate-100 rounded-full transition"
+              >
+                <X size={28} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            {aiRecommendStep === 'form' ? (
+              <fetcher.Form 
+                method="post" 
+                className="flex-1 overflow-y-auto p-8 space-y-6"
+                onSubmit={() => setAiRecommending(true)}
+              >
+                <input type="hidden" name="intent" value="aiRecommend" />
+                
+                {/* 專案類型 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">專案類型 *</label>
+                  <input 
+                    type="text"
+                    name="projectType"
+                    list="project-type-list"
+                    required
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                    placeholder="例如：辦公室裝修、設備維修、製造外包..."
+                  />
+                  <datalist id="project-type-list">
+                    <option value="辦公室裝修" />
+                    <option value="設備維修" />
+                    <option value="製造外包" />
+                    <option value="系統整合" />
+                    <option value="工程施工" />
+                  </datalist>
+                </div>
+
+                {/* 預算範圍 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">預算範圍</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">最低預算（元）</label>
+                      <input 
+                        type="number"
+                        name="budgetMin"
+                        min="0"
+                        step="1000"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">最高預算（元）</label>
+                      <input 
+                        type="number"
+                        name="budgetMax"
+                        min="0"
+                        step="1000"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                        placeholder="不限"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 地區偏好 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">地區偏好</label>
+                  <div className="flex gap-4">
+                    <label className="flex-1 flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
+                      <input type="checkbox" name="regionPreference" value="TAIWAN" className="w-4 h-4 rounded text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">🇹🇼 台灣</span>
+                    </label>
+                    <label className="flex-1 flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
+                      <input type="checkbox" name="regionPreference" value="CHINA" className="w-4 h-4 rounded text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">🇨🇳 大陸</span>
+                    </label>
+                    <label className="flex-1 flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
+                      <input type="checkbox" name="regionPreference" value="ALL" className="w-4 h-4 rounded text-indigo-600" defaultChecked />
+                      <span className="text-sm font-bold text-slate-700">不限</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 身分屬性偏好 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">身分屬性偏好</label>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      { value: ServiceType.LABOR, label: '🛠️ 提供勞務' },
+                      { value: ServiceType.PRODUCT, label: '📦 提供商品' },
+                      { value: ServiceType.MANUFACTURING, label: '🏭 製造商品' }
+                    ].map(item => (
+                      <label key={item.value} className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-indigo-300 transition-all">
+                        <input type="checkbox" name="serviceTypePreference" value={item.value} className="w-4 h-4 rounded text-indigo-600" />
+                        <span className="text-sm font-bold text-slate-700">{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 其他需求 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">其他需求（選填）</label>
+                  <textarea
+                    name="requirements"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all h-24 resize-none" 
+                    placeholder="例如：需要有 ISO 認證、希望能在週末施工、需要提供保固..."
+                  />
+                </div>
+
+                {/* Modal Footer */}
+                <div className="pt-4 border-t border-slate-100 flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowAiRecommendModal(false);
+                      setAiRecommendStep('form');
+                    }} 
+                    className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                    disabled={aiRecommending}
+                  >
+                    取消
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={aiRecommending}
+                    className="flex-1 py-4 bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold rounded-2xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {aiRecommending ? (
+                      <>
+                        <span className="animate-spin">⏳</span> AI 分析中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={18} /> 開始推薦
+                      </>
+                    )}
+                  </button>
+                </div>
+              </fetcher.Form>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="text-center py-4">
+                  <div className="text-lg font-bold text-slate-800 mb-2">🎯 AI 為您推薦以下廠商</div>
+                  <p className="text-sm text-slate-500">根據您的需求條件，我們找到了 {aiRecommendResults.length} 家適合的廠商</p>
+                </div>
+
+                {aiRecommendResults.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    <Sparkles size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>沒有找到符合條件的廠商</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {aiRecommendResults.map((result: any, index: number) => (
+                      <div key={index} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 hover:border-indigo-200 transition-all">
+                        <div className="flex items-start gap-4">
+                          <img src={result.vendor.avatarUrl} className="w-16 h-16 rounded-xl object-cover" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-black text-slate-800">{result.vendor.name}</h4>
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                                匹配度 {result.matchScore}%
+                              </span>
+                              <div className="flex items-center gap-1 text-yellow-600">
+                                {result.vendor.rating} <Star size={14} fill="currentColor"/>
+                              </div>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-3">{result.reason}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {result.vendor.serviceTypes.map((st: string) => (
+                                <span key={st} className="text-xs font-bold px-2 py-1 rounded-lg bg-blue-50 text-blue-600">
+                                  {st}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <Link 
+                            to={`/vendors/${result.vendor.id}`}
+                            className="px-4 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-indigo-600 transition-all"
+                          >
+                            查看詳情
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 結果 Footer */}
+                <div className="pt-4 border-t border-slate-100 flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setAiRecommendStep('form')} 
+                    className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                  >
+                    重新推薦
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowAiRecommendModal(false);
+                      setAiRecommendStep('form');
+                      setAiRecommendResults([]);
+                    }} 
+                    className="flex-1 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-all"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
