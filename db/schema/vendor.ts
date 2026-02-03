@@ -130,3 +130,24 @@ export const socialGroups = pgTable('social_groups', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
+
+// ============================================
+// 廠商評分 (VendorRating)
+// ============================================
+
+export const vendorRatings = pgTable('vendor_ratings', {
+  // 識別資訊
+  id: uuid('id').primaryKey().defaultRandom(),
+  vendorId: uuid('vendor_id').notNull().references(() => vendors.id, { onDelete: 'cascade' }),
+  
+  // 評分資訊
+  rating: integer('rating').notNull(), // 1-5 星
+  
+  // 評論內容
+  comment: text('comment'),
+  
+  // 系統資訊
+  createdBy: uuid('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
