@@ -1199,7 +1199,12 @@ export default function VendorDetail() {
                 <button 
                   onClick={() => {
                     const mainContact = vendor.contacts?.find(c => c.isMainContact) || vendor.contacts?.[0];
-                    if (mainContact) handleContactClick(mainContact, 'log');
+                    if (mainContact) {
+                      handleContactClick(mainContact, 'log');
+                    } else {
+                      // 如果沒有聯絡人，提示使用者先新增聯絡窗口
+                      alert("請先在「聯繫窗口 & 群組」Tab 中新增聯絡窗口，才能建立聯繫紀錄");
+                    }
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-medium"
                 >
