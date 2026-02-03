@@ -1249,6 +1249,20 @@ export default function VendorDetail() {
                                   <div className="text-slate-200 italic text-[10px]">無 WeChat</div>
                                </div>
                             </div>
+                            
+                            {/* 聯繫此人按鈕 */}
+                            <div className="mt-4 pt-4 border-t border-slate-100">
+                              <button
+                                onClick={() => {
+                                  setSelectedContact(contact);
+                                  setModalInitialState('log');
+                                  setShowContactModal(true);
+                                }}
+                                className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2"
+                              >
+                                <Phone size={14} /> 聯繫此人
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1884,6 +1898,10 @@ const ContactLogModal: React.FC<{
   initialIsReservation?: boolean;
   onClose: () => void; 
 }> = ({ contact, vendor, initialIsReservation = false, onClose }) => {
+  // 聯絡人選擇器 state
+  const [selectedContactId, setSelectedContactId] = useState(contact?.id || vendor.contacts?.[0]?.id || '');
+  const selectedContact = vendor.contacts?.find((c: ContactWindow) => c.id === selectedContactId) || contact;
+  
   const [note, setNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [generatedSummary, setGeneratedSummary] = useState('');
@@ -1915,7 +1933,7 @@ const ContactLogModal: React.FC<{
     }
   }, [fetcher.data, onClose]);
 
-  const contactPhone = contact?.mobile || vendor.mainPhone;
+  const contactPhone = selectedContact?.mobile || vendor.mainPhone;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
@@ -1928,17 +1946,39 @@ const ContactLogModal: React.FC<{
          </div>
 
          <div className="p-6">
+           {/* 聯絡人選擇器 */}
+           {vendor.contacts && vendor.contacts.length > 1 && (
+             <div className="mb-6">
+               <label className="block text-sm font-bold text-slate-700 mb-2">
+                 選擇聯絡窗口 *
+               </label>
+               <select 
+                 value={selectedContactId}
+                 onChange={(e) => setSelectedContactId(e.target.value)}
+                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition bg-white"
+               >
+                 {vendor.contacts.map((c: ContactWindow) => (
+                   <option key={c.id} value={c.id}>
+                     👤 {c.name} ({c.role})
+                     {c.isMainContact && ' - 主要聯絡人'}
+                     {c.mobile && ` - ${c.mobile}`}
+                   </option>
+                 ))}
+               </select>
+             </div>
+           )}
+
            <div className="mb-6 text-center">
              <p className="text-sm text-slate-500 mb-1">正在聯繫</p>
              <h3 className="text-2xl font-bold text-slate-800">
-               {contact ? `${contact.name} (${contact.role})` : vendor.name}
+               {selectedContact ? `${selectedContact.name} (${selectedContact.role})` : vendor.name}
              </h3>
              
              <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-mono font-bold text-xl border border-blue-200">
                 {contactPhone || "無號碼"}
                 <Phone size={16} className="animate-pulse" />
              </div>
-             <p className="text-[10px] text-slate-400 mt-1">{contact ? "系統將自動記錄此次聯繫意圖" : "建立廠商聯繫紀錄"}</p>
+             <p className="text-[10px] text-slate-400 mt-1">{selectedContact ? "系統將自動記錄此次聯繫意圖" : "建立廠商聯繫紀錄"}</p>
            </div>
 
            <div className="space-y-4">
@@ -2030,7 +2070,7 @@ const ContactLogModal: React.FC<{
              <fetcher.Form method="post" className="flex gap-3 pt-2">
                 <input type="hidden" name="intent" value="createContactLog" />
                 <input type="hidden" name="vendorId" value={vendor.id} />
-                <input type="hidden" name="contactId" value={contact?.id || ''} />
+                <input type="hidden" name="contactId" value={selectedContactId || ''} />
                 <input type="hidden" name="note" value={note} />
                 <input type="hidden" name="isReservation" value={isReservation.toString()} />
                 {isReservation && (
