@@ -8,7 +8,8 @@ import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
 import { eq } from 'drizzle-orm';
-import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
+// 郵件服務暫時停用
+// import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
@@ -156,10 +157,10 @@ export async function action({ request }: ActionFunctionArgs) {
           })
           .where(eq(users.id, userId));
 
-        // 發送批准郵件
-        await sendApprovalEmail(user.email, user.name, dept.name);
+        // 發送批准郵件（暫時停用）
+        // await sendApprovalEmail(user.email, user.name, dept.name);
 
-        return json({ success: true, message: '用戶已批准，通知郵件已發送' });
+        return json({ success: true, message: '用戶已批准' });
       }
 
       case 'rejectUser': {
@@ -185,10 +186,10 @@ export async function action({ request }: ActionFunctionArgs) {
           })
           .where(eq(users.id, userId));
 
-        // 發送拒絕郵件
-        await sendRejectionEmail(user.email, user.name, reason);
+        // 發送拒絕郵件（暫時停用）
+        // await sendRejectionEmail(user.email, user.name, reason);
 
-        return json({ success: true, message: '用戶已拒絕，通知郵件已發送' });
+        return json({ success: true, message: '用戶已拒絕' });
       }
 
       case 'unblockUser': {
