@@ -24,7 +24,8 @@ import {
   CalendarCheck,
   MapPin,
   DollarSign,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -128,7 +129,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         principleTitle: '系統設計原則',
         principleContent: '將被動的「查詢」轉為主動的「執行」。'
       },
-      user
+      user,
+      isAdmin: user.role === 'ADMIN'
     });
   } catch (error) {
     console.error('[Tasks Loader] Error:', error);
@@ -143,7 +145,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         principleTitle: '系統設計原則',
         principleContent: '將被動的「查詢」轉為主動的「執行」。'
       },
-      user: null
+      user: null,
+      isAdmin: false
     });
   }
 }
@@ -277,6 +280,31 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  // 刪除任務
+  if (intent === "deleteTask") {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, message: "無權限刪除" }, { status: 403 });
+    }
+    
+    const taskId = formData.get("taskId") as string;
+
+    if (!taskId) {
+      return json({ success: false, message: "缺少任務 ID" }, { status: 400 });
+    }
+
+    try {
+      await db.delete(tasks).where(eq(tasks.id, taskId));
+      console.log('[Tasks Action] Deleted task:', taskId);
+      return json({ success: true, message: "任務已刪除" });
+    } catch (error) {
+      console.error('[Tasks Action] Failed to delete task:', error);
+      return json({ success: false, message: "刪除失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+
   return json({ success: false, message: "未知的請求" }, { status: 400 });
 }
 
@@ -300,7 +328,7 @@ interface UnifiedTask {
 }
 
 function TasksContent() {
-  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks, manualTasks: dbManualTasks, helpContent, user } = useLoaderData<typeof loader>();
+  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks, manualTasks: dbManualTasks, helpContent, user, isAdmin } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -651,14 +679,32 @@ function TasksContent() {
                           </div>
                        </div>
 
-                       {task.type !== 'manual' && (
-                          <Link 
-                             to={task.type === 'transaction' ? `/transactions/${task.id}` : `/vendors/${task.vendorId}`}
-                             className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition opacity-0 group-hover:opacity-100"
-                          >
-                             <ChevronRight size={20} />
-                          </Link>
-                       )}
+                       <div className="flex items-center gap-1">
+                         {task.type === 'manual' && isAdmin && (
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               if (confirm(`確定要刪除任務「${task.title}」嗎？`)) {
+                                 const formData = new FormData();
+                                 formData.append('intent', 'deleteTask');
+                                 formData.append('taskId', task.id);
+                                 fetcher.submit(formData, { method: 'post' });
+                               }
+                             }}
+                             className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition opacity-0 group-hover:opacity-100"
+                           >
+                             <Trash2 size={16} />
+                           </button>
+                         )}
+                         {task.type !== 'manual' && (
+                           <Link 
+                              to={task.type === 'transaction' ? `/transactions/${task.id}` : `/vendors/${task.vendorId}`}
+                              className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition opacity-0 group-hover:opacity-100"
+                           >
+                              <ChevronRight size={20} />
+                           </Link>
+                         )}
+                       </div>
                     </div>
                  );
               }) : (

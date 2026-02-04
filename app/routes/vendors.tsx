@@ -12,7 +12,7 @@ import {
   Search, MapPin, Star, ChevronRight, LayoutGrid, 
   LayoutList, Plus, Sparkles, X, Heart, 
   ArrowRight, Package, Hammer, Factory, Info, Globe, Filter,
-  ChevronDown, Save, Phone, Mail, Building2
+  ChevronDown, Save, Phone, Mail, Building2, Trash2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -300,6 +300,37 @@ ${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
     }
   }
 
+  // 刪除廠商
+  if (intent === 'deleteVendor') {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, error: '無權限刪除' }, { status: 403 });
+    }
+    
+    try {
+      const vendorId = formData.get('vendorId') as string;
+
+      if (!vendorId) {
+        return json({ success: false, error: '缺少廠商 ID' }, { status: 400 });
+      }
+
+      // 刪除廠商（關聯的 contact_windows 會自動刪除，因為有 ON DELETE CASCADE）
+      await db.delete(vendors).where(eq(vendors.id, vendorId));
+
+      console.log('[Vendors Action] Deleted vendor:', vendorId);
+
+      return json({ success: true, error: null, message: '廠商已刪除' });
+    } catch (error) {
+      console.error('[Vendors Action] Failed to delete vendor:', error);
+      return json({ 
+        success: false, 
+        error: '刪除失敗，請稍後再試' 
+      }, { status: 500 });
+    }
+  }
+
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
@@ -370,6 +401,7 @@ function VendorDirectoryContent() {
   
   // 從 loader 讀取真實廠商資料
   const allVendors = loaderData.vendors as any[];
+  const isAdmin = loaderData.isAdmin;
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
@@ -707,9 +739,28 @@ function VendorDirectoryContent() {
                          </div>
                       ))}
                    </div>
-                   <Link to={`/vendors/${vendor.id}`} className="text-xs font-black text-slate-900 bg-slate-100 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white transition flex items-center gap-2 uppercase tracking-widest">
-                      Detail <ArrowRight size={14} />
-                   </Link>
+                   <div className="flex items-center gap-2">
+                     {isAdmin && (
+                       <button
+                         onClick={(e) => {
+                           e.preventDefault();
+                           if (confirm(`確定要刪除廠商「${vendor.name}」嗎？`)) {
+                             const formData = new FormData();
+                             formData.append('intent', 'deleteVendor');
+                             formData.append('vendorId', vendor.id);
+                             fetcher.submit(formData, { method: 'post' });
+                           }
+                         }}
+                         disabled={fetcher.state === 'submitting'}
+                         className="text-xs font-black text-red-600 bg-red-50 px-3 py-2 rounded-xl hover:bg-red-600 hover:text-white transition flex items-center gap-1 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                       >
+                         <Trash2 size={12} />
+                       </button>
+                     )}
+                     <Link to={`/vendors/${vendor.id}`} className="text-xs font-black text-slate-900 bg-slate-100 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white transition flex items-center gap-2 uppercase tracking-widest">
+                        Detail <ArrowRight size={14} />
+                     </Link>
+                   </div>
                 </div>
               </div>
             ))}
@@ -771,12 +822,31 @@ function VendorDirectoryContent() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link 
-                        to={`/vendors/${vendor.id}`} 
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
-                      >
-                        查看詳情 →
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        <Link 
+                          to={`/vendors/${vendor.id}`} 
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                        >
+                          查看詳情 →
+                        </Link>
+                        {isAdmin && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`確定要刪除廠商「${vendor.name}」嗎？`)) {
+                                const formData = new FormData();
+                                formData.append('intent', 'deleteVendor');
+                                formData.append('vendorId', vendor.id);
+                                fetcher.submit(formData, { method: 'post' });
+                              }
+                            }}
+                            disabled={fetcher.state === 'submitting'}
+                            className="text-xs font-bold text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          >
+                            <Trash2 size={14} />
+                            刪除
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

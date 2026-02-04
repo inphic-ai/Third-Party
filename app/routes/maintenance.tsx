@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   Maximize2,
-  Upload
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { db } from '~/services/db.server';
 import { maintenanceRecords } from '../../db/schema/operations';
@@ -62,7 +63,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const vendorList = await db.select().from(vendors);
 
-  return json({ records, vendorList });
+  return json({ records, vendorList, isAdmin: user.role === 'ADMIN' });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -132,6 +133,31 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // 刪除維修紀錄
+  if (intent === 'delete') {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, error: '無權限刪除' }, { status: 403 });
+    }
+    
+    const caseId = formData.get('caseId') as string;
+
+    if (!caseId) {
+      return json({ success: false, error: '缺少紀錄 ID' }, { status: 400 });
+    }
+
+    try {
+      await db.delete(maintenanceRecords).where(eq(maintenanceRecords.caseId, caseId));
+      console.log('[Maintenance Action] Deleted record:', caseId);
+      return json({ success: true, message: '維修紀錄已刪除' });
+    } catch (error) {
+      console.error('[Maintenance Action] Failed to delete record:', error);
+      return json({ success: false, error: '刪除失敗，請稍後再試' }, { status: 500 });
+    }
+  }
+
   return json({ success: false });
 }
 
@@ -146,7 +172,7 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 };
 
 export default function MaintenancePage() {
-  const { records, vendorList } = useLoaderData<typeof loader>();
+  const { records, vendorList, isAdmin } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -433,12 +459,31 @@ export default function MaintenancePage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => setSelectedRecord(record)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedRecord(record)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                        {isAdmin && (
+                          <Form method="post" onSubmit={(e) => {
+                            if (!confirm(`確定要刪除維修紀錄「${record.caseId}」嗎？`)) {
+                              e.preventDefault();
+                            }
+                          }}>
+                            <input type="hidden" name="intent" value="delete" />
+                            <input type="hidden" name="caseId" value={record.caseId} />
+                            <button
+                              type="submit"
+                              disabled={isSubmitting}
+                              className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </Form>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
