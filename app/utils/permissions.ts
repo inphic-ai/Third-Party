@@ -106,11 +106,25 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = Object.entries(
 
 /**
  * 解析權限字串為權限陣列
- * @param permissionsStr - 逗號分隔的權限字串
+ * @param permissionsStr - JSON 陣列字串或逗號分隔的權限字串
  * @returns 權限陣列
  */
 export function parsePermissions(permissionsStr: string | null): Permission[] {
   if (!permissionsStr) return [];
+  
+  // 嘗試解析 JSON 陣列格式：["dashboard","vendors"]
+  if (permissionsStr.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(permissionsStr);
+      if (Array.isArray(parsed)) {
+        return parsed as Permission[];
+      }
+    } catch (error) {
+      console.error('Failed to parse permissions as JSON:', error);
+    }
+  }
+  
+  // 降級為逗號分隔格式：dashboard,vendors
   return permissionsStr.split(',').filter(Boolean) as Permission[];
 }
 
