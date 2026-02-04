@@ -6,6 +6,7 @@ import { db } from '../services/db.server';
 import { transactions } from '../../db/schema/financial';
 import { contactLogs, tasks } from '../../db/schema/operations';
 import { vendors } from '../../db/schema/vendor';
+import { helpContents } from '../../db/schema/system';
 import { eq } from 'drizzle-orm';
 import { requireUser } from '~/services/auth.server';
 import { requirePermission } from '~/utils/permissions.server';
@@ -48,12 +49,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     console.log('[Tasks Loader] Loading tasks data...');
     
-    // 讀取所有交易、聯絡紀錄、任務和廠商
-    const [allTransactions, allContactLogs, allTasks, allVendors] = await Promise.all([
+    // 讀取所有交易、聯絡紀錄、任務、廠商和使用說明
+    const [allTransactions, allContactLogs, allTasks, allVendors, helpContentData] = await Promise.all([
       db.select().from(transactions),
       db.select().from(contactLogs),
       db.select().from(tasks),
-      db.select().from(vendors)
+      db.select().from(vendors),
+      db.select().from(helpContents).where(eq(helpContents.page, 'tasks')).limit(1)
     ]);
     
     console.log(`[Tasks Loader] Loaded ${allTransactions.length} transactions, ${allContactLogs.length} contact logs, ${allTasks.length} tasks, ${allVendors.length} vendors`);
@@ -118,14 +120,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({ 
       transactionTasks,
       contactTasks,
-      manualTasks
+      manualTasks,
+      helpContent: helpContentData[0] || {
+        title: '歡迎來到日常戰術中心',
+        subtitle: '系統教學與提示',
+        content: '這裡不只是日曆，而是您的每日行動指揮部。',
+        principleTitle: '系統設計原則',
+        principleContent: '將被動的「查詢」轉為主動的「執行」。'
+      },
+      user
     });
   } catch (error) {
     console.error('[Tasks Loader] Error:', error);
     return json({ 
       transactionTasks: [],
       contactTasks: [],
-      manualTasks: []
+      manualTasks: [],
+      helpContent: {
+        title: '歡迎來到日常戰術中心',
+        subtitle: '系統教學與提示',
+        content: '這裡不只是日曆，而是您的每日行動指揮部。',
+        principleTitle: '系統設計原則',
+        principleContent: '將被動的「查詢」轉為主動的「執行」。'
+      },
+      user: null
     });
   }
 }
@@ -168,6 +186,63 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "updateHelpContent") {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以編輯
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, message: "無權限編輯" }, { status: 403 });
+    }
+    
+    const title = formData.get("title") as string;
+    const subtitle = formData.get("subtitle") as string;
+    const content = formData.get("content") as string;
+    const principleTitle = formData.get("principleTitle") as string;
+    const principleContent = formData.get("principleContent") as string;
+    
+    if (!title || !title.trim() || !content || !content.trim()) {
+      return json({ success: false, message: "標題和內容不能為空" }, { status: 400 });
+    }
+    
+    try {
+      // 檢查是否已存在
+      const [existing] = await db.select().from(helpContents).where(eq(helpContents.page, 'tasks'));
+      
+      if (existing) {
+        // 更新現有資料
+        await db.update(helpContents)
+          .set({
+            title: title.trim(),
+            subtitle: subtitle?.trim() || null,
+            content: content.trim(),
+            principleTitle: principleTitle?.trim() || null,
+            principleContent: principleContent?.trim() || null,
+            updatedBy: user.id,
+            updatedAt: new Date()
+          })
+          .where(eq(helpContents.page, 'tasks'));
+      } else {
+        // 建立新資料
+        await db.insert(helpContents).values({
+          page: 'tasks',
+          title: title.trim(),
+          subtitle: subtitle?.trim() || null,
+          content: content.trim(),
+          principleTitle: principleTitle?.trim() || null,
+          principleContent: principleContent?.trim() || null,
+          updatedBy: user.id
+        });
+      }
+      
+      console.log('[Tasks Action] Updated help content for tasks page');
+      
+      return json({ success: true, message: "使用說明已更新" });
+    } catch (error) {
+      console.error('[Tasks Action] Failed to update help content:', error);
+      return json({ success: false, message: "更新失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+  
   if (intent === "toggleTask") {
     const taskId = formData.get("taskId") as string;
 
@@ -225,7 +300,7 @@ interface UnifiedTask {
 }
 
 function TasksContent() {
-  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks, manualTasks: dbManualTasks } = useLoaderData<typeof loader>();
+  const { transactionTasks: dbTransactionTasks, contactTasks: dbContactTasks, manualTasks: dbManualTasks, helpContent, user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -233,6 +308,15 @@ function TasksContent() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('MEDIUM');
+  
+  // Help Modal States
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [isEditingHelp, setIsEditingHelp] = useState(false);
+  const [editHelpTitle, setEditHelpTitle] = useState('');
+  const [editHelpSubtitle, setEditHelpSubtitle] = useState('');
+  const [editHelpContent, setEditHelpContent] = useState('');
+  const [editPrincipleTitle, setEditPrincipleTitle] = useState('');
+  const [editPrincipleContent, setEditPrincipleContent] = useState('');
 
   // Helper to get days in month
   const getDaysInMonth = (date: Date) => {
@@ -308,6 +392,38 @@ function TasksContent() {
     formData.append('taskId', id);
     fetcher.submit(formData, { method: 'post' });
   };
+  
+  // Help Modal Handlers
+  const handleOpenHelp = () => {
+    setShowHelpModal(true);
+    setIsEditingHelp(false);
+  };
+  
+  const handleEditHelp = () => {
+    setEditHelpTitle(helpContent.title || '');
+    setEditHelpSubtitle(helpContent.subtitle || '');
+    setEditHelpContent(helpContent.content || '');
+    setEditPrincipleTitle(helpContent.principleTitle || '');
+    setEditPrincipleContent(helpContent.principleContent || '');
+    setIsEditingHelp(true);
+  };
+  
+  const handleSaveHelp = () => {
+    const formData = new FormData();
+    formData.append('intent', 'updateHelpContent');
+    formData.append('title', editHelpTitle.trim());
+    formData.append('subtitle', editHelpSubtitle.trim());
+    formData.append('content', editHelpContent.trim());
+    formData.append('principleTitle', editPrincipleTitle.trim());
+    formData.append('principleContent', editPrincipleContent.trim());
+    fetcher.submit(formData, { method: 'post' });
+    setIsEditingHelp(false);
+  };
+  
+  const handleCloseHelp = () => {
+    setShowHelpModal(false);
+    setIsEditingHelp(false);
+  };
 
   const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
   const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
@@ -334,6 +450,7 @@ function TasksContent() {
           </div>
         </div>
         <button 
+          onClick={handleOpenHelp}
           className="flex items-center gap-2 text-indigo-600 font-bold bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition"
         >
           <HelpCircle size={18} /> 如何使用？
@@ -555,6 +672,138 @@ function TasksContent() {
            </div>
         </div>
       </div>
+
+      {/* 使用說明模態框 */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={handleCloseHelp}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-indigo-100 rounded-xl">
+                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  {isEditingHelp ? (
+                    <div className="space-y-2">
+                      <input 
+                        type="text" 
+                        value={editHelpTitle} 
+                        onChange={(e) => setEditHelpTitle(e.target.value)}
+                        className="w-full text-2xl font-bold text-slate-800 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="標題"
+                      />
+                      <input 
+                        type="text" 
+                        value={editHelpSubtitle} 
+                        onChange={(e) => setEditHelpSubtitle(e.target.value)}
+                        className="w-full text-sm text-indigo-600 px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="副標題"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <h2 className="text-2xl font-bold text-slate-800 mb-1">{helpContent.title}</h2>
+                      <p className="text-sm text-indigo-600 font-medium">{helpContent.subtitle}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {user?.role === 'ADMIN' && !isEditingHelp && (
+                  <button 
+                    onClick={handleEditHelp}
+                    className="text-indigo-600 hover:text-indigo-700 text-sm font-medium px-3 py-1 rounded-lg hover:bg-indigo-50 transition"
+                  >
+                    編輯
+                  </button>
+                )}
+                <button 
+                  onClick={handleCloseHelp}
+                  className="text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {isEditingHelp ? (
+                <textarea 
+                  value={editHelpContent} 
+                  onChange={(e) => setEditHelpContent(e.target.value)}
+                  className="w-full h-32 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="主要內容..."
+                />
+              ) : (
+                <p className="text-slate-700 leading-relaxed">{helpContent.content}</p>
+              )}
+
+              {(isEditingHelp || helpContent.principleTitle) && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="flex-1">
+                      {isEditingHelp ? (
+                        <div className="space-y-2">
+                          <input 
+                            type="text" 
+                            value={editPrincipleTitle} 
+                            onChange={(e) => setEditPrincipleTitle(e.target.value)}
+                            className="w-full font-bold text-blue-800 px-3 py-1 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            placeholder="原則標題"
+                          />
+                          <textarea 
+                            value={editPrincipleContent} 
+                            onChange={(e) => setEditPrincipleContent(e.target.value)}
+                            className="w-full h-20 text-sm text-blue-700 px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+                            placeholder="原則內容..."
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="font-bold text-blue-800 mb-2">{helpContent.principleTitle}</h3>
+                          <p className="text-sm text-blue-700 leading-relaxed">{helpContent.principleContent}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isEditingHelp ? (
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setIsEditingHelp(false)}
+                  className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveHelp}
+                  disabled={!editHelpTitle.trim() || !editHelpContent.trim() || fetcher.state === 'submitting'}
+                  className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {fetcher.state === 'submitting' ? '儲存中...' : '儲存'}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-6">
+                <button
+                  onClick={handleCloseHelp}
+                  className="w-full px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition"
+                >
+                  開始使用
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 新增任務模態框 */}
       {showAddTaskModal && (
