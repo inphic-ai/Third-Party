@@ -112,10 +112,17 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = Object.entries(
 export function parsePermissions(permissionsStr: string | null): Permission[] {
   if (!permissionsStr) return [];
   
-  // 嘗試解析 JSON 陣列格式：["dashboard","vendors"]
-  if (permissionsStr.trim().startsWith('[')) {
+  // 嘗試解析 JSON 格式
+  if (permissionsStr.trim().startsWith('[') || permissionsStr.trim().startsWith('{')) {
     try {
       const parsed = JSON.parse(permissionsStr);
+      
+      // 新格式：{ modules: [...], deletePermissions: [...] }
+      if (parsed && typeof parsed === 'object' && 'modules' in parsed) {
+        return (parsed.modules || []) as Permission[];
+      }
+      
+      // 舊格式：["dashboard","vendors"]
       if (Array.isArray(parsed)) {
         return parsed as Permission[];
       }
