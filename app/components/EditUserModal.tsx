@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useFetcher } from "@remix-run/react";
 import { X, User, Lock, Shield } from "lucide-react";
-import { PERMISSION_TEMPLATES } from '~/utils/permissions';
+import { PERMISSION_TEMPLATES, PERMISSIONS, getPermissionsByTemplate, type Permission } from '~/utils/permissions';
 import clsx from "clsx";
 
 type User = {
@@ -44,12 +44,18 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
   
   // 功能權限狀態
   const [permissionTemplate, setPermissionTemplate] = useState('factory_user');
-  const [permissions, setPermissions] = useState(PERMISSION_TEMPLATES.factory_user);
+  const [permissions, setPermissions] = useState<Permission[]>(getPermissionsByTemplate('factory_user'));
   
   // 當權限模板變更時，更新權限
   useEffect(() => {
-    setPermissions(PERMISSION_TEMPLATES[permissionTemplate] || PERMISSION_TEMPLATES.factory_user);
+    const newPermissions = getPermissionsByTemplate(permissionTemplate);
+    setPermissions(newPermissions);
   }, [permissionTemplate]);
+
+  // 輔助函數：檢查是否有某個權限
+  const hasPermission = (permission: Permission) => {
+    return permissions.includes(permission);
+  };
 
   const handleSubmit = () => {
     const formData = {
@@ -75,6 +81,10 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
   if (isSuccess && !isSubmitting) {
     setTimeout(() => onClose(), 500);
   }
+
+  // 獲取當前選擇的模板名稱
+  const currentTemplate = PERMISSION_TEMPLATES.find(t => t.id === permissionTemplate);
+  const currentTemplateName = currentTemplate?.name || 'Factory User';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -242,9 +252,11 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   onChange={(e) => setPermissionTemplate(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="factory_user">Factory User</option>
-                  <option value="factory_admin">Factory Admin</option>
-                  <option value="vendor_user">Vendor User</option>
+                  {PERMISSION_TEMPLATES.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-slate-500 mt-2">
                   使用者的權限統一由模板設定，如需調整權限請至「權限模板」進行編輯。
@@ -257,24 +269,24 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   <label className="text-sm font-medium text-slate-700">
                     模板權限預覽 (READ-ONLY)
                   </label>
-                  <a href="#" className="text-sm text-blue-600 hover:underline">
-                    已選擇: Factory User
-                  </a>
+                  <span className="text-sm text-blue-600">
+                    已選擇: {currentTemplateName}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   {/* 統計儀表板 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.dashboard
+                    hasPermission(PERMISSIONS.DASHBOARD)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.dashboard ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.DASHBOARD) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.dashboard && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.DASHBOARD) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       統計儀表板 (Dashboard)
@@ -284,15 +296,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 廠商名錄 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.vendors
+                    hasPermission(PERMISSIONS.VENDORS)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.vendors ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.VENDORS) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.vendors && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.VENDORS) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       廠商名錄 (Vendors)
@@ -302,15 +314,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 設備維修紀錄 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.maintenance
+                    hasPermission(PERMISSIONS.MAINTENANCE)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.maintenance ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.MAINTENANCE) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.maintenance && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.MAINTENANCE) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       設備維修紀錄 (Maintenance)
@@ -320,15 +332,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 日常任務 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.tasks
+                    hasPermission(PERMISSIONS.TASKS)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.tasks ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.TASKS) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.tasks && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.TASKS) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       日常任務 (Tasks)
@@ -338,15 +350,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 通訊中心 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.communication
+                    hasPermission(PERMISSIONS.COMMUNICATION)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.communication ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.COMMUNICATION) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.communication && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.COMMUNICATION) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       通訊中心 (Communication)
@@ -356,15 +368,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 請款與發票管理 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.invoices
+                    hasPermission(PERMISSIONS.INVOICES)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.invoices ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.INVOICES) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.invoices && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.INVOICES) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       請款與發票管理 (Invoices)
@@ -374,15 +386,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 知識庫 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.knowledge
+                    hasPermission(PERMISSIONS.KNOWLEDGE)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.knowledge ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.KNOWLEDGE) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.knowledge && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.KNOWLEDGE) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       知識庫 (Knowledge)
@@ -392,15 +404,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 系統公告 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.announcements
+                    hasPermission(PERMISSIONS.ANNOUNCEMENTS)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.announcements ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.ANNOUNCEMENTS) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.announcements && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.ANNOUNCEMENTS) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       系統公告 (Announcements)
@@ -410,15 +422,15 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   {/* 系統管理 */}
                   <div className={clsx(
                     "p-4 rounded-lg border-2 flex items-center gap-3",
-                    permissions.system
+                    hasPermission(PERMISSIONS.SYSTEM)
                       ? "bg-green-50 border-green-300"
                       : "bg-slate-50 border-slate-200"
                   )}>
                     <div className={clsx(
                       "w-6 h-6 rounded flex items-center justify-center",
-                      permissions.system ? "bg-green-500" : "bg-slate-300"
+                      hasPermission(PERMISSIONS.SYSTEM) ? "bg-green-500" : "bg-slate-300"
                     )}>
-                      {permissions.system && <span className="text-white text-sm">✓</span>}
+                      {hasPermission(PERMISSIONS.SYSTEM) && <span className="text-white text-sm">✓</span>}
                     </div>
                     <span className="text-sm font-medium text-slate-700">
                       系統管理 (System)
@@ -430,19 +442,18 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
           )}
         </div>
 
-        {/* Footer 按鈕 */}
+        {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200">
           <button
             onClick={onClose}
-            disabled={isSubmitting}
-            className="px-6 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition disabled:opacity-50"
+            className="px-6 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
           >
             取消
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="px-6 py-2.5 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2.5 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-900 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isSubmitting ? (
               <>
@@ -457,13 +468,6 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
             )}
           </button>
         </div>
-
-        {/* 錯誤訊息 */}
-        {fetcher.data?.error && (
-          <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            ⚠️ {fetcher.data.error}
-          </div>
-        )}
       </div>
     </div>
   );
