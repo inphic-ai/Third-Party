@@ -550,20 +550,48 @@ const CategoryManager = () => (
 );
 
 const TagManager = () => (
-  <div className="space-y-4">
+  <div className="space-y-6">
     <div className="flex justify-between items-center">
       <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
       <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
         <Plus size={16} /> 新增標籤
       </button>
     </div>
+    
+    {/* 聯絡標籤 */}
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <h3 className="text-md font-bold text-slate-700 mb-4">聯絡標籤</h3>
       <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.map(tag => (
-          <div key={tag.id} className="px-4 py-2 bg-slate-100 rounded-full flex items-center gap-2">
-            <span className="font-bold text-slate-700">{tag.name}</span>
-            <span className="text-xs text-slate-400">({tag.count})</span>
-            <button className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+        {MOCK_SYSTEM_TAGS.contactTags.map((tag, index) => (
+          <div key={`contact-${index}`} className="px-4 py-2 bg-blue-50 rounded-full flex items-center gap-2">
+            <span className="font-bold text-blue-700">{tag}</span>
+            <button className="text-blue-400 hover:text-red-500"><X size={14} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+    
+    {/* 服務標籤 */}
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <h3 className="text-md font-bold text-slate-700 mb-4">服務標籤</h3>
+      <div className="flex flex-wrap gap-3">
+        {MOCK_SYSTEM_TAGS.serviceTags.map((tag, index) => (
+          <div key={`service-${index}`} className="px-4 py-2 bg-green-50 rounded-full flex items-center gap-2">
+            <span className="font-bold text-green-700">{tag}</span>
+            <button className="text-green-400 hover:text-red-500"><X size={14} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+    
+    {/* 網站標籤 */}
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <h3 className="text-md font-bold text-slate-700 mb-4">網站標籤</h3>
+      <div className="flex flex-wrap gap-3">
+        {MOCK_SYSTEM_TAGS.websiteTags.map((tag, index) => (
+          <div key={`website-${index}`} className="px-4 py-2 bg-purple-50 rounded-full flex items-center gap-2">
+            <span className="font-bold text-purple-700">{tag}</span>
+            <button className="text-purple-400 hover:text-red-500"><X size={14} /></button>
           </div>
         ))}
       </div>
