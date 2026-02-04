@@ -63,7 +63,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const vendorList = await db.select().from(vendors);
 
-  return json({ records, vendorList, isAdmin: user.role === 'ADMIN' });
+  return json({ records, vendorList, isAdmin: user.role === 'admin' });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -138,7 +138,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, error: '無權限刪除' }, { status: 403 });
     }
     

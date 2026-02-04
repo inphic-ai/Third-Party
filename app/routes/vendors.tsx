@@ -305,7 +305,7 @@ ${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, error: '無權限刪除' }, { status: 403 });
     }
     
@@ -379,12 +379,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     console.log(`[Vendors Loader] Successfully mapped ${vendorsWithMapping.length} vendors`);
     
-    return json({ vendors: vendorsWithMapping, isAdmin: user.role === 'ADMIN' });
+    return json({ vendors: vendorsWithMapping, isAdmin: user.role === 'admin' });
   } catch (error) {
     console.error('[Vendors Loader] Fatal error:', error);
     console.error('[Vendors Loader] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     // 發生錯誤時返回空陣列，讓頁面至少能顯示
-    return json({ vendors: [], isAdmin: user.role === 'ADMIN' });
+    return json({ vendors: [], isAdmin: user.role === 'admin' });
   }
 }
 
@@ -403,9 +403,6 @@ function VendorDirectoryContent() {
   const allVendors = loaderData.vendors as any[];
   const isAdmin = loaderData.isAdmin;
   
-  // Debug: 檢查 isAdmin 的值
-  console.log('[Vendors Debug] isAdmin:', isAdmin);
-  console.log('[Vendors Debug] loaderData:', loaderData);
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 

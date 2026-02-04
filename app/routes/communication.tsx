@@ -128,14 +128,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({ 
       contactLogs: contactLogsWithMapping,
       vendors: vendorsWithMapping,
-      isAdmin: user.role === 'ADMIN'
+      isAdmin: user.role === 'admin'
     });
   } catch (error) {
     console.error('[Communication Loader] Error:', error);
     return json({ 
       contactLogs: [],
       vendors: [],
-      isAdmin: user.role === 'ADMIN'
+      isAdmin: user.role === 'admin'
     });
   }
 }
@@ -414,7 +414,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     
@@ -469,7 +469,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     

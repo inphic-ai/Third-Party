@@ -130,7 +130,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         principleContent: '將被動的「查詢」轉為主動的「執行」。'
       },
       user,
-      isAdmin: user.role === 'ADMIN'
+      isAdmin: user.role === 'admin'
     });
   } catch (error) {
     console.error('[Tasks Loader] Error:', error);
@@ -193,7 +193,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以編輯
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, message: "無權限編輯" }, { status: 403 });
     }
     
@@ -285,7 +285,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'admin') {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     
@@ -757,7 +757,7 @@ function TasksContent() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {user?.role === 'ADMIN' && !isEditingHelp && (
+                {user?.role === 'admin' && !isEditingHelp && (
                   <button 
                     onClick={handleEditHelp}
                     className="text-indigo-600 hover:text-indigo-700 text-sm font-medium px-3 py-1 rounded-lg hover:bg-indigo-50 transition"
