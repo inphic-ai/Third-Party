@@ -348,12 +348,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     console.log(`[Vendors Loader] Successfully mapped ${vendorsWithMapping.length} vendors`);
     
-    return json({ vendors: vendorsWithMapping });
+    return json({ vendors: vendorsWithMapping, isAdmin: user.role === 'ADMIN' });
   } catch (error) {
     console.error('[Vendors Loader] Fatal error:', error);
     console.error('[Vendors Loader] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     // 發生錯誤時返回空陣列，讓頁面至少能顯示
-    return json({ vendors: [] });
+    return json({ vendors: [], isAdmin: user.role === 'ADMIN' });
   }
 }
 

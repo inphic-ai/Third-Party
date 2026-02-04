@@ -127,13 +127,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     return json({ 
       contactLogs: contactLogsWithMapping,
-      vendors: vendorsWithMapping 
+      vendors: vendorsWithMapping,
+      isAdmin: user.role === 'ADMIN'
     });
   } catch (error) {
     console.error('[Communication Loader] Error:', error);
     return json({ 
       contactLogs: [],
-      vendors: []
+      vendors: [],
+      isAdmin: user.role === 'ADMIN'
     });
   }
 }
@@ -409,6 +411,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 刪除通訊群組
   if (intent === "deleteGroup") {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, message: "無權限刪除" }, { status: 403 });
+    }
+    
     const groupId = formData.get("groupId") as string;
 
     if (!groupId) {
@@ -457,6 +466,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 刪除聯繫紀錄
   if (intent === "deleteLog") {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'ADMIN') {
+      return json({ success: false, message: "無權限刪除" }, { status: 403 });
+    }
+    
     const logId = formData.get("logId") as string;
 
     if (!logId) {
@@ -527,7 +543,7 @@ const calculateOptimalItemsPerPage = () => {
 };
 
 function CommunicationContent() {
-  const { vendors: dbVendors, contactLogs: dbContactLogs } = useLoaderData<typeof loader>();
+  const { vendors: dbVendors, contactLogs: dbContactLogs, isAdmin } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const [platform, setPlatform] = useState<Platform>('LINE');
   const [viewType, setViewType] = useState<ViewType>('GROUPS');
@@ -1502,14 +1518,16 @@ function CommunicationContent() {
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleDeleteGroup}
-                disabled={fetcher.state === 'submitting'}
-                className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Trash2 size={16} />
-                刪除
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={handleDeleteGroup}
+                  disabled={fetcher.state === 'submitting'}
+                  className="px-4 py-3 bg-red-100 text-red-700 rounded-xl font-bold hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  刪除
+                </button>
+              )}
               <button
                 onClick={() => setShowEditGroupModal(false)}
                 className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
