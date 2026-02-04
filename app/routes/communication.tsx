@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { canUserDelete } from "~/utils/deletePermissions";
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -128,14 +129,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({ 
       contactLogs: contactLogsWithMapping,
       vendors: vendorsWithMapping,
-      isAdmin: user.role === 'admin'
+      canDeleteCommunication: canUserDelete(user, 'communication')
     });
   } catch (error) {
     console.error('[Communication Loader] Error:', error);
     return json({ 
       contactLogs: [],
       vendors: [],
-      isAdmin: user.role === 'admin'
+      canDeleteCommunication: canUserDelete(user, 'communication')
     });
   }
 }
@@ -414,7 +415,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    if (!canUserDelete(user, 'communication')) {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     
@@ -469,7 +470,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    if (!canUserDelete(user, 'communication')) {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     
@@ -1518,7 +1519,7 @@ function CommunicationContent() {
             </div>
 
             <div className="flex gap-3 mt-6">
-              {isAdmin && (
+              {canDeleteCommunication && (
                 <button
                   onClick={handleDeleteGroup}
                   disabled={fetcher.state === 'submitting'}

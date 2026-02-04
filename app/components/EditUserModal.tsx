@@ -44,32 +44,55 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
   const [timeRestrictionEnabled, setTimeRestrictionEnabled] = useState(user.timeRestrictionEnabled || false);
   
   // 功能權限狀態 - 從用戶現有權限初始化
-  const [permissions, setPermissions] = useState<Permission[]>(() => {
+  const [permissionsData, setPermissionsData] = useState<{
+    modules: Permission[];
+    deletePermissions: string[];
+  }>(() => {
     if (user.permissions) {
       try {
         const parsed = JSON.parse(user.permissions);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
+        // 向後兼容：舊格式是陣列，新格式是物件
+        if (Array.isArray(parsed)) {
+          return { modules: parsed, deletePermissions: [] };
+        } else if (parsed.modules) {
+          return {
+            modules: parsed.modules || [],
+            deletePermissions: parsed.deletePermissions || [],
+          };
+        }
+      } catch {}
     }
-    return [];
+    return { modules: [], deletePermissions: [] };
   });
 
   // 切換單個權限
   const togglePermission = (permission: Permission) => {
-    setPermissions(prev => {
-      if (prev.includes(permission)) {
-        return prev.filter(p => p !== permission);
-      } else {
-        return [...prev, permission];
-      }
+    setPermissionsData(prev => {
+      const newModules = prev.modules.includes(permission)
+        ? prev.modules.filter(p => p !== permission)
+        : [...prev.modules, permission];
+      return { ...prev, modules: newModules };
     });
   };
 
   // 檢查是否有某個權限
   const hasPermission = (permission: Permission) => {
-    return permissions.includes(permission);
+    return permissionsData.modules.includes(permission);
+  };
+
+  // 切換刪除權限
+  const toggleDeletePermission = (module: string) => {
+    setPermissionsData(prev => {
+      const newDeletePermissions = prev.deletePermissions.includes(module)
+        ? prev.deletePermissions.filter(m => m !== module)
+        : [...prev.deletePermissions, module];
+      return { ...prev, deletePermissions: newDeletePermissions };
+    });
+  };
+
+  // 檢查是否有刪除權限
+  const hasDeletePermission = (module: string) => {
+    return permissionsData.deletePermissions.includes(module);
   };
 
   const handleSubmit = () => {
@@ -82,7 +105,7 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
       isActive,
       ipWhitelist,
       timeRestrictionEnabled,
-      permissions: JSON.stringify(permissions),
+      permissions: JSON.stringify(permissionsData),
     };
 
     fetcher.submit(formData, { method: 'post' });
@@ -335,8 +358,81 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
               {/* 已選擇的權限數量 */}
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                 <p className="text-sm text-slate-600">
-                  已選擇 <span className="font-bold text-slate-800">{permissions.length}</span> 個功能模組
+                  已選擇 <span className="font-bold text-slate-800">{permissionsData.modules.length}</span> 個功能模組
                 </p>
+              </div>
+
+              {/* 刪除權限區塊 */}
+              <div className="border-t border-slate-200 pt-6 mt-6">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                  <h4 className="text-sm font-bold text-amber-800 mb-1">刪除權限設定</h4>
+                  <p className="text-xs text-amber-600">
+                    請勾選此員工可以刪除資料的功能模組。未勾選的模組將不顯示刪除按鈕。
+                  </p>
+                </div>
+
+                <label className="block text-sm font-medium text-slate-700 mb-4">
+                  模組刪除權限
+                </label>
+                <div className="space-y-3">
+                  {[
+                    { key: 'vendors', label: '廠商名錄', permission: 'vendors' as Permission },
+                    { key: 'maintenance', label: '設備維修紀錄', permission: 'maintenance' as Permission },
+                    { key: 'tasks', label: '日常任務', permission: 'tasks' as Permission },
+                    { key: 'payments', label: '請款與發票管理', permission: 'payments' as Permission },
+                    { key: 'communication', label: '通訊中心', permission: 'communication' as Permission },
+                  ].map((module) => {
+                    const hasModulePermission = hasPermission(module.permission);
+                    const hasDelete = hasDeletePermission(module.key);
+                    
+                    return (
+                      <div key={module.key} className="bg-white border border-slate-200 rounded-lg p-4">
+                        {/* 模組名稱 */}
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className={clsx(
+                            "w-5 h-5 rounded flex items-center justify-center flex-shrink-0",
+                            hasModulePermission ? "bg-green-500" : "bg-slate-300"
+                          )}>
+                            {hasModulePermission && <span className="text-white text-xs font-bold">✓</span>}
+                          </div>
+                          <span className="text-sm font-medium text-slate-700">{module.label}</span>
+                        </div>
+                        
+                        {/* 刪除權限勾選框 */}
+                        <button
+                          type="button"
+                          onClick={() => toggleDeletePermission(module.key)}
+                          disabled={!hasModulePermission}
+                          className={clsx(
+                            "w-full p-3 rounded-lg border-2 flex items-center gap-3 transition-all",
+                            !hasModulePermission && "opacity-50 cursor-not-allowed",
+                            hasModulePermission && "cursor-pointer hover:shadow-md",
+                            hasDelete && hasModulePermission
+                              ? "bg-amber-50 border-amber-300"
+                              : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-5 h-5 rounded flex items-center justify-center flex-shrink-0",
+                            hasDelete && hasModulePermission ? "bg-amber-500" : "bg-slate-300"
+                          )}>
+                            {hasDelete && hasModulePermission && <span className="text-white text-xs font-bold">✓</span>}
+                          </div>
+                          <span className="text-xs font-medium text-slate-600">
+                            允許刪除
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 已選擇的刪除權限數量 */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                  <p className="text-sm text-amber-600">
+                    已選擇 <span className="font-bold text-amber-800">{permissionsData.deletePermissions.length}</span> 個模組的刪除權限
+                  </p>
+                </div>
               </div>
             </div>
           )}

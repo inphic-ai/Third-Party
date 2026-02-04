@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { canUserDelete } from "~/utils/deletePermissions";
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -130,7 +131,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         principleContent: '將被動的「查詢」轉為主動的「執行」。'
       },
       user,
-      isAdmin: user.role === 'admin'
+      canDeleteTask: canUserDelete(user, 'tasks')
     });
   } catch (error) {
     console.error('[Tasks Loader] Error:', error);
@@ -193,7 +194,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以編輯
-    if (user.role !== 'admin') {
+    if (!canUserDelete(user, 'tasks')) {
       return json({ success: false, message: "無權限編輯" }, { status: 403 });
     }
     
@@ -285,7 +286,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    if (!canUserDelete(user, 'tasks')) {
       return json({ success: false, message: "無權限刪除" }, { status: 403 });
     }
     

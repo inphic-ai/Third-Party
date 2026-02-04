@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { canUserDelete } from "~/utils/deletePermissions";
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
 import { useLoaderData, useActionData, useNavigation, Form, useRevalidator } from '@remix-run/react';
 import { requireUser } from '~/services/auth.server';
@@ -63,7 +64,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const vendorList = await db.select().from(vendors);
 
-  return json({ records, vendorList, isAdmin: user.role === 'admin' });
+  return json({ records, vendorList, canDeleteMaintenance: canUserDelete(user, 'maintenance') });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -137,8 +138,8 @@ export async function action({ request }: ActionFunctionArgs) {
   if (intent === 'delete') {
     const user = await requireUser(request);
     
-    // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    // 檢查刪除權限
+    if (!canUserDelete(user, 'maintenance')) {
       return json({ success: false, error: '無權限刪除' }, { status: 403 });
     }
     
@@ -466,7 +467,7 @@ export default function MaintenancePage() {
                         >
                           <ChevronRight className="w-4 h-4" />
                         </button>
-                        {isAdmin && (
+                        {canDeleteMaintenance && (
                           <Form method="post" onSubmit={(e) => {
                             if (!confirm(`確定要刪除維修紀錄「${record.caseId}」嗎？`)) {
                               e.preventDefault();
