@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -501,7 +501,30 @@ interface FlattenedContact {
   vendorCategories: VendorCategory[];
 }
 
-const ITEMS_PER_PAGE_OPTIONS = [9, 18, 36];
+const ITEMS_PER_PAGE_OPTIONS = [10, 20, 30];
+
+// 動態高度計算函數
+const calculateOptimalItemsPerPage = () => {
+  // 取得視窗高度
+  const windowHeight = window.innerHeight;
+  
+  // Header 高度（約 100px） + 分頁高度（約 80px） + 留白（約 50px）
+  const fixedHeight = 230;
+  
+  // 可用高度
+  const availableHeight = windowHeight - fixedHeight;
+  
+  // 每個項目的高度（LIST 模式約 60px，GRID 模式約 120px）
+  const itemHeight = 60; // 預設使用 LIST 模式
+  
+  // 計算可顯示的項目數
+  const calculatedItems = Math.floor(availableHeight / itemHeight);
+  
+  // 選擇最接近的選項（10/20/30）
+  if (calculatedItems <= 15) return 10;
+  if (calculatedItems <= 25) return 20;
+  return 30;
+};
 
 function CommunicationContent() {
   const { vendors: dbVendors, contactLogs: dbContactLogs } = useLoaderData<typeof loader>();
@@ -511,7 +534,7 @@ function CommunicationContent() {
   const [groupViewMode, setGroupViewMode] = useState<'GRID' | 'LIST'>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(9);
+  const [itemsPerPage, setItemsPerPage] = useState(() => calculateOptimalItemsPerPage());
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
@@ -547,6 +570,23 @@ function CommunicationContent() {
     setViewType(v);
     setCurrentPage(1);
   };
+
+  // 視窗大小變化時自動調整每頁筆數
+  useEffect(() => {
+    const handleResize = () => {
+      const optimalItems = calculateOptimalItemsPerPage();
+      if (optimalItems !== itemsPerPage) {
+        setItemsPerPage(optimalItems);
+        setCurrentPage(1); // 重設到第一頁
+      }
+    };
+
+    // 監聽視窗大小變化
+    window.addEventListener('resize', handleResize);
+
+    // 清理監聽器
+    return () => window.removeEventListener('resize', handleResize);
+  }, [itemsPerPage]);
 
   // Initialize Data
   const allGroups: FlattenedGroup[] = useMemo(() => {
