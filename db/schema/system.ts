@@ -95,3 +95,22 @@ export const systemLogs = pgTable('system_logs', {
   
   status: systemLogStatusEnum('status').notNull()
 });
+
+// ============================================
+// 使用說明內容 (HelpContent)
+// ============================================
+
+export const helpContents = pgTable('help_contents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  page: varchar('page', { length: 100 }).notNull().unique(), // 'tasks', 'vendors', etc.
+  title: varchar('title', { length: 200 }).notNull(),
+  subtitle: varchar('subtitle', { length: 200 }),
+  content: text('content').notNull(),
+  principleTitle: varchar('principle_title', { length: 200 }),
+  principleContent: text('principle_content'),
+  
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
