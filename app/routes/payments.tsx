@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { canUserDelete } from "~/utils/deletePermissions";
 import { useLoaderData, useActionData, useNavigation, Form, useSubmit, useRevalidator } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -44,10 +45,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       status: invoice.status,
       attachmentUrl: invoice.attachmentUrl,
     }));
-    return json({ invoices: invoicesWithMapping, vendorList, isAdmin: user.role === 'admin' });
+    return json({ invoices: invoicesWithMapping, vendorList, canDeletePayment: canUserDelete(user, 'payments') });
   } catch (error) {
     console.error('[Payments Loader] Error:', error);
-    return json({ invoices: [], vendorList: [], isAdmin: user.role === 'admin' });
+    return json({ invoices: [], vendorList: [], canDeletePayment: canUserDelete(user, 'payments') });
   }
 }
 
@@ -96,7 +97,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const user = await requireUser(request);
     
     // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    if (!canUserDelete(user, 'payments')) {
       return json({ success: false, error: '無權限刪除' }, { status: 403 });
     }
     
@@ -491,7 +492,7 @@ function PaymentsContent() {
                       <button onClick={() => handleOpenEdit(inv)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
                         <Edit3 size={18} />
                       </button>
-                      {isAdmin && (
+                      {canDeletePayment && (
                         <Form method="post" onSubmit={(e) => {
                           if (!confirm(`確定要刪除請款/發票紀錄「${inv.invoiceNo}」嗎？`)) {
                             e.preventDefault();

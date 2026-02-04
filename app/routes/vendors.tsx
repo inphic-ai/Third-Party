@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { canUserDelete } from "~/utils/deletePermissions";
 import { useSearchParams, Link, useFetcher, useLoaderData } from '@remix-run/react';
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
@@ -304,8 +305,8 @@ ${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
   if (intent === 'deleteVendor') {
     const user = await requireUser(request);
     
-    // 只有管理員可以刪除
-    if (user.role !== 'admin') {
+    // 檢查刪除權限
+    if (!canUserDelete(user, 'vendors')) {
       return json({ success: false, error: '無權限刪除' }, { status: 403 });
     }
     
@@ -379,12 +380,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     console.log(`[Vendors Loader] Successfully mapped ${vendorsWithMapping.length} vendors`);
     
-    return json({ vendors: vendorsWithMapping, isAdmin: user.role === 'admin' });
+    return json({ vendors: vendorsWithMapping, canDeleteVendor: canUserDelete(user, 'vendors') });
   } catch (error) {
     console.error('[Vendors Loader] Fatal error:', error);
     console.error('[Vendors Loader] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     // 發生錯誤時返回空陣列，讓頁面至少能顯示
-    return json({ vendors: [], isAdmin: user.role === 'admin' });
+    return json({ vendors: [], canDeleteVendor: canUserDelete(user, 'vendors') });
   }
 }
 
@@ -401,7 +402,7 @@ function VendorDirectoryContent() {
   
   // 從 loader 讀取真實廠商資料
   const allVendors = loaderData.vendors as any[];
-  const isAdmin = loaderData.isAdmin;
+  const canDeleteVendor = loaderData.canDeleteVendor;
   
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
@@ -741,7 +742,7 @@ function VendorDirectoryContent() {
                       ))}
                    </div>
                    <div className="flex items-center gap-2">
-                     {isAdmin && (
+                     {canDeleteVendor && (
                        <button
                          onClick={(e) => {
                            e.preventDefault();
@@ -830,7 +831,7 @@ function VendorDirectoryContent() {
                         >
                           查看詳情 →
                         </Link>
-                        {isAdmin && (
+                        {canDeleteVendor && (
                           <button
                             onClick={() => {
                               if (confirm(`確定要刪除廠商「${vendor.name}」嗎？`)) {
