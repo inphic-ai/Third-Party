@@ -214,6 +214,54 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ success: true, message: '用戶已解除封鎖，狀態改為待審核' });
       }
 
+      case 'deleteUser': {
+        const userId = formData.get('userId') as string;
+
+        if (!userId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 軟刪除：將 isActive 設為 false
+        await db.update(users)
+          .set({
+            isActive: false,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶已刪除' });
+      }
+
+      case 'restoreUser': {
+        const userId = formData.get('userId') as string;
+
+        if (!userId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 恢復：將 isActive 設為 true
+        await db.update(users)
+          .set({
+            isActive: true,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶已恢復' });
+      }
+
       case 'updateUser': {
         const userId = formData.get('userId') as string;
         const name = formData.get('name') as string;

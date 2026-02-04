@@ -226,6 +226,30 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
                   ))}
                 </select>
               </div>
+
+              {/* 刪除用戶區域 */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-red-800 mb-2">危險操作</h4>
+                  <p className="text-sm text-red-600 mb-4">
+                    刪除此用戶將會停用其帳號，該用戶將無法登入系統。此操作可以在「已拒絕」頁籤中恢復。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`確定要刪除用戶「${user.name}」嗎？`)) {
+                        fetcher.submit(
+                          { intent: 'deleteUser', userId: user.id },
+                          { method: 'post' }
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    刪除用戶
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
