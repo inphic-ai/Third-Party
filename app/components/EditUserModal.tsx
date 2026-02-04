@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useFetcher } from "@remix-run/react";
 import { X, User, Lock, Shield } from "lucide-react";
-import { PERMISSION_TEMPLATES, PERMISSIONS, getPermissionsByTemplate, type Permission } from '~/utils/permissions';
+import { PERMISSIONS, PERMISSION_LABELS, type Permission } from '~/utils/permissions';
 import clsx from "clsx";
 
 type User = {
@@ -14,6 +14,7 @@ type User = {
   isActive: boolean;
   ipWhitelist?: string | null;
   timeRestrictionEnabled?: boolean | null;
+  permissions?: string | null;
 };
 
 type Department = {
@@ -42,17 +43,31 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
   const [ipWhitelist, setIpWhitelist] = useState(user.ipWhitelist || '');
   const [timeRestrictionEnabled, setTimeRestrictionEnabled] = useState(user.timeRestrictionEnabled || false);
   
-  // 功能權限狀態
-  const [permissionTemplate, setPermissionTemplate] = useState('factory_user');
-  const [permissions, setPermissions] = useState<Permission[]>(getPermissionsByTemplate('factory_user'));
-  
-  // 當權限模板變更時，更新權限
-  useEffect(() => {
-    const newPermissions = getPermissionsByTemplate(permissionTemplate);
-    setPermissions(newPermissions);
-  }, [permissionTemplate]);
+  // 功能權限狀態 - 從用戶現有權限初始化
+  const [permissions, setPermissions] = useState<Permission[]>(() => {
+    if (user.permissions) {
+      try {
+        const parsed = JSON.parse(user.permissions);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
 
-  // 輔助函數：檢查是否有某個權限
+  // 切換單個權限
+  const togglePermission = (permission: Permission) => {
+    setPermissions(prev => {
+      if (prev.includes(permission)) {
+        return prev.filter(p => p !== permission);
+      } else {
+        return [...prev, permission];
+      }
+    });
+  };
+
+  // 檢查是否有某個權限
   const hasPermission = (permission: Permission) => {
     return permissions.includes(permission);
   };
@@ -82,9 +97,18 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
     setTimeout(() => onClose(), 500);
   }
 
-  // 獲取當前選擇的模板名稱
-  const currentTemplate = PERMISSION_TEMPLATES.find(t => t.id === permissionTemplate);
-  const currentTemplateName = currentTemplate?.name || 'Factory User';
+  // 所有可用的權限列表（按照顯示順序）
+  const allPermissions: Permission[] = [
+    PERMISSIONS.DASHBOARD,
+    PERMISSIONS.VENDORS,
+    PERMISSIONS.MAINTENANCE,
+    PERMISSIONS.TASKS,
+    PERMISSIONS.COMMUNICATION,
+    PERMISSIONS.INVOICES,
+    PERMISSIONS.KNOWLEDGE,
+    PERMISSIONS.ANNOUNCEMENTS,
+    PERMISSIONS.SYSTEM,
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -242,201 +266,53 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
 
           {activeTab === 'permissions' && (
             <div className="space-y-6">
-              {/* 權限模板 */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  權限模板 (PERMISSION TEMPLATE)
-                </label>
-                <select
-                  value={permissionTemplate}
-                  onChange={(e) => setPermissionTemplate(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {PERMISSION_TEMPLATES.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-2">
-                  使用者的權限統一由模板設定，如需調整權限請至「權限模板」進行編輯。
+              {/* 說明文字 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  請勾選此員工可以訪問的功能模組。未勾選的功能將不會顯示在左側選單中，且無法直接訪問。
                 </p>
               </div>
 
-              {/* 模板權限預覽 */}
+              {/* 功能權限勾選列表 */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-slate-700">
-                    模板權限預覽 (READ-ONLY)
-                  </label>
-                  <span className="text-sm text-blue-600">
-                    已選擇: {currentTemplateName}
-                  </span>
-                </div>
-
+                <label className="block text-sm font-medium text-slate-700 mb-4">
+                  功能模組權限
+                </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {/* 統計儀表板 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.DASHBOARD)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.DASHBOARD) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.DASHBOARD) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      統計儀表板 (Dashboard)
-                    </span>
-                  </div>
-
-                  {/* 廠商名錄 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.VENDORS)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.VENDORS) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.VENDORS) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      廠商名錄 (Vendors)
-                    </span>
-                  </div>
-
-                  {/* 設備維修紀錄 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.MAINTENANCE)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.MAINTENANCE) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.MAINTENANCE) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      設備維修紀錄 (Maintenance)
-                    </span>
-                  </div>
-
-                  {/* 日常任務 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.TASKS)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.TASKS) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.TASKS) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      日常任務 (Tasks)
-                    </span>
-                  </div>
-
-                  {/* 通訊中心 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.COMMUNICATION)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.COMMUNICATION) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.COMMUNICATION) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      通訊中心 (Communication)
-                    </span>
-                  </div>
-
-                  {/* 請款與發票管理 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.INVOICES)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.INVOICES) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.INVOICES) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      請款與發票管理 (Invoices)
-                    </span>
-                  </div>
-
-                  {/* 知識庫 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.KNOWLEDGE)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.KNOWLEDGE) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.KNOWLEDGE) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      知識庫 (Knowledge)
-                    </span>
-                  </div>
-
-                  {/* 系統公告 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.ANNOUNCEMENTS)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.ANNOUNCEMENTS) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.ANNOUNCEMENTS) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      系統公告 (Announcements)
-                    </span>
-                  </div>
-
-                  {/* 系統管理 */}
-                  <div className={clsx(
-                    "p-4 rounded-lg border-2 flex items-center gap-3",
-                    hasPermission(PERMISSIONS.SYSTEM)
-                      ? "bg-green-50 border-green-300"
-                      : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className={clsx(
-                      "w-6 h-6 rounded flex items-center justify-center",
-                      hasPermission(PERMISSIONS.SYSTEM) ? "bg-green-500" : "bg-slate-300"
-                    )}>
-                      {hasPermission(PERMISSIONS.SYSTEM) && <span className="text-white text-sm">✓</span>}
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      系統管理 (System)
-                    </span>
-                  </div>
+                  {allPermissions.map((permission) => {
+                    const isChecked = hasPermission(permission);
+                    return (
+                      <button
+                        key={permission}
+                        type="button"
+                        onClick={() => togglePermission(permission)}
+                        className={clsx(
+                          "p-4 rounded-lg border-2 flex items-center gap-3 transition-all cursor-pointer hover:shadow-md",
+                          isChecked
+                            ? "bg-green-50 border-green-300"
+                            : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                        )}
+                      >
+                        <div className={clsx(
+                          "w-6 h-6 rounded flex items-center justify-center flex-shrink-0",
+                          isChecked ? "bg-green-500" : "bg-slate-300"
+                        )}>
+                          {isChecked && <span className="text-white text-sm font-bold">✓</span>}
+                        </div>
+                        <span className="text-sm font-medium text-slate-700 text-left">
+                          {PERMISSION_LABELS[permission]}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+
+              {/* 已選擇的權限數量 */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <p className="text-sm text-slate-600">
+                  已選擇 <span className="font-bold text-slate-800">{permissions.length}</span> 個功能模組
+                </p>
               </div>
             </div>
           )}
