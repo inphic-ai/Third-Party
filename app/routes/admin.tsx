@@ -320,10 +320,9 @@ type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 
 
 function AdminContent() {
   const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments } = useLoaderData<typeof loader>();
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
-    { id: 'dashboard', label: '數據總覽', icon: <Activity size={18} /> },
     { id: 'logs', label: '日誌中心', icon: <Terminal size={18} /> },
     { id: 'categories', label: '類別管理', icon: <Layers size={18} /> },
     { id: 'tags', label: '標籤管理', icon: <Tags size={18} /> },
@@ -368,7 +367,6 @@ function AdminContent() {
       </div>
 
       <div className="min-h-[600px] py-4">
-        {activeTab === 'dashboard' && <DashboardSummary />}
         {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} />}
         {activeTab === 'categories' && <CategoryManager />}
         {activeTab === 'tags' && <TagManager />}
@@ -382,51 +380,7 @@ function AdminContent() {
   );
 }
 
-const DashboardSummary = () => (
-  <div className="space-y-6">
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-      <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
-        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">台/陸廠商比例</h3>
-        <div className="flex items-end justify-between">
-          <div className="text-3xl font-black text-slate-800">72 / 56</div>
-          <div className="text-xs text-slate-400 font-bold">總計 128 家</div>
-        </div>
-        <div className="mt-4 h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
-           <div className="h-full bg-blue-500 w-[56%]"></div>
-           <div className="h-full bg-red-400 w-[44%]"></div>
-        </div>
-      </div>
-      <div className="bg-white p-6 rounded-2xl border shadow-sm">
-        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">待處理日誌</h3>
-        <div className="text-3xl font-black text-orange-500">24 <span className="text-sm font-normal text-slate-400">條</span></div>
-        <p className="text-[10px] text-slate-400 mt-2">包含 3 條權限變更紀錄</p>
-      </div>
-      <div className="bg-white p-6 rounded-2xl border shadow-sm">
-        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">系統通告轉化</h3>
-        <div className="text-3xl font-black text-indigo-600">88% <span className="text-sm font-normal text-slate-400">閱讀率</span></div>
-        <p className="text-[10px] text-slate-400 mt-2">最近一則公告：2024 年度評鑑</p>
-      </div>
-      <div className="bg-white p-6 rounded-2xl border shadow-sm">
-        <h3 className="text-slate-400 text-xs font-black uppercase mb-4 tracking-widest">API 調用狀態</h3>
-        <div className="text-3xl font-black text-green-600">100% <span className="text-sm font-normal text-slate-400">成功</span></div>
-        <p className="text-[10px] text-slate-400 mt-2">Gemini 2.5 Pro 模型運行中</p>
-      </div>
-    </div>
-    
-    <div className="bg-slate-900 rounded-2xl p-6 text-white overflow-hidden relative">
-       <div className="relative z-10">
-          <h3 className="text-lg font-bold mb-2 flex items-center gap-2"><Terminal size={20} className="text-blue-400" /> 系統運行監控終端</h3>
-          <div className="font-mono text-xs text-blue-200/70 space-y-1">
-             <p>[OK] Cloud Database connection established.</p>
-             <p>[OK] CDN Edge caching warming up...</p>
-             <p>[INFO] Automated vendor evaluation background task started.</p>
-             <p className="text-blue-400">[READY] System is listening for new vendor applications.</p>
-          </div>
-       </div>
-       <Activity size={150} className="absolute -bottom-10 -right-10 text-white/5 opacity-10" />
-    </div>
-  </div>
-);
+
 
 const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
   const [logType, setLogType] = useState<'operation' | 'login'>('operation');
