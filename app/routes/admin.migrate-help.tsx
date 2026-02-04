@@ -7,7 +7,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // 只有管理員可以執行 migration
   const user = await requireUser(request);
   
-  if (user.role !== 'ADMIN') {
+  if (user.role !== 'admin') {
     return json({ success: false, message: "無權限執行 migration" }, { status: 403 });
   }
   

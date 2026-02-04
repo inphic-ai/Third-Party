@@ -28,7 +28,7 @@ export const meta: MetaFunction = () => {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
   
   try {
     const allInvoices = await db.select().from(invoiceRecords).orderBy(desc(invoiceRecords.date));
@@ -44,10 +44,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       status: invoice.status,
       attachmentUrl: invoice.attachmentUrl,
     }));
-    return json({ invoices: invoicesWithMapping, vendorList });
+    return json({ invoices: invoicesWithMapping, vendorList, isAdmin: user.role === 'admin' });
   } catch (error) {
     console.error('[Payments Loader] Error:', error);
-    return json({ invoices: [], vendorList: [] });
+    return json({ invoices: [], vendorList: [], isAdmin: user.role === 'admin' });
   }
 }
 
@@ -91,6 +91,31 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  // 刪除請款/發票紀錄
+  if (intent === 'delete') {
+    const user = await requireUser(request);
+    
+    // 只有管理員可以刪除
+    if (user.role !== 'admin') {
+      return json({ success: false, error: '無權限刪除' }, { status: 403 });
+    }
+    
+    const id = formData.get('id') as string;
+
+    if (!id) {
+      return json({ success: false, error: '缺少紀錄 ID' }, { status: 400 });
+    }
+
+    try {
+      await db.delete(invoiceRecords).where(eq(invoiceRecords.id, id));
+      console.log('[Payments Action] Deleted invoice:', id);
+      return json({ success: true, error: null, message: '請款/發票紀錄已刪除' });
+    } catch (error) {
+      console.error('[Payments Action] Failed to delete invoice:', error);
+      return json({ success: false, error: '刪除失敗，請稍後再試' }, { status: 500 });
+    }
+  }
+
   return json({ success: false, error: 'Invalid intent' }, { status: 400 });
 }
 
@@ -115,7 +140,7 @@ const CURRENCY_SYMBOLS: Record<Currency, string> = {
 };
 
 function PaymentsContent() {
-  const { invoices: dbInvoices, vendorList } = useLoaderData<typeof loader>();
+  const { invoices: dbInvoices, vendorList, isAdmin } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -462,9 +487,28 @@ function PaymentsContent() {
                     </span>
                   </td>
                   <td className="px-10 py-6 text-right">
-                    <button onClick={() => handleOpenEdit(inv)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
-                      <Edit3 size={18} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => handleOpenEdit(inv)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                        <Edit3 size={18} />
+                      </button>
+                      {isAdmin && (
+                        <Form method="post" onSubmit={(e) => {
+                          if (!confirm(`確定要刪除請款/發票紀錄「${inv.invoiceNo}」嗎？`)) {
+                            e.preventDefault();
+                          }
+                        }}>
+                          <input type="hidden" name="intent" value="delete" />
+                          <input type="hidden" name="id" value={inv.id} />
+                          <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </Form>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
