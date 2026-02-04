@@ -13,7 +13,8 @@ import {
   MessageCircle,
   Leaf,
   ChevronDown,
-  History
+  History,
+  LogOut
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PERMISSIONS, parsePermissions, type Permission } from '~/utils/permissions';
@@ -178,11 +179,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
 
         <div className="p-4 border-t border-gray-100">
-          <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 cursor-pointer transition select-none group">
+          <div className="flex items-center gap-3 p-2 rounded-xl mb-2">
             <img 
               src={currentUser.avatarUrl} 
               alt="User" 
-              className="w-9 h-9 rounded-full object-cover border border-gray-200 group-hover:border-slate-300"
+              className="w-9 h-9 rounded-full object-cover border border-gray-200"
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
@@ -195,8 +196,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 <p className="text-xs text-gray-400 truncate">{currentUser.email || ''}</p>
               </div>
             </div>
-            <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600"/>
           </div>
+          <form method="post" action="/logout">
+            <button
+              type="submit"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <LogOut size={16} />
+              <span>登出</span>
+            </button>
+          </form>
         </div>
       </aside>
 
