@@ -91,7 +91,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       role: user.role,
       status: user.status,
       createdAt: user.createdAt.toISOString(),
-      rejectionReason: user.rejectionReason
+      rejectionReason: user.rejectionReason,
+      isActive: user.isActive ?? true,
+      ipWhitelist: user.ipWhitelist ?? null,
+      timeRestrictionEnabled: user.timeRestrictionEnabled ?? false,
+      permissions: user.permissions ?? null
     }));
     
     const departmentsList = allDepartments.map(dept => ({
@@ -208,6 +212,99 @@ export async function action({ request }: ActionFunctionArgs) {
           .where(eq(users.id, userId));
 
         return json({ success: true, message: '用戶已解除封鎖，狀態改為待審核' });
+      }
+
+      case 'deleteUser': {
+        const userId = formData.get('userId') as string;
+
+        if (!userId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 軟刪除：將 isActive 設為 false
+        await db.update(users)
+          .set({
+            isActive: false,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶已刪除' });
+      }
+
+      case 'restoreUser': {
+        const userId = formData.get('userId') as string;
+
+        if (!userId) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 恢復：將 isActive 設為 true
+        await db.update(users)
+          .set({
+            isActive: true,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶已恢復' });
+      }
+
+      case 'updateUser': {
+        const userId = formData.get('userId') as string;
+        const name = formData.get('name') as string;
+        const department = formData.get('department') as string;
+        const status = formData.get('status') as string;
+        const isActive = formData.get('isActive') === 'true';
+        const ipWhitelist = formData.get('ipWhitelist') as string;
+        const timeRestrictionEnabled = formData.get('timeRestrictionEnabled') === 'true';
+        const permissions = formData.get('permissions') as string;
+
+        if (!userId || !name) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+
+        // 獲取用戶資料
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) {
+          return json({ success: false, error: '用戶不存在' }, { status: 404 });
+        }
+
+        // 如果有設定部門，檢查部門是否存在
+        if (department) {
+          const [dept] = await db.select().from(departments).where(eq(departments.id, department)).limit(1);
+          if (!dept) {
+            return json({ success: false, error: '部門不存在' }, { status: 404 });
+          }
+        }
+
+        // 更新用戶資料
+        await db.update(users)
+          .set({
+            name,
+            department: department || null,
+            status,
+            isActive,
+            ipWhitelist: ipWhitelist || null,
+            timeRestrictionEnabled,
+            permissions: permissions || null,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, userId));
+
+        return json({ success: true, message: '用戶資料已更新' });
       }
 
       default:

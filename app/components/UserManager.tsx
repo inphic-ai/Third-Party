@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFetcher } from "@remix-run/react";
 import { Plus, Check, X, UserCheck, Clock, ShieldX, Edit2 } from "lucide-react";
 import clsx from "clsx";
+import { EditUserModal } from "~/components/EditUserModal";
 
 type User = {
   id: string;
@@ -12,6 +13,9 @@ type User = {
   status: string;
   createdAt: string;
   rejectionReason: string | null;
+  isActive: boolean;
+  ipWhitelist?: string | null;
+  timeRestrictionEnabled?: boolean | null;
 };
 
 type Department = {
@@ -31,17 +35,18 @@ export function UserManager({ users, departments }: UserManagerProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
   // 依狀態篩選用戶
-  const approvedUsers = users.filter(u => u.status === 'approved');
-  const pendingUsers = users.filter(u => u.status === 'pending');
-  const rejectedUsers = users.filter(u => u.status === 'rejected');
+  const approvedUsers = users.filter(u => u.status === 'approved' && u.isActive);
+  const pendingUsers = users.filter(u => u.status === 'pending' && u.isActive);
+  const deletedUsers = users.filter(u => !u.isActive); // 已刪除的用戶（isActive === false）
 
   const currentUsers = activeTab === 'approved' ? approvedUsers :
                        activeTab === 'pending' ? pendingUsers :
-                       rejectedUsers;
+                       deletedUsers;
 
   const handleApprove = (user: User) => {
     setSelectedUser(user);
@@ -135,7 +140,7 @@ export function UserManager({ users, departments }: UserManagerProps) {
           )}
         >
           <ShieldX size={16} />
-          已拒絕 ({rejectedUsers.length})
+          已拒絕 ({deletedUsers.length})
         </button>
       </div>
 
@@ -157,7 +162,7 @@ export function UserManager({ users, departments }: UserManagerProps) {
                 <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
                   {activeTab === 'approved' && '目前沒有已啟用的用戶'}
                   {activeTab === 'pending' && '目前沒有待審核的用戶'}
-                  {activeTab === 'rejected' && '目前沒有已拒絕的用戶'}
+                  {activeTab === 'rejected' && '目前沒有已刪除的用戶'}
                 </td>
               </tr>
             ) : (
@@ -212,16 +217,29 @@ export function UserManager({ users, departments }: UserManagerProps) {
                           </button>
                         </>
                       )}
-                      {activeTab === 'rejected' && (
+                       {activeTab === 'rejected' && (
                         <button
-                          onClick={() => handleUnblock(user)}
+                          onClick={() => {
+                            if (confirm(`確定要恢復用戶「${user.name}」嗎？`)) {
+                              fetcher.submit(
+                                { intent: 'restoreUser', userId: user.id },
+                                { method: 'post' }
+                              );
+                            }
+                          }}
                           className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-200 transition"
                         >
-                          解除封鎖
+                          恢復用戶
                         </button>
                       )}
                       {activeTab === 'approved' && (
-                        <button className="text-slate-400 hover:text-slate-600">
+                        <button 
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowEditModal(true);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 transition"
+                        >
                           <Edit2 size={16} />
                         </button>
                       )}
@@ -337,6 +355,18 @@ export function UserManager({ users, departments }: UserManagerProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 編輯用戶 Modal */}
+      {showEditModal && selectedUser && (
+        <EditUserModal
+          user={selectedUser}
+          departments={departments}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedUser(null);
+          }}
+        />
       )}
     </div>
   );

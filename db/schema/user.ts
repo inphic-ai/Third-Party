@@ -27,6 +27,11 @@ export const users = pgTable("users", {
   // 用戶狀態
   isActive: boolean("is_active").default(true).notNull(),
   
+  // 安全設定
+  ipWhitelist: text("ip_whitelist"),
+  timeRestrictionEnabled: boolean("time_restriction_enabled").default(false),
+  permissions: text("permissions"),
+  
   // 時間戳記
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -8,6 +8,7 @@ import { contactLogs, tasks } from '../../db/schema/operations';
 import { vendors } from '../../db/schema/vendor';
 import { eq } from 'drizzle-orm';
 import { requireUser } from '~/services/auth.server';
+import { requirePermission } from '~/utils/permissions.server';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -39,7 +40,10 @@ export const meta: MetaFunction = () => {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
+  
+  // 檢查用戶是否有日常任務權限
+  requirePermission(user, '/tasks');
   
   try {
     console.log('[Tasks Loader] Loading tasks data...');

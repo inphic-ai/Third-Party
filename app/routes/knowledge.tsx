@@ -5,6 +5,7 @@ import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { knowledgeBaseItems } from '../../db/schema/system';
 import { requireUser } from '~/services/auth.server';
+import { requirePermission } from '~/utils/permissions.server';
 import { BookOpen, Search, ChevronDown, ChevronRight, ExternalLink, Calendar, Plus, X, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -55,7 +56,10 @@ export async function action({ request }: any) {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
+  
+  // 檢查用戶是否有知識庫權限
+  requirePermission(user, '/knowledge');
   
   try {
     console.log('[Knowledge Loader] Loading knowledge base items...');

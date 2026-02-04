@@ -106,7 +106,25 @@ export async function requireUser(request: Request) {
 
 // 輔助函數：檢查用戶是否已登入（不重新導向）
 export async function getUser(request: Request) {
-  return await authenticator.isAuthenticated(request);
+  const sessionUser = await authenticator.isAuthenticated(request);
+  
+  if (!sessionUser) {
+    return null;
+  }
+  
+  // 從資料庫重新讀取最新的用戶資料（包括 permissions 等欄位）
+  try {
+    const [latestUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, sessionUser.id))
+      .limit(1);
+    
+    return latestUser || sessionUser;
+  } catch (error) {
+    console.error('Failed to fetch latest user data:', error);
+    return sessionUser;
+  }
 }
 
 // 輔助函數：要求管理員權限

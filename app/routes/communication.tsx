@@ -7,6 +7,7 @@ import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
 import { vendors, socialGroups, contactWindows } from '../../db/schema/vendor';
 import { requireUser } from '~/services/auth.server';
+import { requirePermission } from '~/utils/permissions.server';
 import { 
   MessageCircle, 
   Search, 
@@ -44,7 +45,10 @@ export const meta: MetaFunction = () => {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
+  
+  // 檢查用戶是否有通訊中心權限
+  requirePermission(user, '/communication');
   
   try {
     console.log('[Communication Loader] Loading contact logs and vendors...');

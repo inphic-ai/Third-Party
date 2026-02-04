@@ -3,6 +3,7 @@ import { useLoaderData, Link, Form } from "@remix-run/react";
 import { db, schema } from "../services/db.server";
 import { count, eq, sql } from 'drizzle-orm';
 import { requireUser } from "~/services/auth.server";
+import { requirePermission } from "~/utils/permissions.server";
 import { 
   Globe, Megaphone, Zap, LayoutGrid, Package, Wallet, ShieldAlert,
   ArrowUpRight, Activity, TrendingUp, Bot, Sparkles, Hammer, Factory
@@ -12,6 +13,9 @@ import { clsx } from "clsx";
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入，否則跳轉到登入頁
   const user = await requireUser(request);
+  
+  // 檢查用戶是否有統計儀表板權限
+  requirePermission(user, '/');
   
   try {
     // 從資料庫讀取公告
