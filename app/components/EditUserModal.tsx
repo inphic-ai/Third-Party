@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFetcher } from "@remix-run/react";
 import { X, User, Lock, Shield } from "lucide-react";
+import { PERMISSION_TEMPLATES } from '~/utils/permissions';
 import clsx from "clsx";
 
 type User = {
@@ -43,17 +44,12 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
   
   // 功能權限狀態
   const [permissionTemplate, setPermissionTemplate] = useState('factory_user');
-  const [permissions, setPermissions] = useState({
-    dashboard: true,
-    vendors: true,
-    maintenance: false,
-    tasks: true,
-    communication: true,
-    invoices: true,
-    knowledge: true,
-    announcements: true,
-    system: false,
-  });
+  const [permissions, setPermissions] = useState(PERMISSION_TEMPLATES.factory_user);
+  
+  // 當權限模板變更時，更新權限
+  useEffect(() => {
+    setPermissions(PERMISSION_TEMPLATES[permissionTemplate] || PERMISSION_TEMPLATES.factory_user);
+  }, [permissionTemplate]);
 
   const handleSubmit = () => {
     const formData = {

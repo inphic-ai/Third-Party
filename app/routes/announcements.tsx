@@ -6,6 +6,7 @@ import { db } from '../services/db.server';
 import { announcements } from '../../db/schema/system';
 import { eq } from 'drizzle-orm';
 import { requireUser } from '~/services/auth.server';
+import { requirePermission } from '~/utils/permissions.server';
 import { 
   Megaphone, Calendar, Bell, 
   Info, ShieldCheck, Tag, User, MapPin, Hammer, Package, Factory, ChevronRight,
@@ -78,7 +79,10 @@ export async function action({ request }: any) {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
+  
+  // 檢查用戶是否有系統公告權限
+  requirePermission(user, '/announcements');
   
   try {
     console.log('[Announcements Loader] Loading announcements...');

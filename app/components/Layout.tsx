@@ -16,6 +16,7 @@ import {
   History
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PERMISSIONS, parsePermissions, type Permission } from '~/utils/permissions';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -31,61 +32,71 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
   
   const isAdmin = currentUser.role === 'admin';
+  
+  // 獲取用戶權限
+  const userPermissions: Permission[] = isAdmin 
+    ? Object.values(PERMISSIONS) // Admin 擁有所有權限
+    : parsePermissions(currentUser.permissions || null);
+  
+  // 檢查用戶是否有指定權限
+  const hasPermission = (permission: Permission) => {
+    return isAdmin || userPermissions.includes(permission);
+  };
 
   const navItems = [
     { 
       name: '統計儀表板', 
       path: '/', 
       icon: <LayoutDashboard size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.DASHBOARD)
     },
     { 
       name: '廠商名錄', 
       path: '/vendors', 
       icon: <Users size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.VENDORS)
     },
     { 
       name: '設備維修紀錄', 
       path: '/maintenance', 
       icon: <History size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.MAINTENANCE)
     },
     { 
       name: '日常任務', 
       path: '/tasks', 
       icon: <Briefcase size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.TASKS)
     },
     { 
       name: '通訊中心', 
       path: '/communication', 
       icon: <MessageCircle size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.COMMUNICATION)
     },
     { 
       name: '請款與發票管理', 
       path: '/payments', 
       icon: <CreditCard size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.INVOICES)
     },
     { 
       name: '知識庫', 
       path: '/knowledge', 
       icon: <BookOpen size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.KNOWLEDGE)
     },
     { 
       name: '系統公告', 
       path: '/announcements', 
       icon: <Megaphone size={18} />, 
-      permission: true 
+      permission: hasPermission(PERMISSIONS.ANNOUNCEMENTS)
     }, 
     { 
       name: '系統管理', 
       path: '/admin', 
       icon: <Settings size={18} />, 
-      permission: isAdmin  // 只有管理員可以看到
+      permission: hasPermission(PERMISSIONS.SYSTEM)
     }, 
   ];
 

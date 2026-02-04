@@ -13,6 +13,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入，否則跳轉到登入頁
   const user = await requireUser(request);
   
+  // 檢查用戶是否有統計儀表板權限
+  requirePermission(user, '/');
+  
   try {
     // 從資料庫讀取公告
     const announcements = await db.select().from(schema.announcements).limit(5);

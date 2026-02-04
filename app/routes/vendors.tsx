@@ -5,6 +5,8 @@ import { json, redirect } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { vendors, contactWindows } from '../../db/schema/vendor';
 import { requireUser } from '~/services/auth.server';
+import { requirePermission } from '~/utils/permissions.server';
+import { PERMISSIONS } from '~/utils/permissions';
 import { eq } from 'drizzle-orm';
 import { 
   Search, MapPin, Star, ChevronRight, LayoutGrid, 
@@ -304,7 +306,10 @@ ${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
 // Loader 函數從資料庫讀取廠商列表
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
-  await requireUser(request);
+  const user = await requireUser(request);
+  
+  // 檢查用戶是否有廠商名錄權限
+  requirePermission(user, '/vendors');
   
   try {
     console.log('[Vendors Loader] Starting to load vendors...');
