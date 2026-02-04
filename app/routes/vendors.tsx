@@ -402,6 +402,10 @@ function VendorDirectoryContent() {
   // 從 loader 讀取真實廠商資料
   const allVendors = loaderData.vendors as any[];
   const isAdmin = loaderData.isAdmin;
+  
+  // Debug: 檢查 isAdmin 的值
+  console.log('[Vendors Debug] isAdmin:', isAdmin);
+  console.log('[Vendors Debug] loaderData:', loaderData);
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedServiceType, setSelectedServiceType] = useState<string>(searchParams.get('search') || ''); 
