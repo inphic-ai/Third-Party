@@ -354,7 +354,10 @@ export const MOCK_VENDORS: Vendor[] = [
   }
 ];
 
-export const CATEGORY_OPTIONS = Object.values(VendorCategory);
+export const CATEGORY_OPTIONS = Object.entries(VendorCategory).map(([key, value]) => ({
+  value: key,
+  label: value
+}));
 
 export const MOCK_DEPARTMENTS: Department[] = [
   { id: 'D001', name: '研發部', description: '軟體開發與技術維護', managerName: 'Alex Chen', memberCount: 5 },

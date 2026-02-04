@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { eq } from 'drizzle-orm';
 import { db } from '../services/db.server';
 import { contactLogs } from '../../db/schema/operations';
+import { transactions } from '../../db/schema/financial';
 import { vendors, socialGroups, contactWindows } from '../../db/schema/vendor';
 import { requireUser } from '~/services/auth.server';
 import { requirePermission } from '~/utils/permissions.server';
@@ -141,6 +142,241 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  // 新增通訊群組
+  if (intent === "createGroup") {
+    const user = await requireUser(request);
+    
+    const vendorId = formData.get("vendorId") as string;
+    const platform = formData.get("platform") as string;
+    const groupName = formData.get("groupName") as string;
+    const systemCode = formData.get("systemCode") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+    const qrCodeUrl = formData.get("qrCodeUrl") as string;
+    const note = formData.get("note") as string;
+    
+    // 驗證必填欄位
+    if (!vendorId || !platform || !groupName || !systemCode) {
+      return json({ success: false, message: "請填寫所有必填欄位" }, { status: 400 });
+    }
+    
+    // 驗證平台
+    if (platform !== 'LINE' && platform !== 'WECHAT') {
+      return json({ success: false, message: "無效的平台" }, { status: 400 });
+    }
+    
+    try {
+      // 檢查 systemCode 是否已存在
+      const [existing] = await db.select()
+        .from(socialGroups)
+        .where(eq(socialGroups.systemCode, systemCode));
+      
+      if (existing) {
+        return json({ success: false, message: "系統代碼已存在，請使用其他代碼" }, { status: 400 });
+      }
+      
+      // 建立新群組
+      const [newGroup] = await db.insert(socialGroups).values({
+        vendorId,
+        platform: platform as 'LINE' | 'WECHAT',
+        groupName: groupName.trim(),
+        systemCode: systemCode.trim(),
+        inviteLink: inviteLink?.trim() || null,
+        qrCodeUrl: qrCodeUrl?.trim() || null,
+        note: note?.trim() || null
+      }).returning();
+      
+      console.log('[Communication Action] Created group:', newGroup.id);
+      
+      return json({ success: true, message: "群組已建立", group: newGroup });
+    } catch (error) {
+      console.error('[Communication Action] Failed to create group:', error);
+      return json({ success: false, message: "建立失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+  
+  // AI 智能分析群組
+  if (intent === "aiAnalyzeGroups") {
+    const user = await requireUser(request);
+    
+    try {
+      // 1. 載入所有廠商、群組、聯絡紀錄、交易
+      const [allVendors, allGroups, allContactLogs, allTransactions] = await Promise.all([
+        db.select().from(vendors),
+        db.select().from(socialGroups),
+        db.select().from(contactLogs),
+        db.select().from(transactions)
+      ]);
+      
+      // 2. 建立廠商群組映射
+      const groupsByVendor = new Map<string, any[]>();
+      allGroups.forEach(group => {
+        if (!groupsByVendor.has(group.vendorId)) {
+          groupsByVendor.set(group.vendorId, []);
+        }
+        groupsByVendor.get(group.vendorId)!.push(group);
+      });
+      
+      // 3. 建立廠商聯絡紀錄統計
+      const contactCountByVendor = new Map<string, number>();
+      allContactLogs.forEach(log => {
+        contactCountByVendor.set(log.vendorId, (contactCountByVendor.get(log.vendorId) || 0) + 1);
+      });
+      
+      // 4. 建立廠商交易總額統計
+      const transactionSumByVendor = new Map<string, number>();
+      allTransactions.forEach(tx => {
+        const current = transactionSumByVendor.get(tx.vendorId) || 0;
+        transactionSumByVendor.set(tx.vendorId, current + parseFloat(String(tx.amount)));
+      });
+      
+      // 5. 分析每個廠商
+      const recommendations: any[] = [];
+      
+      allVendors.forEach(vendor => {
+        const existingGroups = groupsByVendor.get(vendor.id) || [];
+        const contactCount = contactCountByVendor.get(vendor.id) || 0;
+        const transactionSum = transactionSumByVendor.get(vendor.id) || 0;
+        
+        const hasLineGroup = existingGroups.some(g => g.platform === 'LINE');
+        const hasWeChatGroup = existingGroups.some(g => g.platform === 'WECHAT');
+        
+        // 規則 1: 完全沒有群組
+        if (existingGroups.length === 0) {
+          recommendations.push({
+            id: `temp-${vendor.id}-LINE`,
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            vendorAvatar: vendor.avatarUrl,
+            platform: 'LINE',
+            suggestedGroupName: `${vendor.name} - 工作溝通群`,
+            suggestedSystemCode: `LINE_${vendor.name}_${Date.now()}`,
+            reason: `此廠商尚未建立任何群組，建議優先建立 LINE 群組`,
+            priority: 5,
+            isSelected: true
+          });
+        }
+        
+        // 規則 2: 只有 LINE 沒有 WeChat
+        if (hasLineGroup && !hasWeChatGroup && contactCount > 3) {
+          recommendations.push({
+            id: `temp-${vendor.id}-WECHAT`,
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            vendorAvatar: vendor.avatarUrl,
+            platform: 'WECHAT',
+            suggestedGroupName: `${vendor.name} - 微信溝通群`,
+            suggestedSystemCode: `WECHAT_${vendor.name}_${Date.now()}`,
+            reason: `此廠商已有 LINE 群組，但聯絡頻繁（${contactCount} 次），建議建立 WeChat 群組`,
+            priority: 4,
+            isSelected: true
+          });
+        }
+        
+        // 規則 3: 高頻聯絡但沒有群組
+        if (existingGroups.length === 0 && contactCount > 5) {
+          recommendations.push({
+            id: `temp-${vendor.id}-LINE-HIGH`,
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            vendorAvatar: vendor.avatarUrl,
+            platform: 'LINE',
+            suggestedGroupName: `${vendor.name} - 重要聯絡群`,
+            suggestedSystemCode: `LINE_${vendor.name}_${Date.now()}`,
+            reason: `此廠商有 ${contactCount} 筆聯絡紀錄但尚未建立群組，建議立即建立`,
+            priority: 5,
+            isSelected: true
+          });
+        }
+        
+        // 規則 4: 高金額但沒有群組
+        if (existingGroups.length === 0 && transactionSum > 100000) {
+          recommendations.push({
+            id: `temp-${vendor.id}-LINE-VIP`,
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            vendorAvatar: vendor.avatarUrl,
+            platform: 'LINE',
+            suggestedGroupName: `${vendor.name} - VIP 客戶群`,
+            suggestedSystemCode: `LINE_${vendor.name}_VIP_${Date.now()}`,
+            reason: `此廠商交易總額達 ${transactionSum.toLocaleString()} 元，建議建立 VIP 群組`,
+            priority: 4,
+            isSelected: true
+          });
+        }
+      });
+      
+      // 6. 依優先級排序
+      recommendations.sort((a, b) => b.priority - a.priority);
+      
+      console.log(`[Communication AI] Generated ${recommendations.length} recommendations`);
+      
+      return json({ success: true, recommendations });
+    } catch (error) {
+      console.error('[Communication AI] Failed to analyze:', error);
+      return json({ success: false, message: "AI 分析失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+  
+  // 批量建立群組
+  if (intent === "batchCreateGroups") {
+    const user = await requireUser(request);
+    
+    const recommendationsJson = formData.get("recommendations") as string;
+    const recommendations: any[] = JSON.parse(recommendationsJson);
+    
+    // 只處理被選中的推薦
+    const selectedRecommendations = recommendations.filter(r => r.isSelected);
+    
+    if (selectedRecommendations.length === 0) {
+      return json({ success: false, message: "請至少選擇一個群組" }, { status: 400 });
+    }
+    
+    try {
+      const createdGroups = [];
+      const errors = [];
+      
+      for (const rec of selectedRecommendations) {
+        try {
+          // 檢查 systemCode 是否已存在
+          const [existing] = await db.select()
+            .from(socialGroups)
+            .where(eq(socialGroups.systemCode, rec.suggestedSystemCode));
+          
+          if (existing) {
+            errors.push(`${rec.vendorName}: 系統代碼已存在`);
+            continue;
+          }
+          
+          // 建立群組
+          const [newGroup] = await db.insert(socialGroups).values({
+            vendorId: rec.vendorId,
+            platform: rec.platform,
+            groupName: rec.suggestedGroupName,
+            systemCode: rec.suggestedSystemCode,
+            note: `AI 智能建群 - ${rec.reason}`
+          }).returning();
+          
+          createdGroups.push(newGroup);
+        } catch (error) {
+          console.error(`[Communication AI] Failed to create group for ${rec.vendorName}:`, error);
+          errors.push(`${rec.vendorName}: 建立失敗`);
+        }
+      }
+      
+      console.log(`[Communication AI] Created ${createdGroups.length} groups, ${errors.length} errors`);
+      
+      return json({ 
+        success: true, 
+        message: `成功建立 ${createdGroups.length} 個群組`,
+        createdCount: createdGroups.length,
+        errors
+      });
+    } catch (error) {
+      console.error('[Communication AI] Failed to batch create:', error);
+      return json({ success: false, message: "批量建立失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+  
   // 編輯通訊群組
   if (intent === "editGroup") {
     const groupId = formData.get("groupId") as string;
@@ -265,7 +501,30 @@ interface FlattenedContact {
   vendorCategories: VendorCategory[];
 }
 
-const ITEMS_PER_PAGE_OPTIONS = [9, 18, 36];
+const ITEMS_PER_PAGE_OPTIONS = [10, 20, 30];
+
+// 動態高度計算函數
+const calculateOptimalItemsPerPage = () => {
+  // 取得視窗高度
+  const windowHeight = window.innerHeight;
+  
+  // Header 高度（約 100px） + 分頁高度（約 80px） + 留白（約 50px）
+  const fixedHeight = 230;
+  
+  // 可用高度
+  const availableHeight = windowHeight - fixedHeight;
+  
+  // 每個項目的高度（LIST 模式約 60px，GRID 模式約 120px）
+  const itemHeight = 60; // 預設使用 LIST 模式
+  
+  // 計算可顯示的項目數
+  const calculatedItems = Math.floor(availableHeight / itemHeight);
+  
+  // 選擇最接近的選項（10/20/30）
+  if (calculatedItems <= 15) return 10;
+  if (calculatedItems <= 25) return 20;
+  return 30;
+};
 
 function CommunicationContent() {
   const { vendors: dbVendors, contactLogs: dbContactLogs } = useLoaderData<typeof loader>();
@@ -275,7 +534,7 @@ function CommunicationContent() {
   const [groupViewMode, setGroupViewMode] = useState<'GRID' | 'LIST'>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(9);
+  const [itemsPerPage, setItemsPerPage] = useState(() => calculateOptimalItemsPerPage());
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
@@ -284,6 +543,20 @@ function CommunicationContent() {
   const [editGroupName, setEditGroupName] = useState('');
   const [editPlatform, setEditPlatform] = useState<Platform>('LINE');
   const [editInviteLink, setEditInviteLink] = useState('');
+  
+  // 新增群組表單狀態
+  const [newGroupVendorId, setNewGroupVendorId] = useState('');
+  const [newGroupPlatform, setNewGroupPlatform] = useState<Platform>(platform);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupSystemCode, setNewGroupSystemCode] = useState('');
+  const [newGroupInviteLink, setNewGroupInviteLink] = useState('');
+  const [newGroupQrCodeUrl, setNewGroupQrCodeUrl] = useState('');
+  const [newGroupNote, setNewGroupNote] = useState('');
+  
+  // AI 智能建群狀態
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Reset pagination when main controls change
   const handlePlatformChange = (p: Platform) => {
@@ -297,6 +570,23 @@ function CommunicationContent() {
     setViewType(v);
     setCurrentPage(1);
   };
+
+  // 視窗大小變化時自動調整每頁筆數
+  useEffect(() => {
+    const handleResize = () => {
+      const optimalItems = calculateOptimalItemsPerPage();
+      if (optimalItems !== itemsPerPage) {
+        setItemsPerPage(optimalItems);
+        setCurrentPage(1); // 重設到第一頁
+      }
+    };
+
+    // 監聽視窗大小變化
+    window.addEventListener('resize', handleResize);
+
+    // 清理監聽器
+    return () => window.removeEventListener('resize', handleResize);
+  }, [itemsPerPage]);
 
   // Initialize Data
   const allGroups: FlattenedGroup[] = useMemo(() => {
@@ -442,6 +732,112 @@ function CommunicationContent() {
     setShowEditGroupModal(false);
     setSelectedGroup(null);
   };
+  
+  // 自動生成系統代碼
+  const generateSystemCode = () => {
+    const vendor = dbVendors.find(v => v.id === newGroupVendorId);
+    if (!vendor) {
+      alert('請先選擇廠商');
+      return;
+    }
+    
+    const timestamp = Date.now();
+    const platformPrefix = newGroupPlatform === 'LINE' ? 'LINE' : 'WECHAT';
+    const code = `${platformPrefix}_${vendor.name}_${timestamp}`;
+    setNewGroupSystemCode(code);
+  };
+  
+  // 建立新群組
+  const handleCreateGroup = () => {
+    if (!newGroupVendorId || !newGroupName.trim() || !newGroupSystemCode.trim()) {
+      alert('請填寫所有必填欄位（廠商、群組名稱、系統代碼）');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('intent', 'createGroup');
+    formData.append('vendorId', newGroupVendorId);
+    formData.append('platform', newGroupPlatform);
+    formData.append('groupName', newGroupName.trim());
+    formData.append('systemCode', newGroupSystemCode.trim());
+    formData.append('inviteLink', newGroupInviteLink.trim());
+    formData.append('qrCodeUrl', newGroupQrCodeUrl.trim());
+    formData.append('note', newGroupNote.trim());
+    
+    fetcher.submit(formData, { method: 'post' });
+    
+    // 清空表單並關閉模態框
+    setNewGroupVendorId('');
+    setNewGroupName('');
+    setNewGroupSystemCode('');
+    setNewGroupInviteLink('');
+    setNewGroupQrCodeUrl('');
+    setNewGroupNote('');
+    setShowAddGroupModal(false);
+  };
+  
+  // AI 智能分析
+  const handleAIAnalyze = async () => {
+    setShowAIModal(true);
+    setIsAnalyzing(true);
+    setAiRecommendations([]);
+    
+    try {
+      const formData = new FormData();
+      formData.append('intent', 'aiAnalyzeGroups');
+      
+      const response = await fetch('', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.success && result.recommendations) {
+        setAiRecommendations(result.recommendations);
+      } else {
+        alert(result.message || 'AI 分析失敗');
+      }
+    } catch (error) {
+      console.error('AI 分析錯誤:', error);
+      alert('AI 分析失敗，請稍後再試');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+  
+  // 切換 AI 推薦選擇
+  const toggleAIRecommendation = (id: string) => {
+    setAiRecommendations(prev => 
+      prev.map(rec => 
+        rec.id === id ? { ...rec, isSelected: !rec.isSelected } : rec
+      )
+    );
+  };
+  
+  // 批量建立群組
+  const handleBatchCreate = () => {
+    const selectedCount = aiRecommendations.filter(r => r.isSelected).length;
+    
+    if (selectedCount === 0) {
+      alert('請至少選擇一個群組');
+      return;
+    }
+    
+    if (!confirm(`確定要建立 ${selectedCount} 個群組嗎？`)) {
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('intent', 'batchCreateGroups');
+    formData.append('recommendations', JSON.stringify(aiRecommendations));
+    
+    fetcher.submit(formData, { method: 'post' });
+    
+    // 關閉模態框
+    setShowAIModal(false);
+    setAiRecommendations([]);
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col">
@@ -460,9 +856,10 @@ function CommunicationContent() {
           
           <div className="flex gap-2">
             <button
+               onClick={handleAIAnalyze}
                className="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold shadow-md hover:shadow-lg transition flex items-center gap-2"
             >
-               <Sparkles size={18} className="text-yellow-300" /> AI 智能搜群
+               <Sparkles size={18} className="text-yellow-300" /> AI 智能建群
             </button>
             
             {viewType === 'GROUPS' && (
@@ -673,7 +1070,7 @@ function CommunicationContent() {
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{group.systemCode}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{group.memberCount} 人</td>
+                        <td className="px-4 py-3 text-slate-500">- 人</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
                             <button onClick={() => handleEditGroup(group)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600" title="編輯群組">
@@ -783,6 +1180,265 @@ function CommunicationContent() {
             >
               關閉
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 新增群組模態框 */}
+      {showAddGroupModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddGroupModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">新增 {newGroupPlatform} 群組</h3>
+              <button
+                onClick={() => setShowAddGroupModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 選擇廠商 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">選擇廠商 *</label>
+                <select
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  value={newGroupVendorId}
+                  onChange={(e) => setNewGroupVendorId(e.target.value)}
+                >
+                  <option value="">請選擇廠商...</option>
+                  {dbVendors.map((vendor: any) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 選擇平台 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">選擇平台 *</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="platform"
+                      value="LINE"
+                      checked={newGroupPlatform === 'LINE'}
+                      onChange={(e) => setNewGroupPlatform(e.target.value as Platform)}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm text-slate-700">🟢 LINE</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="platform"
+                      value="WeChat"
+                      checked={newGroupPlatform === 'WeChat'}
+                      onChange={(e) => setNewGroupPlatform(e.target.value as Platform)}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm text-slate-700">🟢 WeChat（微信）</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 群組名稱 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">群組名稱 *</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入群組名稱..."
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+
+              {/* 系統代碼 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">系統代碼 *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                    placeholder="輸入系統代碼..."
+                    value={newGroupSystemCode}
+                    onChange={(e) => setNewGroupSystemCode(e.target.value)}
+                    maxLength={50}
+                  />
+                  <button
+                    onClick={generateSystemCode}
+                    className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition whitespace-nowrap"
+                  >
+                    自動生成
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">ℹ️ 系統代碼必須唯一，用於內部識別</p>
+              </div>
+
+              {/* 邀請連結 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">邀請連結</label>
+                <input
+                  type="url"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="https://line.me/R/ti/g/..."
+                  value={newGroupInviteLink}
+                  onChange={(e) => setNewGroupInviteLink(e.target.value)}
+                />
+              </div>
+
+              {/* QR Code 圖片 URL */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">QR Code 圖片 URL</label>
+                <input
+                  type="url"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="https://..."
+                  value={newGroupQrCodeUrl}
+                  onChange={(e) => setNewGroupQrCodeUrl(e.target.value)}
+                />
+              </div>
+
+              {/* 備註 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">備註</label>
+                <textarea
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入備註..."
+                  value={newGroupNote}
+                  onChange={(e) => setNewGroupNote(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddGroupModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={!newGroupVendorId || !newGroupName.trim() || !newGroupSystemCode.trim() || fetcher.state === 'submitting'}
+                className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {fetcher.state === 'submitting' ? '建立中...' : '建立群組 ✓'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 智能建群模態框 */}
+      {showAIModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAIModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Sparkles size={24} className="text-indigo-600" />
+                AI 智能建群推薦
+              </h3>
+              <button
+                onClick={() => setShowAIModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {isAnalyzing ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                <p className="text-slate-600">🔍 AI 分析中...</p>
+                <p className="text-slate-400 text-sm mt-2">正在分析廠商、群組、聯絡紀錄和交易資料...</p>
+              </div>
+            ) : aiRecommendations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="text-6xl mb-4">🎉</div>
+                <p className="text-slate-600 font-bold">太棒了！所有廠商都已建立群組</p>
+                <p className="text-slate-400 text-sm mt-2">沒有找到需要建立群組的廠商</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <p className="text-sm text-indigo-800">
+                    🤖 AI 已分析完成，共找到 <span className="font-bold">{aiRecommendations.length}</span> 個建議。
+                    請勾選您想要建立的群組，然後點擊「批量建立」。
+                  </p>
+                </div>
+
+                <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+                  {aiRecommendations.map((rec) => (
+                    <div
+                      key={rec.id}
+                      className={clsx(
+                        "border-2 rounded-xl p-4 cursor-pointer transition",
+                        rec.isSelected
+                          ? "border-indigo-500 bg-indigo-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      )}
+                      onClick={() => toggleAIRecommendation(rec.id)}
+                    >
+                      <div className="flex items-start gap-4">
+                        <input
+                          type="checkbox"
+                          checked={rec.isSelected}
+                          onChange={() => toggleAIRecommendation(rec.id)}
+                          className="mt-1 w-5 h-5 text-indigo-600 rounded"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <img
+                          src={rec.vendorAvatar}
+                          alt={rec.vendorName}
+                          className="w-12 h-12 rounded-full"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-slate-800">{rec.suggestedGroupName}</h4>
+                            <span className={clsx(
+                              "px-2 py-0.5 rounded text-xs font-bold",
+                              rec.platform === 'LINE' ? "bg-green-100 text-green-700" : "bg-green-700 text-white"
+                            )}>
+                              {rec.platform}
+                            </span>
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                              優先級 {rec.priority}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-600 mb-2">{rec.vendorName}</p>
+                          <p className="text-sm text-slate-500">💡 {rec.reason}</p>
+                          <p className="text-xs text-slate-400 mt-1 font-mono">系統代碼: {rec.suggestedSystemCode}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 mt-6 pt-4 border-t">
+                  <button
+                    onClick={() => setShowAIModal(false)}
+                    className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleBatchCreate}
+                    disabled={aiRecommendations.filter(r => r.isSelected).length === 0 || fetcher.state === 'submitting'}
+                    className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {fetcher.state === 'submitting' ? '建立中...' : `批量建立 (${aiRecommendations.filter(r => r.isSelected).length})`}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
