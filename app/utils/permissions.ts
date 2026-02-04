@@ -90,7 +90,7 @@ export const PERMISSION_ROUTES: Record<Permission, string> = {
   [PERMISSIONS.MAINTENANCE]: '/maintenance',
   [PERMISSIONS.TASKS]: '/tasks',
   [PERMISSIONS.COMMUNICATION]: '/communication',
-  [PERMISSIONS.INVOICES]: '/invoices',
+  [PERMISSIONS.INVOICES]: '/payments',
   [PERMISSIONS.KNOWLEDGE]: '/knowledge',
   [PERMISSIONS.ANNOUNCEMENTS]: '/announcements',
   [PERMISSIONS.SYSTEM]: '/admin',
