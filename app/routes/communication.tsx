@@ -141,6 +141,58 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  // 新增通訊群組
+  if (intent === "createGroup") {
+    const user = await requireUser(request);
+    
+    const vendorId = formData.get("vendorId") as string;
+    const platform = formData.get("platform") as string;
+    const groupName = formData.get("groupName") as string;
+    const systemCode = formData.get("systemCode") as string;
+    const inviteLink = formData.get("inviteLink") as string;
+    const qrCodeUrl = formData.get("qrCodeUrl") as string;
+    const note = formData.get("note") as string;
+    
+    // 驗證必填欄位
+    if (!vendorId || !platform || !groupName || !systemCode) {
+      return json({ success: false, message: "請填寫所有必填欄位" }, { status: 400 });
+    }
+    
+    // 驗證平台
+    if (platform !== 'LINE' && platform !== 'WECHAT') {
+      return json({ success: false, message: "無效的平台" }, { status: 400 });
+    }
+    
+    try {
+      // 檢查 systemCode 是否已存在
+      const [existing] = await db.select()
+        .from(socialGroups)
+        .where(eq(socialGroups.systemCode, systemCode));
+      
+      if (existing) {
+        return json({ success: false, message: "系統代碼已存在，請使用其他代碼" }, { status: 400 });
+      }
+      
+      // 建立新群組
+      const [newGroup] = await db.insert(socialGroups).values({
+        vendorId,
+        platform: platform as 'LINE' | 'WECHAT',
+        groupName: groupName.trim(),
+        systemCode: systemCode.trim(),
+        inviteLink: inviteLink?.trim() || null,
+        qrCodeUrl: qrCodeUrl?.trim() || null,
+        note: note?.trim() || null
+      }).returning();
+      
+      console.log('[Communication Action] Created group:', newGroup.id);
+      
+      return json({ success: true, message: "群組已建立", group: newGroup });
+    } catch (error) {
+      console.error('[Communication Action] Failed to create group:', error);
+      return json({ success: false, message: "建立失敗，請稍後再試" }, { status: 500 });
+    }
+  }
+  
   // 編輯通訊群組
   if (intent === "editGroup") {
     const groupId = formData.get("groupId") as string;
@@ -284,6 +336,15 @@ function CommunicationContent() {
   const [editGroupName, setEditGroupName] = useState('');
   const [editPlatform, setEditPlatform] = useState<Platform>('LINE');
   const [editInviteLink, setEditInviteLink] = useState('');
+  
+  // 新增群組表單狀態
+  const [newGroupVendorId, setNewGroupVendorId] = useState('');
+  const [newGroupPlatform, setNewGroupPlatform] = useState<Platform>(platform);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupSystemCode, setNewGroupSystemCode] = useState('');
+  const [newGroupInviteLink, setNewGroupInviteLink] = useState('');
+  const [newGroupQrCodeUrl, setNewGroupQrCodeUrl] = useState('');
+  const [newGroupNote, setNewGroupNote] = useState('');
 
   // Reset pagination when main controls change
   const handlePlatformChange = (p: Platform) => {
@@ -441,6 +502,49 @@ function CommunicationContent() {
 
     setShowEditGroupModal(false);
     setSelectedGroup(null);
+  };
+  
+  // 自動生成系統代碼
+  const generateSystemCode = () => {
+    const vendor = dbVendors.find(v => v.id === newGroupVendorId);
+    if (!vendor) {
+      alert('請先選擇廠商');
+      return;
+    }
+    
+    const timestamp = Date.now();
+    const platformPrefix = newGroupPlatform === 'LINE' ? 'LINE' : 'WECHAT';
+    const code = `${platformPrefix}_${vendor.name}_${timestamp}`;
+    setNewGroupSystemCode(code);
+  };
+  
+  // 建立新群組
+  const handleCreateGroup = () => {
+    if (!newGroupVendorId || !newGroupName.trim() || !newGroupSystemCode.trim()) {
+      alert('請填寫所有必填欄位（廠商、群組名稱、系統代碼）');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('intent', 'createGroup');
+    formData.append('vendorId', newGroupVendorId);
+    formData.append('platform', newGroupPlatform);
+    formData.append('groupName', newGroupName.trim());
+    formData.append('systemCode', newGroupSystemCode.trim());
+    formData.append('inviteLink', newGroupInviteLink.trim());
+    formData.append('qrCodeUrl', newGroupQrCodeUrl.trim());
+    formData.append('note', newGroupNote.trim());
+    
+    fetcher.submit(formData, { method: 'post' });
+    
+    // 清空表單並關閉模態框
+    setNewGroupVendorId('');
+    setNewGroupName('');
+    setNewGroupSystemCode('');
+    setNewGroupInviteLink('');
+    setNewGroupQrCodeUrl('');
+    setNewGroupNote('');
+    setShowAddGroupModal(false);
   };
 
   return (
@@ -673,7 +777,7 @@ function CommunicationContent() {
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{group.systemCode}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{group.memberCount} 人</td>
+                        <td className="px-4 py-3 text-slate-500">- 人</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
                             <button onClick={() => handleEditGroup(group)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600" title="編輯群組">
@@ -783,6 +887,159 @@ function CommunicationContent() {
             >
               關閉
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 新增群組模態框 */}
+      {showAddGroupModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddGroupModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">新增 {newGroupPlatform} 群組</h3>
+              <button
+                onClick={() => setShowAddGroupModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 選擇廠商 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">選擇廠商 *</label>
+                <select
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  value={newGroupVendorId}
+                  onChange={(e) => setNewGroupVendorId(e.target.value)}
+                >
+                  <option value="">請選擇廠商...</option>
+                  {dbVendors.map((vendor: any) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 選擇平台 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">選擇平台 *</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="platform"
+                      value="LINE"
+                      checked={newGroupPlatform === 'LINE'}
+                      onChange={(e) => setNewGroupPlatform(e.target.value as Platform)}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm text-slate-700">🟢 LINE</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="platform"
+                      value="WeChat"
+                      checked={newGroupPlatform === 'WeChat'}
+                      onChange={(e) => setNewGroupPlatform(e.target.value as Platform)}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm text-slate-700">🟢 WeChat（微信）</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 群組名稱 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">群組名稱 *</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入群組名稱..."
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+
+              {/* 系統代碼 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">系統代碼 *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                    placeholder="輸入系統代碼..."
+                    value={newGroupSystemCode}
+                    onChange={(e) => setNewGroupSystemCode(e.target.value)}
+                    maxLength={50}
+                  />
+                  <button
+                    onClick={generateSystemCode}
+                    className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition whitespace-nowrap"
+                  >
+                    自動生成
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">ℹ️ 系統代碼必須唯一，用於內部識別</p>
+              </div>
+
+              {/* 邀請連結 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">邀請連結</label>
+                <input
+                  type="url"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="https://line.me/R/ti/g/..."
+                  value={newGroupInviteLink}
+                  onChange={(e) => setNewGroupInviteLink(e.target.value)}
+                />
+              </div>
+
+              {/* QR Code 圖片 URL */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">QR Code 圖片 URL</label>
+                <input
+                  type="url"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="https://..."
+                  value={newGroupQrCodeUrl}
+                  onChange={(e) => setNewGroupQrCodeUrl(e.target.value)}
+                />
+              </div>
+
+              {/* 備註 */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">備註</label>
+                <textarea
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  placeholder="輸入備註..."
+                  value={newGroupNote}
+                  onChange={(e) => setNewGroupNote(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddGroupModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={!newGroupVendorId || !newGroupName.trim() || !newGroupSystemCode.trim() || fetcher.state === 'submitting'}
+                className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {fetcher.state === 'submitting' ? '建立中...' : '建立群組 ✓'}
+              </button>
+            </div>
           </div>
         </div>
       )}
