@@ -85,7 +85,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 // 權限對應的路由路徑
 export const PERMISSION_ROUTES: Record<Permission, string> = {
-  [PERMISSIONS.DASHBOARD]: '/dashboard',
+  [PERMISSIONS.DASHBOARD]: '/',
   [PERMISSIONS.VENDORS]: '/vendors',
   [PERMISSIONS.MAINTENANCE]: '/maintenance',
   [PERMISSIONS.TASKS]: '/tasks',
