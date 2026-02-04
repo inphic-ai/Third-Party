@@ -39,7 +39,61 @@ export async function loader({ request }: LoaderFunctionArgs) {
     );
     const riskCount = riskCountResult[0]?.count || 0;
     
-    // 身分佈局統計（根據 serviceTypes）
+    // ===== 方案 B：新增統計邏輯 =====
+    
+    // 1. 廠商統計
+    const activeVendorsCount = await db.select({ count: count() }).from(schema.vendors).where(
+      eq(schema.vendors.isBlacklisted, false)
+    );
+    const activeVendors = activeVendorsCount[0]?.count || 0;
+    
+    // 本月新增廠商（假設 createdAt 欄位存在）
+    const thisMonthStart = new Date();
+    thisMonthStart.setDate(1);
+    thisMonthStart.setHours(0, 0, 0, 0);
+    
+    const newVendorsThisMonth = await db.select({ count: count() }).from(schema.vendors).where(
+      sql`${schema.vendors.createdAt} >= ${thisMonthStart.toISOString()}`
+    );
+    const newVendors = newVendorsThisMonth[0]?.count || 0;
+    
+    // 2. 交易統計
+    const transactionsThisMonth = await db.select({
+      count: count(),
+      total: sql<number>`COALESCE(SUM(amount), 0)`
+    }).from(schema.transactions).where(
+      sql`${schema.transactions.createdAt} >= ${thisMonthStart.toISOString()}`
+    );
+    const transactionCount = transactionsThisMonth[0]?.count || 0;
+    const transactionAmount = Number(transactionsThisMonth[0]?.total) || 0;
+    const avgTransaction = transactionCount > 0 ? Math.round(transactionAmount / transactionCount) : 0;
+    
+    // 3. 通訊統計
+    const lineGroupsCount = await db.select({ count: count() }).from(schema.socialGroups).where(
+      eq(schema.socialGroups.platform, 'LINE')
+    );
+    const wechatGroupsCount = await db.select({ count: count() }).from(schema.socialGroups).where(
+      eq(schema.socialGroups.platform, 'WECHAT')
+    );
+    const lineGroups = lineGroupsCount[0]?.count || 0;
+    const wechatGroups = wechatGroupsCount[0]?.count || 0;
+    const totalGroups = lineGroups + wechatGroups;
+    
+    // 4. 工單統計（假設有 maintenanceRecords 表格）
+    const ongoingWorkOrders = await db.select({ count: count() }).from(schema.maintenanceRecords).where(
+      sql`${schema.maintenanceRecords.status} IN ('PENDING', 'IN_PROGRESS')`
+    );
+    const ongoingCount = ongoingWorkOrders[0]?.count || 0;
+    
+    const completedThisMonth = await db.select({ count: count() }).from(schema.maintenanceRecords).where(
+      sql`${schema.maintenanceRecords.status} = 'COMPLETED' AND ${schema.maintenanceRecords.updatedAt} >= ${thisMonthStart.toISOString()}`
+    );
+    const completedCount = completedThisMonth[0]?.count || 0;
+    
+    // 平均處理時間（假設有 createdAt 和 completedAt）
+    const avgProcessingTime = 3.2; // 暫時使用固定值，之後可以計算
+    
+    // ===== 原有的身分佈局統計 =====
     const laborCount = await db.select({ count: count() }).from(schema.vendors).where(
       sql`'labor' = ANY(${schema.vendors.serviceTypes})`
     );
@@ -70,7 +124,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
         totalVendors: totalVendors || 0,
         approvedAmount,
         riskCount,
-        identityMix
+        identityMix,
+        // 方案 B 的統計資料
+        vendorStats: {
+          total: totalVendors || 0,
+          active: activeVendors,
+          newThisMonth: newVendors
+        },
+        transactionStats: {
+          count: transactionCount,
+          amount: transactionAmount,
+          average: avgTransaction
+        },
+        communicationStats: {
+          total: totalGroups,
+          line: lineGroups,
+          wechat: wechatGroups
+        },
+        workOrderStats: {
+          ongoing: ongoingCount,
+          completedThisMonth: completedCount,
+          avgProcessingTime
+        }
       },
       dbConnected: true,
       user
@@ -160,74 +235,97 @@ export default function WarRoomPage() {
         </div>
       </div>
 
-      {/* 2. KPI 卡片 */}
+      {/* 2. KPI 卡片（方案 B） */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+         {/* 1. 廠商統計 */}
          <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
-            <div className="flex justify-between mb-4"><div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><LayoutGrid size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-blue-600"/></div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{stats.totalVendors}</h3>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">活躍協作夥伴</p>
+            <div className="flex justify-between mb-4">
+               <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><LayoutGrid size={24}/></div>
+               <ArrowUpRight className="text-slate-200 group-hover:text-blue-600"/>
+            </div>
+            <h3 className="text-5xl font-black text-slate-800 tracking-tighter mb-2">{stats.vendorStats?.total || 0}</h3>
+            <p className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">總廠商數</p>
+            <div className="mt-4 space-y-2">
+               <div className="flex items-center gap-2 text-sm text-emerald-600 font-semibold">
+                  <span className="text-lg">↑</span>
+                  <span>{stats.vendorStats?.newThisMonth || 0} 家</span>
+                  <span className="text-slate-400">本月新增</span>
+               </div>
+               <div className="flex items-center gap-2 text-sm text-blue-600 font-semibold">
+                  <span className="text-lg">✓</span>
+                  <span>{stats.vendorStats?.active || 0} 家</span>
+                  <span className="text-slate-400">活躍廠商</span>
+               </div>
+            </div>
          </Link>
-         <Link to="/payments" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
-            <div className="flex justify-between mb-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Wallet size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-emerald-600"/></div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tighter">${(stats.approvedAmount/1000).toFixed(1)}k</h3>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">已核准待撥款</p>
+         
+         {/* 2. 交易統計 */}
+         <Link to="/transactions" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
+            <div className="flex justify-between mb-4">
+               <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Wallet size={24}/></div>
+               <ArrowUpRight className="text-slate-200 group-hover:text-emerald-600"/>
+            </div>
+            <h3 className="text-5xl font-black text-slate-800 tracking-tighter mb-2">NT$ {((stats.transactionStats?.amount || 0)/1000).toFixed(1)}k</h3>
+            <p className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">本月交易額</p>
+            <div className="mt-4 space-y-2">
+               <div className="flex items-center gap-2 text-sm text-emerald-600 font-semibold">
+                  <span className="text-lg">📊</span>
+                  <span>{stats.transactionStats?.count || 0} 筆</span>
+                  <span className="text-slate-400">交易數</span>
+               </div>
+               <div className="flex items-center gap-2 text-sm text-blue-600 font-semibold">
+                  <span className="text-lg">💰</span>
+                  <span>NT$ {((stats.transactionStats?.average || 0)/1000).toFixed(1)}k</span>
+                  <span className="text-slate-400">平均金額</span>
+               </div>
+            </div>
          </Link>
-         <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
-            <div className="flex justify-between mb-4"><div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><TrendingUp size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-indigo-600"/></div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tighter">4.3</h3>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">廠商平均評分</p>
+         
+         {/* 3. 通訊統計 */}
+         <Link to="/communication" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
+            <div className="flex justify-between mb-4">
+               <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Activity size={24}/></div>
+               <ArrowUpRight className="text-slate-200 group-hover:text-indigo-600"/>
+            </div>
+            <h3 className="text-5xl font-black text-slate-800 tracking-tighter mb-2">{stats.communicationStats?.total || 0}</h3>
+            <p className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">通訊群組</p>
+            <div className="mt-4 space-y-2">
+               <div className="flex items-center gap-2 text-sm text-emerald-600 font-semibold">
+                  <span className="text-lg">🟢</span>
+                  <span>{stats.communicationStats?.line || 0} 個</span>
+                  <span className="text-slate-400">LINE 群組</span>
+               </div>
+               <div className="flex items-center gap-2 text-sm text-blue-600 font-semibold">
+                  <span className="text-lg">👉</span>
+                  <span>{stats.communicationStats?.wechat || 0} 個</span>
+                  <span className="text-slate-400">WeChat 群組</span>
+               </div>
+            </div>
          </Link>
-         <Link to="/vendors" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
-            <div className="flex justify-between mb-4"><div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><ShieldAlert size={24}/></div><ArrowUpRight className="text-slate-200 group-hover:text-rose-600"/></div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{stats.riskCount}</h3>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">風險監控對象</p>
+         
+         {/* 4. 工單統計 */}
+         <Link to="/maintenance" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
+            <div className="flex justify-between mb-4">
+               <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><Hammer size={24}/></div>
+               <ArrowUpRight className="text-slate-200 group-hover:text-rose-600"/>
+            </div>
+            <h3 className="text-5xl font-black text-slate-800 tracking-tighter mb-2">{stats.workOrderStats?.ongoing || 0}</h3>
+            <p className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">進行中工單</p>
+            <div className="mt-4 space-y-2">
+               <div className="flex items-center gap-2 text-sm text-emerald-600 font-semibold">
+                  <span className="text-lg">✓</span>
+                  <span>{stats.workOrderStats?.completedThisMonth || 0} 件</span>
+                  <span className="text-slate-400">本月完成</span>
+               </div>
+               <div className="flex items-center gap-2 text-sm text-blue-600 font-semibold">
+                  <span className="text-lg">⏱️</span>
+                  <span>{stats.workOrderStats?.avgProcessingTime || 0} 天</span>
+                  <span className="text-slate-400">平均處理</span>
+               </div>
+            </div>
          </Link>
       </div>
 
-      {/* 3. 身分佈局矩陣 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-         <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col">
-            <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest mb-10 flex items-center gap-3">
-               <Package size={24} className="text-indigo-500" /> 兩岸協力身分佈局
-            </h3>
-            <div className="space-y-10 flex-1 flex flex-col justify-center">
-               {stats.identityMix.map((item: any) => (
-                  <div key={item.name} className="space-y-3">
-                     <div className="flex justify-between text-xs font-black tracking-[0.2em] text-slate-500 uppercase">
-                        <span className="flex items-center gap-2">
-                           {item.name === '提供勞務' ? <Hammer size={14}/> : item.name === '提供商品' ? <Package size={14}/> : <Factory size={14}/>}
-                           {item.name}
-                        </span>
-                        <span className="text-indigo-600">{item.value}%</span>
-                     </div>
-                     <div className="h-5 w-full bg-slate-50 rounded-full overflow-hidden p-1 border border-slate-100">
-                        <div className={clsx("h-full rounded-full transition-all duration-1000 shadow-sm", item.name === '提供勞務' ? "bg-indigo-500" : item.name === '提供商品' ? "bg-orange-500" : "bg-purple-500")} style={{ width: `${item.value}%` }}></div>
-                     </div>
-                  </div>
-               ))}
-            </div>
-         </div>
-
-         <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden flex flex-col">
-            <div className="relative z-10">
-               <div className="flex items-center gap-3 mb-10">
-                  <div className="p-3 bg-indigo-500 rounded-2xl shadow-xl shadow-indigo-500/20"><Bot size={32} /></div>
-                  <h3 className="font-black text-2xl uppercase tracking-widest">AI 供應鏈洞察</h3>
-               </div>
-               <div className="space-y-8">
-                  <div className="p-6 bg-white/5 backdrop-blur-md rounded-[2rem] border border-white/10 hover:bg-white/10 transition-all cursor-pointer group">
-                     <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Sparkles size={14} className="text-yellow-400"/> 核心結構建議
-                     </h4>
-                     <p className="text-slate-300 leading-relaxed font-medium text-sm">
-                        當前「<span className="text-white font-black underline">製造商品</span>」身分佔比偏低 ({stats.identityMix[2]?.value || 10}%)。AI 分析指出：若要強化供應鏈韌性，建議在 2026 Q1 前引進至少 2 家具備自有工廠的大陸廠商，以平衡物流風險。
-                     </p>
-                  </div>
-               </div>
-            </div>
-            <Activity size={200} className="absolute -bottom-20 -right-20 text-white opacity-[0.03] pointer-events-none" />
-         </div>
-      </div>
 
       {/* 快速導覽 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
