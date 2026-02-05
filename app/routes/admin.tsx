@@ -23,6 +23,7 @@ import { clsx } from 'clsx';
 
 import { ClientOnly } from '~/components/ClientOnly';
 import { UserManager } from '~/components/UserManager';
+import { AddAnnouncementModal } from '~/components/AddAnnouncementModal';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
@@ -520,6 +521,29 @@ export async function action({ request }: ActionFunctionArgs) {
         await db.delete(departments).where(eq(departments.id, id));
         
         return json({ success: true, message: '部門已刪除' });
+      }
+
+      case 'createAnnouncement': {
+        const title = formData.get('title') as string;
+        const content = formData.get('content') as string;
+        const priority = formData.get('priority') as string;
+        
+        if (!title || !content) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.insert(announcements).values({
+          title: title.trim(),
+          content: content.trim(),
+          date: new Date(),
+          priority: priority === 'HIGH' ? 'HIGH' : 'NORMAL',
+          author: adminUser.id,
+          tags: [],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        return json({ success: true, message: '公告已發布' });
       }
 
       default:
@@ -1491,50 +1515,144 @@ const DepartmentManager = ({ departments }: { departments: Array<{ id: string; n
   );
 };
 
-const AnnouncementManager = ({ announcements }: { announcements: any[] }) => (
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">系統公告管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 發布公告
-      </button>
-    </div>
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 border-b border-slate-100">
-          <tr className="text-slate-500 font-bold">
-            <th className="px-6 py-4 text-left">標題</th>
-            <th className="px-6 py-4 text-left">發布日期</th>
-            <th className="px-6 py-4 text-center">優先級</th>
-            <th className="px-6 py-4 text-center">操作</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {announcements.map((ann: any) => (
-            <tr key={ann.id} className="hover:bg-slate-50/50 transition">
-              <td className="px-6 py-4 font-bold text-slate-800">{ann.title}</td>
-              <td className="px-6 py-4 text-slate-500">{ann.date}</td>
-              <td className="px-6 py-4 text-center">
-                <span className={clsx(
-                  "px-2 py-1 rounded text-xs font-bold",
-                  ann.priority === 'High' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
-                )}>
-                  {ann.priority === 'High' ? '緊急' : '一般'}
-                </span>
-              </td>
-              <td className="px-6 py-4 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
-                  <button className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
-                </div>
-              </td>
+const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // 計算分頁
+  const totalPages = Math.ceil(announcements.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentAnnouncements = announcements.slice(startIndex, endIndex);
+
+  // 格式化日期
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-TW', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">系統公告管理</h2>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+        >
+          <Plus size={16} /> 發布公告
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-100">
+            <tr className="text-slate-500 font-bold">
+              <th className="px-6 py-4 text-left">標題</th>
+              <th className="px-6 py-4 text-left">內容預覽</th>
+              <th className="px-6 py-4 text-left">發布日期</th>
+              <th className="px-6 py-4 text-center">優先級</th>
+              <th className="px-6 py-4 text-center">操作</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {currentAnnouncements.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                  目前沒有公告，點擊「發布公告」新增第一則公告
+                </td>
+              </tr>
+            ) : (
+              currentAnnouncements.map((ann: any) => (
+                <tr key={ann.id} className="hover:bg-slate-50/50 transition">
+                  <td className="px-6 py-4 font-bold text-slate-800 max-w-xs truncate">
+                    {ann.title}
+                  </td>
+                  <td className="px-6 py-4 text-slate-500 max-w-md truncate">
+                    {ann.content?.substring(0, 50)}...
+                  </td>
+                  <td className="px-6 py-4 text-slate-500">
+                    {formatDate(ann.date)}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={clsx(
+                      "px-2 py-1 rounded text-xs font-bold",
+                      ann.priority === 'HIGH' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                    )}>
+                      {ann.priority === 'HIGH' ? '緊急' : '一般'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button className="text-slate-400 hover:text-slate-600">
+                        <Edit2 size={16} />
+                      </button>
+                      <button className="text-slate-400 hover:text-red-500">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {/* 分頁控制 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
+            <div className="text-sm text-slate-500">
+              顯示 {startIndex + 1} - {Math.min(endIndex, announcements.length)} 筆，共 {announcements.length} 筆
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border border-slate-300 rounded text-sm text-slate-600 hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                上一頁
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={clsx(
+                      "px-3 py-1 rounded text-sm transition",
+                      currentPage === page
+                        ? "bg-slate-900 text-white font-bold"
+                        : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border border-slate-300 rounded text-sm text-slate-600 hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 發布公告 Modal */}
+      {showAddModal && (
+        <AddAnnouncementModal
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 export default function AdminPage() {
   return (
