@@ -528,6 +528,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const title = formData.get('title') as string;
         const content = formData.get('content') as string;
         const priority = formData.get('priority') as string;
+        const imageUrl = formData.get('imageUrl') as string | null;
         
         if (!title || !content) {
           return json({ success: false, error: '缺少必要參數' }, { status: 400 });
@@ -540,6 +541,7 @@ export async function action({ request }: ActionFunctionArgs) {
           priority: priority === 'HIGH' ? 'HIGH' : 'NORMAL',
           author: adminUser.id,
           tags: [],
+          imageUrl: imageUrl || null,
           createdAt: new Date(),
           updatedAt: new Date()
         });
@@ -552,18 +554,26 @@ export async function action({ request }: ActionFunctionArgs) {
         const title = formData.get('title') as string;
         const content = formData.get('content') as string;
         const priority = formData.get('priority') as string;
+        const imageUrl = formData.get('imageUrl') as string | null;
         
         if (!id || !title || !content) {
           return json({ success: false, error: '缺少必要參數' }, { status: 400 });
         }
         
+        const updateData: any = {
+          title: title.trim(),
+          content: content.trim(),
+          priority: priority === 'HIGH' ? 'HIGH' : 'NORMAL',
+          updatedAt: new Date()
+        };
+        
+        // 如果有提供 imageUrl，則更新；如果是空字串，則刪除
+        if (imageUrl !== undefined) {
+          updateData.imageUrl = imageUrl || null;
+        }
+        
         await db.update(announcements)
-          .set({
-            title: title.trim(),
-            content: content.trim(),
-            priority: priority === 'HIGH' ? 'HIGH' : 'NORMAL',
-            updatedAt: new Date()
-          })
+          .set(updateData)
           .where(eq(announcements.id, id));
         
         return json({ success: true, message: '公告已更新' });
@@ -1592,6 +1602,7 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
             <tr className="text-slate-500 font-bold">
               <th className="px-6 py-4 text-left">標題</th>
               <th className="px-6 py-4 text-left">內容預覽</th>
+              <th className="px-6 py-4 text-center">圖片</th>
               <th className="px-6 py-4 text-left">發布日期</th>
               <th className="px-6 py-4 text-center">優先級</th>
               <th className="px-6 py-4 text-center">操作</th>
@@ -1600,7 +1611,7 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
           <tbody className="divide-y divide-slate-50">
             {currentAnnouncements.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
                   目前沒有公告，點擊「發布公告」新增第一則公告
                 </td>
               </tr>
@@ -1612,6 +1623,19 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
                   </td>
                   <td className="px-6 py-4 text-slate-500 max-w-md truncate">
                     {ann.content?.substring(0, 50)}...
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {ann.imageUrl ? (
+                      <img 
+                        src={ann.imageUrl} 
+                        alt="公告圖片" 
+                        className="w-12 h-12 object-cover rounded mx-auto cursor-pointer hover:scale-110 transition"
+                        onClick={() => window.open(ann.imageUrl, '_blank')}
+                        title="點擊查看大圖"
+                      />
+                    ) : (
+                      <span className="text-slate-300 text-xs">無圖片</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-slate-500">
                     {formatDate(ann.date)}
