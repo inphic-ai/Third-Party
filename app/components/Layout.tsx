@@ -106,12 +106,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       path: '/admin', 
       icon: <Settings size={18} />, 
       permission: hasPermission(PERMISSIONS.SYSTEM)
-    },
-    { 
-      name: '需求管理', 
-      path: '/requirements', 
-      icon: <ClipboardList size={18} />, 
-      permission: isAdmin
     }, 
   ];
 

@@ -17,7 +17,7 @@ import {
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
   History, LogIn, Monitor, Smartphone, Trash2, Tags, Power, Edit2,
-  Building, Terminal, ShieldCheck, CheckCircle2
+  Building, Terminal, ShieldCheck, CheckCircle2, ClipboardList
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -659,7 +659,7 @@ function AdminContent() {
         {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
         {activeTab === 'departments' && <DepartmentManager departments={dbDepartments} />}
         {activeTab === 'announcements' && <AnnouncementManager announcements={dbAnnouncements} />}
-        {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
+        {activeTab === 'settings' && <SystemSettings />}
       </div>
     </div>
   );
@@ -1761,6 +1761,43 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const SystemSettings = () => {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* 需求管理入口 */}
+        <a
+          href="/requirements"
+          className="bg-white rounded-xl border-2 border-slate-200 p-6 hover:border-slate-900 hover:shadow-lg transition-all group"
+        >
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition">
+              <ClipboardList size={24} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-slate-900">需求管理</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                查看和管理用戶提交的功能建議和改進需求
+              </p>
+              <div className="text-xs text-blue-600 font-bold group-hover:text-blue-700">
+                點擊進入 →
+              </div>
+            </div>
+          </div>
+        </a>
+
+        {/* 其他系統設定項目可以在這裡添加 */}
+        <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-6 flex items-center justify-center">
+          <div className="text-center text-slate-400">
+            <Settings size={32} className="mx-auto mb-2 opacity-50" />
+            <p className="text-sm">更多設定項目即將推出</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
