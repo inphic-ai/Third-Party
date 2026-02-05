@@ -130,6 +130,7 @@ export function EditUserModal({ user, departments, onClose }: EditUserModalProps
     PERMISSIONS.INVOICES,
     PERMISSIONS.KNOWLEDGE,
     PERMISSIONS.ANNOUNCEMENTS,
+    PERMISSIONS.SUGGESTIONS,
     PERMISSIONS.SYSTEM,
   ];
 
