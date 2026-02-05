@@ -260,10 +260,9 @@ export default function WarRoomPage() {
          </Link>
          
          {/* 2. 交易統計 */}
-         <Link to="/transactions" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
+         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
             <div className="flex justify-between mb-4">
                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Wallet size={24}/></div>
-               <ArrowUpRight className="text-slate-200 group-hover:text-emerald-600"/>
             </div>
             <h3 className="text-5xl font-black text-slate-800 tracking-tighter mb-2">NT$ {((stats.transactionStats?.amount || 0)/1000).toFixed(1)}k</h3>
             <p className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">本月交易額</p>
@@ -279,7 +278,7 @@ export default function WarRoomPage() {
                   <span className="text-slate-400">平均金額</span>
                </div>
             </div>
-         </Link>
+         </div>
          
          {/* 3. 通訊統計 */}
          <Link to="/communication" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer">
