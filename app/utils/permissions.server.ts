@@ -6,23 +6,33 @@
 import { redirect } from '@remix-run/node';
 import type { Permission } from './permissions';
 import { parsePermissions, canAccessRoute } from './permissions';
+import { db } from '../services/db.server';
+import { users } from '../../db/schema/user';
+import { eq } from 'drizzle-orm';
 
 /**
  * 檢查用戶是否有訪問指定路由的權限
  * 如果沒有權限，則拋出 redirect 到無權限頁面
- * @param user - 用戶對象（包含 permissions 欄位）
+ * @param user - 用戶對象（包含 id 和 role）
  * @param route - 要訪問的路由
  */
-export function requirePermission(
-  user: { permissions: string | null; role?: string },
+export async function requirePermission(
+  user: { id: string; role?: string },
   route: string
-): void {
+): Promise<void> {
   // Admin 角色擁有所有權限
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'ADMIN') {
     return;
   }
 
-  const userPermissions = parsePermissions(user.permissions);
+  // 從資料庫讀取最新權限
+  const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  
+  if (!dbUser) {
+    throw redirect('/login');
+  }
+
+  const userPermissions = parsePermissions(dbUser.permissions);
   
   if (!canAccessRoute(userPermissions, route)) {
     throw redirect('/no-permission');
