@@ -4,10 +4,11 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remi
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
+import { loginLogs } from '../../db/schema/login';
 import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 // 郵件服務暫時停用
 // import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
@@ -21,7 +22,7 @@ import { clsx } from 'clsx';
 import { ClientOnly } from '~/components/ClientOnly';
 import { UserManager } from '~/components/UserManager';
 import { 
-  MOCK_ANNOUNCEMENTS, MOCK_LOGS, MOCK_LOGIN_LOGS, 
+  MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
   MOCK_USERS, MOCK_DEPARTMENTS 
 } from '~/constants';
@@ -41,12 +42,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log('[Admin Loader] Loading admin data...');
     
     // 讀取資料
-    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments] = await Promise.all([
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
-      db.select().from(departments) // 部門管理
+      db.select().from(departments), // 部門管理
+      db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100) // 登入日誌（最新的在前）
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -104,12 +106,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
       description: dept.description
     }));
     
+    // 處理登入日誌
+    const loginLogsWithMapping = allLoginLogs.map(log => ({
+      id: log.id,
+      timestamp: log.timestamp.toISOString(),
+      user: log.userName || 'Unknown',
+      email: log.email,
+      ip: log.ip,
+      device: log.device || `${log.browser || 'Unknown'} / ${log.os || 'Unknown'}`,
+      status: log.status === 'SUCCESS' ? 'success' : 'failed'
+    }));
+    
     return json({ 
       systemLogs: logsWithMapping,
       adminUsers: usersWithMapping,
       announcements: announcementsWithMapping,
       users: usersForApproval,
-      departments: departmentsList
+      departments: departmentsList,
+      loginLogs: loginLogsWithMapping
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
@@ -118,7 +132,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       adminUsers: [],
       users: [],
       departments: [],
-      announcements: []
+      announcements: [],
+      loginLogs: []
     });
   }
 }
@@ -319,7 +334,7 @@ export async function action({ request }: ActionFunctionArgs) {
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
@@ -367,7 +382,7 @@ function AdminContent() {
       </div>
 
       <div className="min-h-[600px] py-4">
-        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} />}
+        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} loginLogs={dbLoginLogs} />}
         {activeTab === 'categories' && <CategoryManager />}
         {activeTab === 'tags' && <TagManager />}
         {activeTab === 'ai' && <AiConfig />}
@@ -382,7 +397,7 @@ function AdminContent() {
 
 
 
-const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
+const LogCenter = ({ systemLogs, loginLogs }: { systemLogs: any[]; loginLogs: any[] }) => {
   const [logType, setLogType] = useState<'operation' | 'login'>('operation');
 
   return (
@@ -454,7 +469,7 @@ const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {MOCK_LOGIN_LOGS.map(l => (
+                {loginLogs.map(l => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>

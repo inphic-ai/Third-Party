@@ -5,6 +5,7 @@ import { db } from "./db.server";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import type { User } from "../../db/schema/user";
+import { logLoginSuccess } from "./loginLog.server";
 
 // 建立 Authenticator 實例
 export const authenticator = new Authenticator<User>(sessionStorage);
