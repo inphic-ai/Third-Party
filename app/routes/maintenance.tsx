@@ -173,7 +173,7 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 };
 
 export default function MaintenancePage() {
-  const { records, vendorList, isAdmin } = useLoaderData<typeof loader>();
+  const { records, vendorList, canDeleteMaintenance } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
