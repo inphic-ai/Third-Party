@@ -26,7 +26,7 @@ import { UserManager } from '~/components/UserManager';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
-  MOCK_USERS, MOCK_DEPARTMENTS 
+  MOCK_USERS
 } from '~/constants';
 
 export const meta: MetaFunction = () => {
@@ -104,11 +104,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       permissions: user.permissions ?? null
     }));
     
-    const departmentsList = allDepartments.map(dept => ({
-      id: dept.id,
-      name: dept.name,
-      description: dept.description
-    }));
+    // 計算每個部門的成員數量
+    const departmentsList = allDepartments.map(dept => {
+      const memberCount = allUsers.filter(user => user.department === dept.name).length;
+      return {
+        id: dept.id,
+        name: dept.name,
+        description: dept.description,
+        memberCount
+      };
+    });
     
     // 處理登入日誌
     const loginLogsWithMapping = allLoginLogs.map(log => ({
@@ -455,6 +460,68 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ success: true, message: '標籤已刪除' });
       }
 
+      // 部門管理
+      case 'createDepartment': {
+        const name = formData.get('name') as string;
+        const description = formData.get('description') as string;
+        
+        if (!name || !name.trim()) {
+          return json({ success: false, error: '部門名稱不能為空' }, { status: 400 });
+        }
+        
+        // 檢查是否重複
+        const existing = await db.select().from(departments).where(eq(departments.name, name.trim()));
+        if (existing.length > 0) {
+          return json({ success: false, error: '部門名稱已存在' }, { status: 400 });
+        }
+        
+        await db.insert(departments).values({
+          name: name.trim(),
+          description: description?.trim() || '',
+        });
+        
+        return json({ success: true, message: '部門已新增' });
+      }
+
+      case 'updateDepartment': {
+        const id = formData.get('id') as string;
+        const name = formData.get('name') as string;
+        const description = formData.get('description') as string;
+        
+        if (!id || !name || !name.trim()) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        // 檢查是否與其他部門重複
+        const existing = await db.select().from(departments)
+          .where(eq(departments.name, name.trim()));
+        if (existing.length > 0 && existing[0].id !== id) {
+          return json({ success: false, error: '部門名稱已存在' }, { status: 400 });
+        }
+        
+        await db.update(departments)
+          .set({ 
+            name: name.trim(),
+            description: description?.trim() || '',
+            updatedAt: new Date() 
+          })
+          .where(eq(departments.id, id));
+        
+        return json({ success: true, message: '部門已更新' });
+      }
+
+      case 'deleteDepartment': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.delete(departments).where(eq(departments.id, id));
+        
+        return json({ success: true, message: '部門已刪除' });
+      }
+
       default:
         return json({ success: false, error: '未知操作' }, { status: 400 });
     }
@@ -520,7 +587,7 @@ function AdminContent() {
         {activeTab === 'tags' && <TagManager tags={vendorTags} />}
         {activeTab === 'ai' && <AiConfig />}
         {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
-        {activeTab === 'departments' && <DepartmentManager />}
+        {activeTab === 'departments' && <DepartmentManager departments={dbDepartments} />}
         {activeTab === 'announcements' && <AnnouncementManager announcements={dbAnnouncements} />}
         {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
       </div>
@@ -1190,31 +1257,239 @@ const AiConfig = () => (
   </div>
 );
 
-const DepartmentManager = () => (
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">部門清單管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增部門
-      </button>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {MOCK_DEPARTMENTS.map(dept => (
-        <div key={dept.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-800">{dept.name}</h3>
-            <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">{dept.description}</p>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Users size={14} />
-            <span>{dept.memberCount} 人</span>
+const DepartmentManager = ({ departments }: { departments: Array<{ id: string; name: string; description: string; memberCount: number }> }) => {
+  const [isAdding, setIsAdding] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editName, setEditName] = React.useState('');
+  const [editDescription, setEditDescription] = React.useState('');
+  const [newName, setNewName] = React.useState('');
+  const [newDescription, setNewDescription] = React.useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
+  
+  const createFetcher = useFetcher();
+  const updateFetcher = useFetcher();
+  const deleteFetcher = useFetcher();
+
+  // 處理新增
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'createDepartment');
+    formData.append('name', newName.trim());
+    formData.append('description', newDescription.trim());
+    
+    createFetcher.submit(formData, { method: 'post' });
+    setNewName('');
+    setNewDescription('');
+    setIsAdding(false);
+  };
+
+  // 處理編輯
+  const handleEdit = (dept: { id: string; name: string; description: string }) => {
+    setEditingId(dept.id);
+    setEditName(dept.name);
+    setEditDescription(dept.description || '');
+  };
+
+  // 處理更新
+  const handleUpdate = () => {
+    if (!editName.trim() || !editingId) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'updateDepartment');
+    formData.append('id', editingId);
+    formData.append('name', editName.trim());
+    formData.append('description', editDescription.trim());
+    
+    updateFetcher.submit(formData, { method: 'post' });
+    setEditingId(null);
+  };
+
+  // 處理刪除
+  const handleDelete = (id: string) => {
+    const formData = new FormData();
+    formData.append('intent', 'deleteDepartment');
+    formData.append('id', id);
+    
+    deleteFetcher.submit(formData, { method: 'post' });
+    setDeleteConfirmId(null);
+  };
+
+  // 鍵盤快捷鍵
+  const handleKeyDown = (e: React.KeyboardEvent, action: 'create' | 'update' | 'cancel') => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (action === 'create') handleCreate();
+      if (action === 'update') handleUpdate();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (action === 'cancel') {
+        setIsAdding(false);
+        setEditingId(null);
+        setNewName('');
+        setNewDescription('');
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">部門清單管理</h2>
+        {!isAdding && (
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+          >
+            <Plus size={16} /> 新增部門
+          </button>
+        )}
+      </div>
+
+      {/* 新增表單 */}
+      {isAdding && (
+        <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'create')}
+              placeholder="部門名稱"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              autoFocus
+            />
+            <input
+              type="text"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'create')}
+              placeholder="部門描述（選填）"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim() || createFetcher.state !== 'idle'}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {createFetcher.state !== 'idle' ? '儲存中...' : '儲存'}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAdding(false);
+                  setNewName('');
+                  setNewDescription('');
+                }}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-300 transition"
+              >
+                取消
+              </button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* 部門列表 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {departments.map(dept => (
+          <div key={dept.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            {editingId === dept.id ? (
+              // 編輯模式
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, 'update')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold"
+                  autoFocus
+                />
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, 'update')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUpdate}
+                    disabled={!editName.trim() || updateFetcher.state !== 'idle'}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {updateFetcher.state !== 'idle' ? '儲存中...' : '儲存'}
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="flex-1 px-3 py-2 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-300 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 顯示模式
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-slate-800">{dept.name}</h3>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleEdit(dept)}
+                      className="text-slate-400 hover:text-blue-600 transition"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => setDeleteConfirmId(dept.id)}
+                      className="text-slate-400 hover:text-red-600 transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">{dept.description || '無描述'}</p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Users size={14} />
+                  <span>{dept.memberCount} 人</span>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 刪除確認對話框 */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full mx-4">
+            <h3 className="text-lg font-bold text-slate-800 mb-2">確認刪除</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              確定要刪除此部門嗎？此操作無法復原。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleDelete(deleteConfirmId)}
+                disabled={deleteFetcher.state !== 'idle'}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {deleteFetcher.state !== 'idle' ? '刪除中...' : '確認刪除'}
+              </button>
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-300 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const AnnouncementManager = ({ announcements }: { announcements: any[] }) => (
   <div className="space-y-4">
