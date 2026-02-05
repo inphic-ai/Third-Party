@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useLoaderData, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -6,6 +6,7 @@ import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
 import { loginLogs } from '../../db/schema/login';
 import { vendorCategories } from '../../db/schema/vendorCategory';
+import { vendorTags } from '../../db/schema/vendorTag';
 import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
@@ -25,7 +26,7 @@ import { UserManager } from '~/components/UserManager';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
-  MOCK_USERS, MOCK_DEPARTMENTS 
+  MOCK_USERS
 } from '~/constants';
 
 export const meta: MetaFunction = () => {
@@ -43,14 +44,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log('[Admin Loader] Loading admin data...');
     
     // 讀取資料
-    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories] = await Promise.all([
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories, allVendorTags] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
       db.select().from(departments), // 部門管理
       db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100), // 登入日誌（最新的在前）
-      db.select().from(vendorCategories).orderBy(vendorCategories.displayOrder) // 廠商類別
+      db.select().from(vendorCategories).orderBy(vendorCategories.displayOrder), // 廠商類別
+      db.select().from(vendorTags).orderBy(vendorTags.displayOrder) // 廠商標籤
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -102,11 +104,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       permissions: user.permissions ?? null
     }));
     
-    const departmentsList = allDepartments.map(dept => ({
-      id: dept.id,
-      name: dept.name,
-      description: dept.description
-    }));
+    // 計算每個部門的成員數量（使用 dept.id 比對，因為 users.department 儲存的是 UUID）
+    const departmentsList = allDepartments.map(dept => {
+      const memberCount = allUsers.filter(user => user.department === dept.id).length;
+      return {
+        id: dept.id,
+        name: dept.name,
+        description: dept.description,
+        memberCount
+      };
+    });
     
     // 處理登入日誌
     const loginLogsWithMapping = allLoginLogs.map(log => ({
@@ -126,7 +133,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       users: usersForApproval,
       departments: departmentsList,
       loginLogs: loginLogsWithMapping,
-      vendorCategories: allVendorCategories
+      vendorCategories: allVendorCategories,
+      vendorTags: allVendorTags
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
@@ -137,7 +145,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       departments: [],
       announcements: [],
       loginLogs: [],
-      vendorCategories: []
+      vendorCategories: [],
+      vendorTags: []
     });
   }
 }
@@ -384,6 +393,134 @@ export async function action({ request }: ActionFunctionArgs) {
         
         return json({ success: true, message: '類別已刪除' });
       }
+      
+      // 標籤管理
+      case 'createTag': {
+        const name = formData.get('name') as string;
+        const category = formData.get('category') as string;
+        const color = formData.get('color') as string || 'blue';
+        
+        if (!name || !name.trim() || !category) {
+          return json({ success: false, error: '標籤名稱和分類不能為空' }, { status: 400 });
+        }
+        
+        // 檢查是否已存在
+        const [existing] = await db.select().from(vendorTags)
+          .where(eq(vendorTags.name, name.trim()))
+          .limit(1);
+        if (existing) {
+          return json({ success: false, error: '標籤已存在' }, { status: 400 });
+        }
+        
+        await db.insert(vendorTags).values({
+          name: name.trim(),
+          category: category,
+          color: color,
+          displayOrder: String(Date.now())
+        });
+        
+        return json({ success: true, message: '標籤已新增' });
+      }
+      
+      case 'updateTag': {
+        const id = formData.get('id') as string;
+        const name = formData.get('name') as string;
+        
+        if (!id || !name || !name.trim()) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        // 檢查是否與其他標籤重複
+        const [existing] = await db.select().from(vendorTags)
+          .where(eq(vendorTags.name, name.trim()))
+          .limit(1);
+        if (existing && existing.id !== id) {
+          return json({ success: false, error: '標籤名稱已存在' }, { status: 400 });
+        }
+        
+        await db.update(vendorTags)
+          .set({ 
+            name: name.trim(),
+            updatedAt: new Date()
+          })
+          .where(eq(vendorTags.id, id));
+        
+        return json({ success: true, message: '標籤已更新' });
+      }
+      
+      case 'deleteTag': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.delete(vendorTags).where(eq(vendorTags.id, id));
+        
+        return json({ success: true, message: '標籤已刪除' });
+      }
+
+      // 部門管理
+      case 'createDepartment': {
+        const name = formData.get('name') as string;
+        const description = formData.get('description') as string;
+        
+        if (!name || !name.trim()) {
+          return json({ success: false, error: '部門名稱不能為空' }, { status: 400 });
+        }
+        
+        // 檢查是否重複
+        const existing = await db.select().from(departments).where(eq(departments.name, name.trim()));
+        if (existing.length > 0) {
+          return json({ success: false, error: '部門名稱已存在' }, { status: 400 });
+        }
+        
+        await db.insert(departments).values({
+          name: name.trim(),
+          description: description?.trim() || '',
+        });
+        
+        return json({ success: true, message: '部門已新增' });
+      }
+
+      case 'updateDepartment': {
+        const id = formData.get('id') as string;
+        const name = formData.get('name') as string;
+        const description = formData.get('description') as string;
+        
+        if (!id || !name || !name.trim()) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        // 檢查是否與其他部門重複
+        const existing = await db.select().from(departments)
+          .where(eq(departments.name, name.trim()));
+        if (existing.length > 0 && existing[0].id !== id) {
+          return json({ success: false, error: '部門名稱已存在' }, { status: 400 });
+        }
+        
+        await db.update(departments)
+          .set({ 
+            name: name.trim(),
+            description: description?.trim() || '',
+            updatedAt: new Date() 
+          })
+          .where(eq(departments.id, id));
+        
+        return json({ success: true, message: '部門已更新' });
+      }
+
+      case 'deleteDepartment': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.delete(departments).where(eq(departments.id, id));
+        
+        return json({ success: true, message: '部門已刪除' });
+      }
 
       default:
         return json({ success: false, error: '未知操作' }, { status: 400 });
@@ -397,7 +534,7 @@ export async function action({ request }: ActionFunctionArgs) {
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs, vendorCategories } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs, vendorCategories, vendorTags } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
@@ -447,10 +584,10 @@ function AdminContent() {
       <div className="min-h-[600px] py-4">
         {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} loginLogs={dbLoginLogs} />}
         {activeTab === 'categories' && <CategoryManager categories={vendorCategories} />}
-        {activeTab === 'tags' && <TagManager />}
+        {activeTab === 'tags' && <TagManager tags={vendorTags} />}
         {activeTab === 'ai' && <AiConfig />}
         {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
-        {activeTab === 'departments' && <DepartmentManager />}
+        {activeTab === 'departments' && <DepartmentManager departments={dbDepartments} />}
         {activeTab === 'announcements' && <AnnouncementManager announcements={dbAnnouncements} />}
         {activeTab === 'settings' && <div className="text-slate-400 p-20 text-center border-2 border-dashed rounded-xl bg-white">系統基礎設定載入中...</div>}
       </div>
@@ -799,55 +936,290 @@ const CategoryManager = ({ categories }: { categories: any[] }) => {
   );
 };
 
-const TagManager = () => (
-  <div className="space-y-6">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增標籤
-      </button>
-    </div>
+// TagManager 組件 - 完整的 CRUD 功能
+interface Tag {
+  id: string;
+  name: string;
+  category: string;
+  color: string;
+}
+
+interface TagManagerProps {
+  tags: Tag[];
+}
+
+export const TagManager = ({ tags }: TagManagerProps) => {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagCategory, setNewTagCategory] = useState('聯絡標籤');
+  const fetcher = useFetcher();
+  
+  const handleEdit = (id: string, currentName: string) => {
+    setEditingId(id);
+    setEditingName(currentName);
+  };
+  
+  const handleSave = (id: string) => {
+    if (!editingName.trim()) return;
     
-    {/* 聯絡標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">聯絡標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.contactTags.map((tag, index) => (
-          <div key={`contact-${index}`} className="px-4 py-2 bg-blue-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-blue-700">{tag}</span>
-            <button className="text-blue-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
-      </div>
-    </div>
+    const formData = new FormData();
+    formData.append('intent', 'updateTag');
+    formData.append('id', id);
+    formData.append('name', editingName);
     
-    {/* 服務標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">服務標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.serviceTags.map((tag, index) => (
-          <div key={`service-${index}`} className="px-4 py-2 bg-green-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-green-700">{tag}</span>
-            <button className="text-green-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
-      </div>
-    </div>
+    fetcher.submit(formData, { method: 'post' });
+    setEditingId(null);
+    setEditingName('');
+  };
+  
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+  
+  const handleDelete = (id: string, name: string) => {
+    if (!confirm(`確定要刪除標籤「${name}」嗎？`)) return;
     
-    {/* 網站標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">網站標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.websiteTags.map((tag, index) => (
-          <div key={`website-${index}`} className="px-4 py-2 bg-purple-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-purple-700">{tag}</span>
-            <button className="text-purple-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
+    const formData = new FormData();
+    formData.append('intent', 'deleteTag');
+    formData.append('id', id);
+    
+    fetcher.submit(formData, { method: 'post' });
+  };
+  
+  const handleAddTag = () => {
+    if (!newTagName.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'createTag');
+    formData.append('name', newTagName);
+    formData.append('category', newTagCategory);
+    formData.append('color', getColorByCategory(newTagCategory));
+    
+    fetcher.submit(formData, { method: 'post' });
+    setNewTagName('');
+    setIsAddModalOpen(false);
+  };
+  
+  const getColorByCategory = (category: string) => {
+    switch (category) {
+      case '聯絡標籤': return 'blue';
+      case '服務標籤': return 'green';
+      case '網站標籤': return 'purple';
+      default: return 'blue';
+    }
+  };
+  
+  const getColorClasses = (color: string) => {
+    switch (color) {
+      case 'blue': return 'bg-blue-50 text-blue-700';
+      case 'green': return 'bg-green-50 text-green-700';
+      case 'purple': return 'bg-purple-50 text-purple-700';
+      default: return 'bg-blue-50 text-blue-700';
+    }
+  };
+  
+  // 按分類分組標籤
+  const tagsByCategory = {
+    '聯絡標籤': tags.filter(t => t.category === '聯絡標籤'),
+    '服務標籤': tags.filter(t => t.category === '服務標籤'),
+    '網站標籤': tags.filter(t => t.category === '網站標籤'),
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+        >
+          <Plus size={16} /> 新增標籤
+        </button>
       </div>
+      
+      {/* 聯絡標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">聯絡標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['聯絡標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-blue-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-blue-400 hover:text-blue-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-blue-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 服務標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">服務標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['服務標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-green-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-green-400 hover:text-green-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-green-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 網站標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">網站標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['網站標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-purple-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-purple-400 hover:text-purple-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-purple-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 新增標籤 Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">新增標籤</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">標籤名稱</label>
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddTag();
+                    if (e.key === 'Escape') setIsAddModalOpen(false);
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="輸入標籤名稱"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">標籤分類</label>
+                <select
+                  value={newTagCategory}
+                  onChange={(e) => setNewTagCategory(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="聯絡標籤">聯絡標籤</option>
+                  <option value="服務標籤">服務標籤</option>
+                  <option value="網站標籤">網站標籤</option>
+                </select>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-bold"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddTag}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700"
+                >
+                  新增
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const AiConfig = () => (
   <div className="space-y-4">
@@ -885,31 +1257,239 @@ const AiConfig = () => (
   </div>
 );
 
-const DepartmentManager = () => (
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">部門清單管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增部門
-      </button>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {MOCK_DEPARTMENTS.map(dept => (
-        <div key={dept.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-800">{dept.name}</h3>
-            <button className="text-slate-400 hover:text-slate-600"><Edit2 size={16} /></button>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">{dept.description}</p>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Users size={14} />
-            <span>{dept.memberCount} 人</span>
+const DepartmentManager = ({ departments }: { departments: Array<{ id: string; name: string; description: string; memberCount: number }> }) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  const createFetcher = useFetcher();
+  const updateFetcher = useFetcher();
+  const deleteFetcher = useFetcher();
+
+  // 處理新增
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'createDepartment');
+    formData.append('name', newName.trim());
+    formData.append('description', newDescription.trim());
+    
+    createFetcher.submit(formData, { method: 'post' });
+    setNewName('');
+    setNewDescription('');
+    setIsAdding(false);
+  };
+
+  // 處理編輯
+  const handleEdit = (dept: { id: string; name: string; description: string }) => {
+    setEditingId(dept.id);
+    setEditName(dept.name);
+    setEditDescription(dept.description || '');
+  };
+
+  // 處理更新
+  const handleUpdate = () => {
+    if (!editName.trim() || !editingId) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'updateDepartment');
+    formData.append('id', editingId);
+    formData.append('name', editName.trim());
+    formData.append('description', editDescription.trim());
+    
+    updateFetcher.submit(formData, { method: 'post' });
+    setEditingId(null);
+  };
+
+  // 處理刪除
+  const handleDelete = (id: string) => {
+    const formData = new FormData();
+    formData.append('intent', 'deleteDepartment');
+    formData.append('id', id);
+    
+    deleteFetcher.submit(formData, { method: 'post' });
+    setDeleteConfirmId(null);
+  };
+
+  // 鍵盤快捷鍵
+  const handleKeyDown = (e: React.KeyboardEvent, action: 'create' | 'update' | 'cancel') => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (action === 'create') handleCreate();
+      if (action === 'update') handleUpdate();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (action === 'cancel') {
+        setIsAdding(false);
+        setEditingId(null);
+        setNewName('');
+        setNewDescription('');
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">部門清單管理</h2>
+        {!isAdding && (
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+          >
+            <Plus size={16} /> 新增部門
+          </button>
+        )}
+      </div>
+
+      {/* 新增表單 */}
+      {isAdding && (
+        <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'create')}
+              placeholder="部門名稱"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              autoFocus
+            />
+            <input
+              type="text"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'create')}
+              placeholder="部門描述（選填）"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim() || createFetcher.state !== 'idle'}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {createFetcher.state !== 'idle' ? '儲存中...' : '儲存'}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAdding(false);
+                  setNewName('');
+                  setNewDescription('');
+                }}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-300 transition"
+              >
+                取消
+              </button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* 部門列表 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {departments.map(dept => (
+          <div key={dept.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            {editingId === dept.id ? (
+              // 編輯模式
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, 'update')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold"
+                  autoFocus
+                />
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, 'update')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUpdate}
+                    disabled={!editName.trim() || updateFetcher.state !== 'idle'}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {updateFetcher.state !== 'idle' ? '儲存中...' : '儲存'}
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="flex-1 px-3 py-2 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-300 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 顯示模式
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-slate-800">{dept.name}</h3>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleEdit(dept)}
+                      className="text-slate-400 hover:text-blue-600 transition"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => setDeleteConfirmId(dept.id)}
+                      className="text-slate-400 hover:text-red-600 transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">{dept.description || '無描述'}</p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Users size={14} />
+                  <span>{dept.memberCount} 人</span>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 刪除確認對話框 */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full mx-4">
+            <h3 className="text-lg font-bold text-slate-800 mb-2">確認刪除</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              確定要刪除此部門嗎？此操作無法復原。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleDelete(deleteConfirmId)}
+                disabled={deleteFetcher.state !== 'idle'}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {deleteFetcher.state !== 'idle' ? '刪除中...' : '確認刪除'}
+              </button>
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-300 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const AnnouncementManager = ({ announcements }: { announcements: any[] }) => (
   <div className="space-y-4">
