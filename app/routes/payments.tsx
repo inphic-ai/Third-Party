@@ -141,7 +141,7 @@ const CURRENCY_SYMBOLS: Record<Currency, string> = {
 };
 
 function PaymentsContent() {
-  const { invoices: dbInvoices, vendorList, isAdmin } = useLoaderData<typeof loader>();
+  const { invoices: dbInvoices, vendorList, canDeletePayment } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
