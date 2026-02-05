@@ -481,6 +481,11 @@ function VendorDirectoryContent() {
         setAiRecommendStep('result');
         setAiRecommending(false);
       }
+      // 處理刪除廠商
+      if (actionData.message === '廠商已刪除') {
+        // Remix 會自動重新驗證 loader，刷新廠商列表
+        console.log('[Vendors] Vendor deleted successfully');
+      }
       // Remix 會自動重新驗證 loader，無需手動重新載入
     }
     // 處理錯誤
