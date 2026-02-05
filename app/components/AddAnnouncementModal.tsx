@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useFetcher } from "@remix-run/react";
-import { X, Megaphone, FileText, AlertCircle } from "lucide-react";
+import { X, Megaphone, FileText, AlertCircle, Image as ImageIcon, Upload } from "lucide-react";
 
 type AddAnnouncementModalProps = {
   onClose: () => void;
@@ -12,8 +12,45 @@ export function AddAnnouncementModal({ onClose }: AddAnnouncementModalProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'HIGH'>('NORMAL');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = () => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // 驗證檔案類型
+      if (!file.type.startsWith('image/')) {
+        alert('請選擇圖片檔案');
+        return;
+      }
+      // 驗證檔案大小 (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('圖片大小不能超過 5MB');
+        return;
+      }
+      
+      setImageFile(file);
+      
+      // 生成預覽
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) {
       alert('請填寫標題和內容');
       return;
@@ -24,6 +61,34 @@ export function AddAnnouncementModal({ onClose }: AddAnnouncementModalProps) {
     formData.append('title', title.trim());
     formData.append('content', content.trim());
     formData.append('priority', priority);
+    
+    // 如果有圖片，先上傳到 S3
+    if (imageFile) {
+      setIsUploading(true);
+      try {
+        // 使用 manus-upload-file 上傳圖片
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', imageFile);
+        
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadFormData
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error('圖片上傳失敗');
+        }
+        
+        const { url } = await uploadResponse.json();
+        formData.append('imageUrl', url);
+      } catch (error) {
+        alert('圖片上傳失敗，請重試');
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
 
     fetcher.submit(formData, { method: 'post' });
   };
@@ -138,6 +203,49 @@ export function AddAnnouncementModal({ onClose }: AddAnnouncementModalProps) {
                 <span className="text-sm text-red-700 font-semibold">緊急</span>
               </label>
             </div>
+          </div>
+
+          {/* 圖片上傳 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              <div className="flex items-center gap-2">
+                <ImageIcon size={16} />
+                公告圖片 (選填)
+              </div>
+            </label>
+            
+            {!imagePreview ? (
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition"
+              >
+                <Upload size={32} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-sm text-slate-600 mb-1">點擊上傳圖片</p>
+                <p className="text-xs text-slate-400">支援 JPG, PNG, GIF，最大 5MB</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+              </div>
+            ) : (
+              <div className="relative border border-slate-300 rounded-lg overflow-hidden">
+                <img 
+                  src={imagePreview} 
+                  alt="預覽" 
+                  className="w-full h-48 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 提示訊息 */}

@@ -43,6 +43,8 @@ export const announcements = pgTable('announcements', {
   targetIdentity: text('target_identity').array(), // ServiceType[]
   targetRegion: varchar('target_region', { length: 20 }), // Region
   
+  imageUrl: text('image_url'), // Optional image URL for announcement
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

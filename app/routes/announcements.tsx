@@ -274,9 +274,20 @@ function AnnouncementsContent() {
                   {announcement.title}
                 </h3>
                 
-                <p className="text-slate-600 leading-relaxed font-bold text-base mb-10 max-w-3xl">
+                <p className="text-slate-600 leading-relaxed font-bold text-base mb-6 max-w-3xl">
                   {announcement.content}
                 </p>
+                
+                {announcement.imageUrl && (
+                  <div className="mb-10">
+                    <img 
+                      src={announcement.imageUrl} 
+                      alt={announcement.title}
+                      className="w-full max-w-2xl rounded-2xl shadow-lg border-2 border-slate-100 object-cover"
+                      style={{ maxHeight: '400px' }}
+                    />
+                  </div>
+                )}
               </>
             )}
             
