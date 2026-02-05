@@ -5,6 +5,7 @@ import { authenticator } from "~/services/auth.server";
 // Google 會將用戶重新導向到這個路由，並帶上授權碼
 export async function loader({ request }: LoaderFunctionArgs) {
   // 完成 OAuth 流程，取得用戶資訊並建立 session
+  // authenticator 會自動處理 session 和重新導向
   return authenticator.authenticate("google", request, {
     successRedirect: "/", // 登入成功後跳轉到首頁
     failureRedirect: "/login", // 登入失敗後跳轉到登入頁

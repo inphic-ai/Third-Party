@@ -5,6 +5,7 @@ import { db } from "./db.server";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import type { User } from "../../db/schema/user";
+import { logLoginSuccessSimple } from "./loginLog.server";
 
 // 建立 Authenticator 實例
 export const authenticator = new Authenticator<User>(sessionStorage);
@@ -44,6 +45,9 @@ const googleStrategy = new GoogleStrategy(
           .where(eq(users.id, existingUsers[0].id))
           .returning();
 
+        // 記錄登入成功
+        await logLoginSuccessSimple(updatedUser.id, updatedUser.email, updatedUser.name);
+
         return updatedUser;
       } else {
         // 檢查是否為第一個用戶
@@ -67,6 +71,9 @@ const googleStrategy = new GoogleStrategy(
             approvedAt: isFirstUser ? new Date() : undefined,
           })
           .returning();
+
+        // 記錄登入成功（新用戶）
+        await logLoginSuccessSimple(newUser.id, newUser.email, newUser.name);
 
         return newUser;
       }

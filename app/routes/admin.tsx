@@ -4,10 +4,11 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remi
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
+import { loginLogs } from '../../db/schema/login';
 import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 // 郵件服務暫時停用
 // import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
@@ -21,7 +22,7 @@ import { clsx } from 'clsx';
 import { ClientOnly } from '~/components/ClientOnly';
 import { UserManager } from '~/components/UserManager';
 import { 
-  MOCK_ANNOUNCEMENTS, MOCK_LOGS, MOCK_LOGIN_LOGS, 
+  MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
   MOCK_USERS, MOCK_DEPARTMENTS 
 } from '~/constants';
@@ -41,12 +42,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log('[Admin Loader] Loading admin data...');
     
     // 讀取資料
-    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments] = await Promise.all([
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
-      db.select().from(departments) // 部門管理
+      db.select().from(departments), // 部門管理
+      db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100) // 登入日誌（最新的在前）
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -104,12 +106,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
       description: dept.description
     }));
     
+    // 處理登入日誌
+    const loginLogsWithMapping = allLoginLogs.map(log => ({
+      id: log.id,
+      timestamp: log.timestamp.toISOString(),
+      user: log.userName || 'Unknown',
+      email: log.email,
+      ip: log.ip,
+      device: log.device || `${log.browser || 'Unknown'} / ${log.os || 'Unknown'}`,
+      status: log.status === 'SUCCESS' ? 'success' : 'failed'
+    }));
+    
     return json({ 
       systemLogs: logsWithMapping,
       adminUsers: usersWithMapping,
       announcements: announcementsWithMapping,
       users: usersForApproval,
-      departments: departmentsList
+      departments: departmentsList,
+      loginLogs: loginLogsWithMapping
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
@@ -118,7 +132,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       adminUsers: [],
       users: [],
       departments: [],
-      announcements: []
+      announcements: [],
+      loginLogs: []
     });
   }
 }
@@ -319,7 +334,7 @@ export async function action({ request }: ActionFunctionArgs) {
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
@@ -367,7 +382,7 @@ function AdminContent() {
       </div>
 
       <div className="min-h-[600px] py-4">
-        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} />}
+        {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} loginLogs={dbLoginLogs} />}
         {activeTab === 'categories' && <CategoryManager />}
         {activeTab === 'tags' && <TagManager />}
         {activeTab === 'ai' && <AiConfig />}
@@ -382,14 +397,35 @@ function AdminContent() {
 
 
 
-const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
+const LogCenter = ({ systemLogs, loginLogs }: { systemLogs: any[]; loginLogs: any[] }) => {
   const [logType, setLogType] = useState<'operation' | 'login'>('operation');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // 計算分頁
+  const getCurrentPageData = (data: any[]) => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return data.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = (data: any[]) => Math.ceil(data.length / itemsPerPage);
+
+  // 當切換日誌類型時，重置到第一頁
+  const handleLogTypeChange = (type: 'operation' | 'login') => {
+    setLogType(type);
+    setCurrentPage(1);
+  };
+
+  const currentData = logType === 'operation' ? getCurrentPageData(systemLogs) : getCurrentPageData(loginLogs);
+  const totalPages = logType === 'operation' ? getTotalPages(systemLogs) : getTotalPages(loginLogs);
+  const totalItems = logType === 'operation' ? systemLogs.length : loginLogs.length;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
         <button 
-          onClick={() => setLogType('operation')}
+          onClick={() => handleLogTypeChange('operation')}
           className={clsx(
             "px-4 py-2 rounded-lg text-sm font-black flex items-center gap-2 transition",
             logType === 'operation' ? "bg-slate-800 text-white shadow-lg" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
@@ -398,7 +434,7 @@ const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
           <History size={16} /> 操作審計日誌
         </button>
         <button 
-          onClick={() => setLogType('login')}
+          onClick={() => handleLogTypeChange('login')}
           className={clsx(
             "px-4 py-2 rounded-lg text-sm font-black flex items-center gap-2 transition",
             logType === 'login' ? "bg-slate-800 text-white shadow-lg" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
@@ -422,7 +458,7 @@ const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {systemLogs.map((l: any) => (
+                {currentData.map((l: any) => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
@@ -454,7 +490,7 @@ const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {MOCK_LOGIN_LOGS.map(l => (
+                {currentData.map(l => (
                   <tr key={l.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-5 text-slate-400 font-mono text-xs">{l.timestamp}</td>
                     <td className="px-6 py-5 font-bold text-slate-700">{l.user}</td>
@@ -477,6 +513,76 @@ const LogCenter = ({ systemLogs }: { systemLogs: any[] }) => {
             </table>
           )}
         </div>
+        
+        {/* 分頁系統 */}
+        {totalItems > 0 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <div className="text-sm text-slate-500">
+              顯示 <span className="font-bold text-slate-700">{(currentPage - 1) * itemsPerPage + 1}</span> 到 <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, totalItems)}</span> 筆，共 <span className="font-bold text-slate-700">{totalItems}</span> 筆
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className={clsx(
+                  "px-3 py-1.5 rounded-lg text-sm font-bold transition",
+                  currentPage === 1
+                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                )}
+              >
+                上一頁
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                  // 顯示邏輯：第一頁、最後一頁、當前頁、當前頁前後各一頁
+                  if (
+                    page === 1 ||
+                    page === totalPages ||
+                    page === currentPage ||
+                    page === currentPage - 1 ||
+                    page === currentPage + 1
+                  ) {
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={clsx(
+                          "px-3 py-1.5 rounded-lg text-sm font-bold transition min-w-[36px]",
+                          page === currentPage
+                            ? "bg-slate-800 text-white"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    );
+                  } else if (
+                    page === currentPage - 2 ||
+                    page === currentPage + 2
+                  ) {
+                    return <span key={page} className="text-slate-400 px-1">...</span>;
+                  }
+                  return null;
+                })}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className={clsx(
+                  "px-3 py-1.5 rounded-lg text-sm font-bold transition",
+                  currentPage === totalPages
+                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                )}
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
