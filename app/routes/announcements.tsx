@@ -132,13 +132,13 @@ export default function Announcements() {
                       
                       {/* 操作 */}
                       <td className="px-6 py-4 text-center">
-                        <a
-                          href={`/announcements/${announcement.id}`}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition no-underline"
+                        <button
+                          onClick={() => window.location.href = `/announcements/${announcement.id}`}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition cursor-pointer"
                         >
                           <Eye size={16} />
                           檢視
-                        </a>
+                        </button>
                       </td>
                     </tr>
                   ))
