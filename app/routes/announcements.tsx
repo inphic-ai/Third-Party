@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
 import { requireUser } from "~/services/auth.server";
 import { requirePermission } from "~/utils/permissions.server";
 import { db } from "../../db";
@@ -43,7 +43,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function Announcements() {
   const { announcements: dbAnnouncements } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
@@ -133,13 +132,13 @@ export default function Announcements() {
                       
                       {/* 操作 */}
                       <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => navigate(`/announcements/${announcement.id}`)}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition cursor-pointer"
+                        <a
+                          href={`/announcements/${announcement.id}`}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition no-underline"
                         >
                           <Eye size={16} />
                           檢視
-                        </button>
+                        </a>
                       </td>
                     </tr>
                   ))
