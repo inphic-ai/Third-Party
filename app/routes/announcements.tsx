@@ -5,8 +5,9 @@ import { requireUser } from "~/services/auth.server";
 import { requirePermission } from "~/utils/permissions.server";
 import { db } from "../../db";
 import { announcements } from "../../db/schema/system";
-import { Bell, Calendar, AlertCircle, Eye } from "lucide-react";
+import { Bell, Calendar, AlertCircle, Eye, X, Image as ImageIcon } from "lucide-react";
 import clsx from "clsx";
+import { useState } from "react";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 要求用戶必須登入
@@ -32,6 +33,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       targetIdentity: Array.isArray(ann.targetIdentity) ? ann.targetIdentity : [],
       targetRegion: ann.targetRegion || undefined,
       imageUrl: ann.imageUrl,
+      author: ann.author,
     }));
     
     return json({ announcements: announcementsWithMapping });
@@ -43,6 +45,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function Announcements() {
   const { announcements: dbAnnouncements } = useLoaderData<typeof loader>();
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
@@ -133,7 +136,7 @@ export default function Announcements() {
                       {/* 操作 */}
                       <td className="px-6 py-4 text-center">
                         <button
-                          onClick={() => window.location.href = `/announcements/${announcement.id}`}
+                          onClick={() => setSelectedAnnouncement(announcement)}
                           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition cursor-pointer"
                         >
                           <Eye size={16} />
@@ -155,6 +158,103 @@ export default function Announcements() {
           </div>
         )}
       </div>
+
+      {/* 公告詳情 Modal */}
+      {selectedAnnouncement && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal 標題區域 */}
+            <div className={clsx(
+              "px-8 py-6 border-b border-slate-100 sticky top-0 bg-white z-10",
+              selectedAnnouncement.priority === 'High' ? "bg-red-50" : "bg-slate-50"
+            )}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 flex-1">
+                  <div className={clsx(
+                    "w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg",
+                    selectedAnnouncement.priority === 'High' 
+                      ? "bg-gradient-to-br from-red-500 to-red-600 shadow-red-200" 
+                      : "bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-200"
+                  )}>
+                    <Bell size={28} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={clsx(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider",
+                        selectedAnnouncement.priority === 'High' 
+                          ? "bg-red-100 text-red-700" 
+                          : "bg-blue-100 text-blue-700"
+                      )}>
+                        {selectedAnnouncement.priority === 'High' && <AlertCircle size={12} />}
+                        {selectedAnnouncement.priority === 'High' ? 'Emergency' : 'General'}
+                      </span>
+                      <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
+                        <Calendar size={14} />
+                        {selectedAnnouncement.date}
+                      </div>
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800">
+                      {selectedAnnouncement.title}
+                    </h2>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition"
+                >
+                  <X size={24} className="text-slate-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal 內容區域 */}
+            <div className="px-8 py-8">
+              {/* 公告內容 */}
+              <div className="prose prose-slate max-w-none mb-8">
+                <p className="text-slate-700 leading-relaxed text-base whitespace-pre-wrap">
+                  {selectedAnnouncement.content}
+                </p>
+              </div>
+
+              {/* 公告圖片 */}
+              {selectedAnnouncement.imageUrl && (
+                <div className="mt-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ImageIcon size={20} className="text-slate-600" />
+                    <h3 className="text-lg font-bold text-slate-800">附件圖片</h3>
+                  </div>
+                  <div className="border-2 border-slate-200 rounded-xl overflow-hidden">
+                    <img 
+                      src={selectedAnnouncement.imageUrl} 
+                      alt={selectedAnnouncement.title}
+                      className="w-full cursor-pointer hover:opacity-90 transition"
+                      onClick={() => window.open(selectedAnnouncement.imageUrl, '_blank')}
+                      title="點擊查看大圖"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2 text-center">點擊圖片可放大查看</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal 底部資訊 */}
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-100">
+              <div className="flex items-center justify-between text-sm">
+                <div className="text-slate-500">
+                  發布者：<span className="font-medium text-slate-700">{selectedAnnouncement.author || 'System Admin'}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="px-6 py-2 bg-slate-600 text-white rounded-lg font-bold hover:bg-slate-700 transition"
+                >
+                  關閉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
