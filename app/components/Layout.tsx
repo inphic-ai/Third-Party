@@ -78,6 +78,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       permission: hasPermission(PERMISSIONS.COMMUNICATION)
     },
     { 
+      name: '功能建議', 
+      path: '/suggestions', 
+      icon: <Lightbulb size={18} />, 
+      permission: hasPermission(PERMISSIONS.SUGGESTIONS)
+    },
+    { 
       name: '請款與發票管理', 
       path: '/payments', 
       icon: <CreditCard size={18} />, 
@@ -94,12 +100,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       path: '/announcements', 
       icon: <Megaphone size={18} />, 
       permission: hasPermission(PERMISSIONS.ANNOUNCEMENTS)
-    },
-    { 
-      name: '功能建議', 
-      path: '/suggestions', 
-      icon: <Lightbulb size={18} />, 
-      permission: hasPermission(PERMISSIONS.SUGGESTIONS)
     },
     { 
       name: '系統管理', 
@@ -146,7 +146,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
            <div>
               <p className="px-4 text-xs font-bold text-gray-400 mb-2 tracking-wider">資源導覽</p>
               <nav className="space-y-1">
-                {navItems.slice(0, 5).map((item) => (
+                {navItems.slice(0, 6).map((item) => (
                   item.permission && (
                     <Link
                       key={item.path}
@@ -170,7 +170,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
            <div>
               <p className="px-4 text-xs font-bold text-gray-400 mb-2 tracking-wider">管理中心</p>
               <nav className="space-y-1">
-                {navItems.slice(5).map((item) => (
+                {navItems.slice(6).map((item) => (
                   item.permission && (
                     <Link
                       key={item.path}
