@@ -317,10 +317,14 @@ ${JSON.stringify(filteredVendors.slice(0, 20).map(v => ({
         return json({ success: false, error: '缺少廠商 ID' }, { status: 400 });
       }
 
-      // 刪除廠商（關聯的 contact_windows 會自動刪除，因為有 ON DELETE CASCADE）
+      // 先刪除相關的交易記錄（避免外鍵約束錯誤）
+      const { transactions } = await import('../../db/schema/financial');
+      await db.delete(transactions).where(eq(transactions.vendorId, vendorId));
+
+      // 刪除廠商（關聯的 contact_windows、contactLogs、socialGroups、vendorRatings 會自動刪除，因為有 ON DELETE CASCADE）
       await db.delete(vendors).where(eq(vendors.id, vendorId));
 
-      console.log('[Vendors Action] Deleted vendor:', vendorId);
+      console.log('[Vendors Action] Deleted vendor and related transactions:', vendorId);
 
       return json({ success: true, error: null, message: '廠商已刪除' });
     } catch (error) {
@@ -480,6 +484,11 @@ function VendorDirectoryContent() {
         setAiRecommendResults(actionData.recommendations as any[]);
         setAiRecommendStep('result');
         setAiRecommending(false);
+      }
+      // 處理刪除廠商
+      if (actionData.message === '廠商已刪除') {
+        // Remix 會自動重新驗證 loader，刷新廠商列表
+        console.log('[Vendors] Vendor deleted successfully');
       }
       // Remix 會自動重新驗證 loader，無需手動重新載入
     }
