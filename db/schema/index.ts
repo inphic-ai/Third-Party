@@ -10,3 +10,4 @@ export * from './operations';
 export * from './financial';
 export * from './system';
 export * from './login';
+export * from './vendorCategory';

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useLoaderData } from '@remix-run/react';
+import { useLoaderData, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
 import { loginLogs } from '../../db/schema/login';
+import { vendorCategories } from '../../db/schema/vendorCategory';
 import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
@@ -15,7 +16,7 @@ import {
   Settings, Users, Plus, Megaphone, 
   Activity, X, Layers, Bot, 
   History, LogIn, Monitor, Smartphone, Trash2, Tags, Power, Edit2,
-  Building, Terminal, ShieldCheck
+  Building, Terminal, ShieldCheck, CheckCircle2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -42,13 +43,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log('[Admin Loader] Loading admin data...');
     
     // 讀取資料
-    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs] = await Promise.all([
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
       db.select().from(departments), // 部門管理
-      db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100) // 登入日誌（最新的在前）
+      db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100), // 登入日誌（最新的在前）
+      db.select().from(vendorCategories).orderBy(vendorCategories.displayOrder) // 廠商類別
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -123,7 +125,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       announcements: announcementsWithMapping,
       users: usersForApproval,
       departments: departmentsList,
-      loginLogs: loginLogsWithMapping
+      loginLogs: loginLogsWithMapping,
+      vendorCategories: allVendorCategories
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
@@ -133,7 +136,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       users: [],
       departments: [],
       announcements: [],
-      loginLogs: []
+      loginLogs: [],
+      vendorCategories: []
     });
   }
 }
@@ -322,6 +326,65 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ success: true, message: '用戶資料已更新' });
       }
 
+      case 'createCategory': {
+        const name = formData.get('name') as string;
+        
+        if (!name || !name.trim()) {
+          return json({ success: false, error: '類別名稱不能為空' }, { status: 400 });
+        }
+        
+        // 檢查是否已存在
+        const [existing] = await db.select().from(vendorCategories).where(eq(vendorCategories.name, name.trim())).limit(1);
+        if (existing) {
+          return json({ success: false, error: '類別已存在' }, { status: 400 });
+        }
+        
+        await db.insert(vendorCategories).values({
+          name: name.trim(),
+          displayOrder: String(Date.now()) // 使用時間戳作為預設排序
+        });
+        
+        return json({ success: true, message: '類別已新增' });
+      }
+      
+      case 'updateCategory': {
+        const id = formData.get('id') as string;
+        const name = formData.get('name') as string;
+        
+        if (!id || !name || !name.trim()) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        // 檢查是否與其他類別重複
+        const [existing] = await db.select().from(vendorCategories)
+          .where(eq(vendorCategories.name, name.trim()))
+          .limit(1);
+        if (existing && existing.id !== id) {
+          return json({ success: false, error: '類別名稱已存在' }, { status: 400 });
+        }
+        
+        await db.update(vendorCategories)
+          .set({ 
+            name: name.trim(),
+            updatedAt: new Date()
+          })
+          .where(eq(vendorCategories.id, id));
+        
+        return json({ success: true, message: '類別已更新' });
+      }
+      
+      case 'deleteCategory': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.delete(vendorCategories).where(eq(vendorCategories.id, id));
+        
+        return json({ success: true, message: '類別已刪除' });
+      }
+
       default:
         return json({ success: false, error: '未知操作' }, { status: 400 });
     }
@@ -334,7 +397,7 @@ export async function action({ request }: ActionFunctionArgs) {
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs, vendorCategories } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
@@ -383,7 +446,7 @@ function AdminContent() {
 
       <div className="min-h-[600px] py-4">
         {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} loginLogs={dbLoginLogs} />}
-        {activeTab === 'categories' && <CategoryManager />}
+        {activeTab === 'categories' && <CategoryManager categories={vendorCategories} />}
         {activeTab === 'tags' && <TagManager />}
         {activeTab === 'ai' && <AiConfig />}
         {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
@@ -588,26 +651,153 @@ const LogCenter = ({ systemLogs, loginLogs }: { systemLogs: any[]; loginLogs: an
   );
 };
 
-const CategoryManager = () => (
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">廠商類別管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增類別
-      </button>
-    </div>
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {CATEGORY_OPTIONS.map(cat => (
-          <div key={cat.value} className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-            <span className="font-bold text-slate-700">{cat.label}</span>
-            <button className="text-slate-400 hover:text-slate-600"><Edit2 size={14} /></button>
-          </div>
-        ))}
+const CategoryManager = ({ categories }: { categories: any[] }) => {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const fetcher = useFetcher();
+  
+  const handleEdit = (id: string, currentName: string) => {
+    setEditingId(id);
+    setEditingName(currentName);
+  };
+  
+  const handleSave = (id: string) => {
+    fetcher.submit(
+      { intent: 'updateCategory', id, name: editingName },
+      { method: 'post' }
+    );
+    setEditingId(null);
+  };
+  
+  const handleDelete = (id: string, name: string) => {
+    if (confirm(`確定要刪除類別「${name}」嗎？`)) {
+      fetcher.submit(
+        { intent: 'deleteCategory', id },
+        { method: 'post' }
+      );
+    }
+  };
+  
+  const handleAdd = () => {
+    if (!newCategoryName.trim()) {
+      alert('請輸入類別名稱');
+      return;
+    }
+    fetcher.submit(
+      { intent: 'createCategory', name: newCategoryName },
+      { method: 'post' }
+    );
+    setNewCategoryName('');
+    setIsAddModalOpen(false);
+  };
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">廠商類別管理</h2>
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+        >
+          <Plus size={16} /> 新增類別
+        </button>
       </div>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {categories.map(cat => (
+            <div key={cat.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2">
+              {editingId === cat.id ? (
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSave(cat.id);
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  className="flex-1 px-2 py-1 border border-slate-300 rounded font-bold text-slate-700"
+                  autoFocus
+                />
+              ) : (
+                <span className="font-bold text-slate-700">{cat.name}</span>
+              )}
+              <div className="flex items-center gap-1">
+                {editingId === cat.id ? (
+                  <>
+                    <button 
+                      onClick={() => handleSave(cat.id)}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <CheckCircle2 size={14} />
+                    </button>
+                    <button 
+                      onClick={() => setEditingId(null)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => handleEdit(cat.id, cat.name)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(cat.id, cat.name)}
+                      className="text-slate-400 hover:text-red-600"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 新增類別 Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-96">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">新增類別</h3>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAdd();
+                if (e.key === 'Escape') setIsAddModalOpen(false);
+              }}
+              placeholder="請輸入類別名稱"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAdd}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const TagManager = () => (
   <div className="space-y-6">
