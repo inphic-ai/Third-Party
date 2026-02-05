@@ -327,7 +327,7 @@ function PaymentsContent() {
   };
 
   return (
-    <div className="flex flex-col space-y-10 p-8 max-w-7xl mx-auto">
+    <div className="flex flex-col h-screen space-y-6 p-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
@@ -430,7 +430,7 @@ function PaymentsContent() {
         </div>
       </div>
 
-      <div className="bg-white rounded-[3rem] shadow-xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-[3rem] shadow-xl border border-slate-100 overflow-hidden flex-1 flex flex-col">
         <div className="p-8 border-b border-slate-50 flex flex-wrap items-center justify-between gap-6 bg-slate-50/30">
           <div className="relative flex-1 min-w-[300px]">
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
@@ -456,16 +456,16 @@ function PaymentsContent() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto flex-1 overflow-y-auto">
           <table className="w-full">
             <thead>
               <tr className="text-left border-b border-slate-50">
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">發票資訊</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">廠商名稱</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">金額</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">日期</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">狀態</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">操作</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider">發票資訊</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider">廠商名稱</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider">金額</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider">日期</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider">狀態</th>
+                <th className="px-10 py-6 text-sm font-black text-slate-600 uppercase tracking-wider text-right">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
