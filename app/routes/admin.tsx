@@ -515,7 +515,7 @@ const LogCenter = ({ systemLogs, loginLogs }: { systemLogs: any[]; loginLogs: an
         </div>
         
         {/* 分頁系統 */}
-        {totalPages > 1 && (
+        {totalItems > 0 && (
           <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
             <div className="text-sm text-slate-500">
               顯示 <span className="font-bold text-slate-700">{(currentPage - 1) * itemsPerPage + 1}</span> 到 <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, totalItems)}</span> 筆，共 <span className="font-bold text-slate-700">{totalItems}</span> 筆
