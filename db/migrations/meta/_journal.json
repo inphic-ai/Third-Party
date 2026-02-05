@@ -50,6 +50,13 @@
       "when": 1770258826416,
       "tag": "0006_mature_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770259550906,
+      "tag": "0007_bright_ogun",
+      "breakpoints": true
     }
   ]
 }

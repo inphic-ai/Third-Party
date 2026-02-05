@@ -11,3 +11,4 @@ export * from './financial';
 export * from './system';
 export * from './login';
 export * from './vendorCategory';
+export * from './vendorTag';

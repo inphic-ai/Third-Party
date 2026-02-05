@@ -6,6 +6,7 @@ import { db } from '../services/db.server';
 import { systemLogs, adminUsers, announcements } from '../../db/schema/system';
 import { loginLogs } from '../../db/schema/login';
 import { vendorCategories } from '../../db/schema/vendorCategory';
+import { vendorTags } from '../../db/schema/vendorTag';
 import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { requireAdmin } from '~/services/auth.server';
@@ -43,14 +44,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log('[Admin Loader] Loading admin data...');
     
     // 讀取資料
-    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories] = await Promise.all([
+    const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories, allVendorTags] = await Promise.all([
       db.select().from(systemLogs).limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
       db.select().from(departments), // 部門管理
       db.select().from(loginLogs).orderBy(desc(loginLogs.timestamp)).limit(100), // 登入日誌（最新的在前）
-      db.select().from(vendorCategories).orderBy(vendorCategories.displayOrder) // 廠商類別
+      db.select().from(vendorCategories).orderBy(vendorCategories.displayOrder), // 廠商類別
+      db.select().from(vendorTags).orderBy(vendorTags.displayOrder) // 廠商標籤
     ]);
     
     console.log(`[Admin Loader] Loaded ${allSystemLogs.length} logs, ${allAdminUsers.length} users, ${allAnnouncements.length} announcements`);
@@ -126,7 +128,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       users: usersForApproval,
       departments: departmentsList,
       loginLogs: loginLogsWithMapping,
-      vendorCategories: allVendorCategories
+      vendorCategories: allVendorCategories,
+      vendorTags: allVendorTags
     });
   } catch (error) {
     console.error('[Admin Loader] Error:', error);
@@ -137,7 +140,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       departments: [],
       announcements: [],
       loginLogs: [],
-      vendorCategories: []
+      vendorCategories: [],
+      vendorTags: []
     });
   }
 }
@@ -384,6 +388,72 @@ export async function action({ request }: ActionFunctionArgs) {
         
         return json({ success: true, message: '類別已刪除' });
       }
+      
+      // 標籤管理
+      case 'createTag': {
+        const name = formData.get('name') as string;
+        const category = formData.get('category') as string;
+        const color = formData.get('color') as string || 'blue';
+        
+        if (!name || !name.trim() || !category) {
+          return json({ success: false, error: '標籤名稱和分類不能為空' }, { status: 400 });
+        }
+        
+        // 檢查是否已存在
+        const [existing] = await db.select().from(vendorTags)
+          .where(eq(vendorTags.name, name.trim()))
+          .limit(1);
+        if (existing) {
+          return json({ success: false, error: '標籤已存在' }, { status: 400 });
+        }
+        
+        await db.insert(vendorTags).values({
+          name: name.trim(),
+          category: category,
+          color: color,
+          displayOrder: String(Date.now())
+        });
+        
+        return json({ success: true, message: '標籤已新增' });
+      }
+      
+      case 'updateTag': {
+        const id = formData.get('id') as string;
+        const name = formData.get('name') as string;
+        
+        if (!id || !name || !name.trim()) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        // 檢查是否與其他標籤重複
+        const [existing] = await db.select().from(vendorTags)
+          .where(eq(vendorTags.name, name.trim()))
+          .limit(1);
+        if (existing && existing.id !== id) {
+          return json({ success: false, error: '標籤名稱已存在' }, { status: 400 });
+        }
+        
+        await db.update(vendorTags)
+          .set({ 
+            name: name.trim(),
+            updatedAt: new Date()
+          })
+          .where(eq(vendorTags.id, id));
+        
+        return json({ success: true, message: '標籤已更新' });
+      }
+      
+      case 'deleteTag': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.delete(vendorTags).where(eq(vendorTags.id, id));
+        
+        return json({ success: true, message: '標籤已刪除' });
+      }
 
       default:
         return json({ success: false, error: '未知操作' }, { status: 400 });
@@ -397,7 +467,7 @@ export async function action({ request }: ActionFunctionArgs) {
 type AdminTab = 'dashboard' | 'logs' | 'categories' | 'tags' | 'ai' | 'users' | 'departments' | 'announcements' | 'settings';
 
 function AdminContent() {
-  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs, vendorCategories } = useLoaderData<typeof loader>();
+  const { systemLogs: dbSystemLogs, adminUsers: dbAdminUsers, announcements: dbAnnouncements, users: dbUsers, departments: dbDepartments, loginLogs: dbLoginLogs, vendorCategories, vendorTags } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState<AdminTab>('logs');
 
   const navItems = [
@@ -447,7 +517,7 @@ function AdminContent() {
       <div className="min-h-[600px] py-4">
         {activeTab === 'logs' && <LogCenter systemLogs={dbSystemLogs} loginLogs={dbLoginLogs} />}
         {activeTab === 'categories' && <CategoryManager categories={vendorCategories} />}
-        {activeTab === 'tags' && <TagManager />}
+        {activeTab === 'tags' && <TagManager tags={vendorTags} />}
         {activeTab === 'ai' && <AiConfig />}
         {activeTab === 'users' && <UserManager users={dbUsers} departments={dbDepartments} />}
         {activeTab === 'departments' && <DepartmentManager />}
@@ -799,55 +869,290 @@ const CategoryManager = ({ categories }: { categories: any[] }) => {
   );
 };
 
-const TagManager = () => (
-  <div className="space-y-6">
-    <div className="flex justify-between items-center">
-      <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
-      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-        <Plus size={16} /> 新增標籤
-      </button>
-    </div>
+// TagManager 組件 - 完整的 CRUD 功能
+interface Tag {
+  id: string;
+  name: string;
+  category: string;
+  color: string;
+}
+
+interface TagManagerProps {
+  tags: Tag[];
+}
+
+export const TagManager = ({ tags }: TagManagerProps) => {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagCategory, setNewTagCategory] = useState('聯絡標籤');
+  const fetcher = useFetcher();
+  
+  const handleEdit = (id: string, currentName: string) => {
+    setEditingId(id);
+    setEditingName(currentName);
+  };
+  
+  const handleSave = (id: string) => {
+    if (!editingName.trim()) return;
     
-    {/* 聯絡標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">聯絡標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.contactTags.map((tag, index) => (
-          <div key={`contact-${index}`} className="px-4 py-2 bg-blue-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-blue-700">{tag}</span>
-            <button className="text-blue-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
-      </div>
-    </div>
+    const formData = new FormData();
+    formData.append('intent', 'updateTag');
+    formData.append('id', id);
+    formData.append('name', editingName);
     
-    {/* 服務標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">服務標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.serviceTags.map((tag, index) => (
-          <div key={`service-${index}`} className="px-4 py-2 bg-green-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-green-700">{tag}</span>
-            <button className="text-green-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
-      </div>
-    </div>
+    fetcher.submit(formData, { method: 'post' });
+    setEditingId(null);
+    setEditingName('');
+  };
+  
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+  
+  const handleDelete = (id: string, name: string) => {
+    if (!confirm(`確定要刪除標籤「${name}」嗎？`)) return;
     
-    {/* 網站標籤 */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-md font-bold text-slate-700 mb-4">網站標籤</h3>
-      <div className="flex flex-wrap gap-3">
-        {MOCK_SYSTEM_TAGS.websiteTags.map((tag, index) => (
-          <div key={`website-${index}`} className="px-4 py-2 bg-purple-50 rounded-full flex items-center gap-2">
-            <span className="font-bold text-purple-700">{tag}</span>
-            <button className="text-purple-400 hover:text-red-500"><X size={14} /></button>
-          </div>
-        ))}
+    const formData = new FormData();
+    formData.append('intent', 'deleteTag');
+    formData.append('id', id);
+    
+    fetcher.submit(formData, { method: 'post' });
+  };
+  
+  const handleAddTag = () => {
+    if (!newTagName.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('intent', 'createTag');
+    formData.append('name', newTagName);
+    formData.append('category', newTagCategory);
+    formData.append('color', getColorByCategory(newTagCategory));
+    
+    fetcher.submit(formData, { method: 'post' });
+    setNewTagName('');
+    setIsAddModalOpen(false);
+  };
+  
+  const getColorByCategory = (category: string) => {
+    switch (category) {
+      case '聯絡標籤': return 'blue';
+      case '服務標籤': return 'green';
+      case '網站標籤': return 'purple';
+      default: return 'blue';
+    }
+  };
+  
+  const getColorClasses = (color: string) => {
+    switch (color) {
+      case 'blue': return 'bg-blue-50 text-blue-700';
+      case 'green': return 'bg-green-50 text-green-700';
+      case 'purple': return 'bg-purple-50 text-purple-700';
+      default: return 'bg-blue-50 text-blue-700';
+    }
+  };
+  
+  // 按分類分組標籤
+  const tagsByCategory = {
+    '聯絡標籤': tags.filter(t => t.category === '聯絡標籤'),
+    '服務標籤': tags.filter(t => t.category === '服務標籤'),
+    '網站標籤': tags.filter(t => t.category === '網站標籤'),
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-slate-800">系統標籤管理</h2>
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition"
+        >
+          <Plus size={16} /> 新增標籤
+        </button>
       </div>
+      
+      {/* 聯絡標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">聯絡標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['聯絡標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-blue-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-blue-400 hover:text-blue-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-blue-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 服務標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">服務標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['服務標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-green-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-green-400 hover:text-green-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-green-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 網站標籤 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-md font-bold text-slate-700 mb-4">網站標籤</h3>
+        <div className="flex flex-wrap gap-3">
+          {tagsByCategory['網站標籤'].map((tag) => (
+            <div key={tag.id} className={`px-4 py-2 rounded-full flex items-center gap-2 ${getColorClasses(tag.color)}`}>
+              {editingId === tag.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave(tag.id);
+                      if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="px-2 py-1 border border-purple-300 rounded text-sm font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    autoFocus
+                  />
+                  <button onClick={() => handleSave(tag.id)} className="text-green-600 hover:text-green-700">
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <button onClick={handleCancel} className="text-red-600 hover:text-red-700">
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">{tag.name}</span>
+                  <button onClick={() => handleEdit(tag.id, tag.name)} className="text-purple-400 hover:text-purple-600">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(tag.id, tag.name)} className="text-purple-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 新增標籤 Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">新增標籤</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">標籤名稱</label>
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddTag();
+                    if (e.key === 'Escape') setIsAddModalOpen(false);
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="輸入標籤名稱"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">標籤分類</label>
+                <select
+                  value={newTagCategory}
+                  onChange={(e) => setNewTagCategory(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="聯絡標籤">聯絡標籤</option>
+                  <option value="服務標籤">服務標籤</option>
+                  <option value="網站標籤">網站標籤</option>
+                </select>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-bold"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddTag}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700"
+                >
+                  新增
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const AiConfig = () => (
   <div className="space-y-4">
