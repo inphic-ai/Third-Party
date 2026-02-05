@@ -104,13 +104,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       permissions: user.permissions ?? null
     }));
     
-    // 計算每個部門的成員數量
-    console.log('[Admin Loader] All departments:', allDepartments.map(d => d.name));
-    console.log('[Admin Loader] All users departments:', allUsers.map(u => ({ email: u.email, dept: u.department })));
-    
+    // 計算每個部門的成員數量（使用 dept.id 比對，因為 users.department 儲存的是 UUID）
     const departmentsList = allDepartments.map(dept => {
-      const memberCount = allUsers.filter(user => user.department === dept.name).length;
-      console.log(`[Admin Loader] Department "${dept.name}" has ${memberCount} members`);
+      const memberCount = allUsers.filter(user => user.department === dept.id).length;
       return {
         id: dept.id,
         name: dept.name,
