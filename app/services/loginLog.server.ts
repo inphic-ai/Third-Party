@@ -60,7 +60,36 @@ function getClientIP(request: Request): string {
 }
 
 /**
- * 記錄登入成功
+ * 記錄登入成功（簡化版，不需要 request）
+ */
+export async function logLoginSuccessSimple(
+  userId: string,
+  email: string,
+  userName: string
+): Promise<void> {
+  try {
+    await db.insert(loginLogs).values({
+      userId,
+      email,
+      userName,
+      ip: 'Unknown',
+      userAgent: 'Unknown',
+      browser: 'Unknown',
+      os: 'Unknown',
+      device: 'Unknown',
+      status: 'SUCCESS',
+      timestamp: new Date(),
+    });
+    
+    console.log(`[LoginLog] Success: ${email} (simplified log)`);
+  } catch (error) {
+    console.error('[LoginLog] Failed to log login success:', error);
+    // 不拋出錯誤，避免影響登入流程
+  }
+}
+
+/**
+ * 記錄登入成功（完整版，需要 request）
  */
 export async function logLoginSuccess(
   request: Request,
