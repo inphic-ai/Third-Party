@@ -110,8 +110,10 @@ export function EditAnnouncementModal({ announcement, onClose }: EditAnnouncemen
       } finally {
         setIsUploading(false);
       }
+    } else if (announcement.imageUrl) {
+      // 保持原有圖片
+      formData.append('imageUrl', announcement.imageUrl);
     }
-    // 如果沒有變更圖片，不傳 imageUrl 參數
 
     fetcher.submit(formData, { method: 'post' });
   };

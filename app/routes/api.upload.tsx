@@ -1,11 +1,23 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { writeFile, unlink } from "fs/promises";
-import { join } from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-const execAsync = promisify(exec);
+// 環境變數
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || '';
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || '';
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'partnerlink-pro';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
+
+// 創建 S3 Client（R2 相容 S3 API）
+const r2Client = new S3Client({
+  region: 'auto',
+  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
+  },
+});
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
@@ -28,27 +40,30 @@ export async function action({ request }: ActionFunctionArgs) {
     
     // 生成唯一檔名
     const timestamp = Date.now();
-    const ext = file.name.split('.').pop();
-    const filename = `announcement_${timestamp}.${ext}`;
-    const tempPath = join('/tmp', filename);
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const key = `announcements/${timestamp}-${randomStr}.${ext}`;
     
-    // 將檔案寫入臨時目錄
+    // 將檔案轉換為 Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    await writeFile(tempPath, buffer);
     
     try {
-      // 使用 manus-upload-file 上傳到 S3
-      const { stdout } = await execAsync(`manus-upload-file ${tempPath}`);
-      const url = stdout.trim();
+      // 上傳到 R2
+      const command = new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: file.type,
+      });
       
-      // 刪除臨時檔案
-      await unlink(tempPath);
+      await r2Client.send(command);
+      
+      // 返回公開 URL
+      const url = `${R2_PUBLIC_URL}/${key}`;
       
       return json({ url, success: true });
     } catch (uploadError) {
-      // 刪除臨時檔案
-      await unlink(tempPath);
       console.error('Upload error:', uploadError);
       return json({ error: '圖片上傳失敗' }, { status: 500 });
     }

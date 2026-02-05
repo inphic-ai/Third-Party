@@ -283,8 +283,10 @@ function AnnouncementsContent() {
                     <img 
                       src={announcement.imageUrl} 
                       alt={announcement.title}
-                      className="w-full max-w-2xl rounded-2xl shadow-lg border-2 border-slate-100 object-cover"
+                      className="w-full max-w-2xl rounded-2xl shadow-lg border-2 border-slate-100 object-cover cursor-pointer hover:scale-105 transition-transform"
                       style={{ maxHeight: '400px' }}
+                      onClick={() => window.open(announcement.imageUrl, '_blank')}
+                      title="點擊查看大圖"
                     />
                   </div>
                 )}
