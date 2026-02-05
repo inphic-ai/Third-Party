@@ -14,7 +14,9 @@ import {
   Leaf,
   ChevronDown,
   History,
-  LogOut
+  LogOut,
+  Lightbulb,
+  ClipboardList
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PERMISSIONS, parsePermissions, type Permission } from '~/utils/permissions';
@@ -92,12 +94,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       path: '/announcements', 
       icon: <Megaphone size={18} />, 
       permission: hasPermission(PERMISSIONS.ANNOUNCEMENTS)
-    }, 
+    },
+    { 
+      name: '功能建議', 
+      path: '/suggestions', 
+      icon: <Lightbulb size={18} />, 
+      permission: hasPermission(PERMISSIONS.SUGGESTIONS)
+    },
     { 
       name: '系統管理', 
       path: '/admin', 
       icon: <Settings size={18} />, 
       permission: hasPermission(PERMISSIONS.SYSTEM)
+    },
+    { 
+      name: '需求管理', 
+      path: '/requirements', 
+      icon: <ClipboardList size={18} />, 
+      permission: isAdmin
     }, 
   ];
 
