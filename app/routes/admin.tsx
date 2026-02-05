@@ -1015,8 +1015,8 @@ const CategoryManager = ({ categories }: { categories: any[] }) => {
       
       {/* 新增類別 Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-96">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold text-slate-800 mb-4">新增類別</h3>
             <input
               type="text"
@@ -1283,8 +1283,8 @@ export const TagManager = ({ tags }: TagManagerProps) => {
       
       {/* 新增標籤 Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-bold text-slate-800 mb-4">新增標籤</h3>
             <div className="space-y-4">
               <div>
