@@ -1,7 +1,8 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { requireUser, requirePermission } from "~/services/auth.server";
+import { requireUser } from "~/services/auth.server";
+import { requirePermission } from "~/utils/permissions.server";
 import { db } from "../../db";
 import { announcements } from "../../db/schema/system";
 import { eq } from "drizzle-orm";
