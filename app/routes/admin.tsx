@@ -105,8 +105,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }));
     
     // 計算每個部門的成員數量
+    console.log('[Admin Loader] All departments:', allDepartments.map(d => d.name));
+    console.log('[Admin Loader] All users departments:', allUsers.map(u => ({ email: u.email, dept: u.department })));
+    
     const departmentsList = allDepartments.map(dept => {
       const memberCount = allUsers.filter(user => user.department === dept.name).length;
+      console.log(`[Admin Loader] Department "${dept.name}" has ${memberCount} members`);
       return {
         id: dept.id,
         name: dept.name,
