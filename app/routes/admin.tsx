@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useLoaderData, useFetcher } from '@remix-run/react';
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -1258,13 +1258,13 @@ const AiConfig = () => (
 );
 
 const DepartmentManager = ({ departments }: { departments: Array<{ id: string; name: string; description: string; memberCount: number }> }) => {
-  const [isAdding, setIsAdding] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [editName, setEditName] = React.useState('');
-  const [editDescription, setEditDescription] = React.useState('');
-  const [newName, setNewName] = React.useState('');
-  const [newDescription, setNewDescription] = React.useState('');
-  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   const createFetcher = useFetcher();
   const updateFetcher = useFetcher();
