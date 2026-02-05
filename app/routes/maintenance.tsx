@@ -413,8 +413,8 @@ export default function MaintenancePage() {
 
         {/* Table */}
         <div className="flex-1 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto">
-          <table className="w-full">
+          <div className="flex-1 overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">案件編號</th>
