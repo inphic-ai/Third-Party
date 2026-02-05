@@ -24,6 +24,7 @@ import { clsx } from 'clsx';
 import { ClientOnly } from '~/components/ClientOnly';
 import { UserManager } from '~/components/UserManager';
 import { AddAnnouncementModal } from '~/components/AddAnnouncementModal';
+import { EditAnnouncementModal } from '~/components/EditAnnouncementModal';
 import { 
   MOCK_ANNOUNCEMENTS, MOCK_LOGS, 
   MOCK_MODEL_RULES, MOCK_SYSTEM_TAGS, CATEGORY_OPTIONS, 
@@ -544,6 +545,40 @@ export async function action({ request }: ActionFunctionArgs) {
         });
         
         return json({ success: true, message: '公告已發布' });
+      }
+
+      case 'updateAnnouncement': {
+        const id = formData.get('id') as string;
+        const title = formData.get('title') as string;
+        const content = formData.get('content') as string;
+        const priority = formData.get('priority') as string;
+        
+        if (!id || !title || !content) {
+          return json({ success: false, error: '缺少必要參數' }, { status: 400 });
+        }
+        
+        await db.update(announcements)
+          .set({
+            title: title.trim(),
+            content: content.trim(),
+            priority: priority === 'HIGH' ? 'HIGH' : 'NORMAL',
+            updatedAt: new Date()
+          })
+          .where(eq(announcements.id, id));
+        
+        return json({ success: true, message: '公告已更新' });
+      }
+
+      case 'deleteAnnouncement': {
+        const id = formData.get('id') as string;
+        
+        if (!id) {
+          return json({ success: false, error: '缺少公告 ID' }, { status: 400 });
+        }
+        
+        await db.delete(announcements).where(eq(announcements.id, id));
+        
+        return json({ success: true, message: '公告已刪除' });
       }
 
       default:
@@ -1517,6 +1552,9 @@ const DepartmentManager = ({ departments }: { departments: Array<{ id: string; n
 
 const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const fetcher = useFetcher();
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -1588,10 +1626,18 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <button className="text-slate-400 hover:text-slate-600">
+                      <button 
+                        onClick={() => setEditingAnnouncement(ann)}
+                        className="text-slate-400 hover:text-slate-600"
+                        title="編輯公告"
+                      >
                         <Edit2 size={16} />
                       </button>
-                      <button className="text-slate-400 hover:text-red-500">
+                      <button 
+                        onClick={() => setDeletingId(ann.id)}
+                        className="text-slate-400 hover:text-red-500"
+                        title="刪除公告"
+                      >
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -1649,6 +1695,46 @@ const AnnouncementManager = ({ announcements }: { announcements: any[] }) => {
         <AddAnnouncementModal
           onClose={() => setShowAddModal(false)}
         />
+      )}
+
+      {/* 編輯公告 Modal */}
+      {editingAnnouncement && (
+        <EditAnnouncementModal
+          announcement={editingAnnouncement}
+          onClose={() => setEditingAnnouncement(null)}
+        />
+      )}
+
+      {/* 刪除確認對話框 */}
+      {deletingId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-3">確認刪除</h3>
+            <p className="text-slate-600 mb-6">
+              確定要刪除這則公告嗎？此操作無法復原。
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeletingId(null)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  fetcher.submit(
+                    { intent: 'deleteAnnouncement', id: deletingId },
+                    { method: 'post' }
+                  );
+                  setDeletingId(null);
+                }}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition"
+              >
+                確認刪除
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

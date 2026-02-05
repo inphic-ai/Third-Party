@@ -236,24 +236,7 @@ function AnnouncementsContent() {
                       <X size={18} />
                     </button>
                   </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => handleEdit(announcement)}
-                      className="p-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                      title="編輯"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(announcement.id)}
-                      className="p-2 rounded-xl bg-red-100 text-red-700 hover:bg-red-200 transition"
-                      title="刪除"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </>
-                )}
+                ) : null}
               </div>
             </div>
             
@@ -324,21 +307,7 @@ function AnnouncementsContent() {
         )}
       </div>
 
-      <div className="bg-slate-900 p-12 rounded-[3rem] text-white mt-20 flex flex-col lg:flex-row lg:items-center justify-between shadow-2xl relative overflow-hidden">
-         <div className="relative z-10">
-            <h4 className="text-3xl font-black mb-3 flex items-center gap-4">
-               <Info className="text-blue-400" size={32}/> 
-               訂閱戰術通知
-            </h4>
-            <p className="text-slate-400 text-lg font-medium max-w-xl leading-relaxed">
-               當與您關聯的廠商或「重點監控地區」有緊急政策更新時，系統將主動發送 LINE/WeChat/Email 推播通知。
-            </p>
-         </div>
-         <button className="bg-white text-slate-900 px-12 py-5 rounded-[1.5rem] font-black hover:bg-blue-50 transition active:scale-95 shadow-2xl mt-8 lg:mt-0 relative z-10 uppercase tracking-[0.2em] text-sm">
-            Enable Alerts
-         </button>
-         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
-      </div>
+
     </div>
   );
 }
