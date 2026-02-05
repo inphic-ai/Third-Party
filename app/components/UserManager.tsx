@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFetcher } from "@remix-run/react";
-import { Plus, Check, X, UserCheck, Clock, ShieldX, Edit2 } from "lucide-react";
+import { Check, X, UserCheck, Clock, ShieldX, Edit2 } from "lucide-react";
 import clsx from "clsx";
 import { EditUserModal } from "~/components/EditUserModal";
 
@@ -99,9 +99,6 @@ export function UserManager({ users, departments }: UserManagerProps) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold text-slate-800">人員權限管理</h2>
-        <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition">
-          <Plus size={16} /> 新增人員
-        </button>
       </div>
 
       {/* 分頁標籤 */}
