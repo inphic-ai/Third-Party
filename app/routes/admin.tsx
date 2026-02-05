@@ -88,6 +88,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       content: ann.content,
       date: ann.date.toISOString().split('T')[0],
       priority: ann.priority === 'HIGH' ? 'High' : 'Normal',
+      imageUrl: ann.imageUrl,
     }));
     
     // 處理 users 和 departments
