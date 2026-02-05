@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "remix vite:dev",
     "build": "remix vite:build",
+    "start": "node scripts/start-with-migration.js",
+    "postinstall": "node scripts/run-all-migrations.js && node scripts/migrate-add-columns.js",
     "typecheck": "tsc",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
