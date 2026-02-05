@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   INVOICES: 'invoices',
   KNOWLEDGE: 'knowledge',
   ANNOUNCEMENTS: 'announcements',
+  SUGGESTIONS: 'suggestions',
   SYSTEM: 'system',
 } as const;
 
@@ -80,6 +81,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.INVOICES]: '請款與發票管理',
   [PERMISSIONS.KNOWLEDGE]: '知識庫',
   [PERMISSIONS.ANNOUNCEMENTS]: '系統公告',
+  [PERMISSIONS.SUGGESTIONS]: '功能建議',
   [PERMISSIONS.SYSTEM]: '系統管理',
 };
 
@@ -93,6 +95,7 @@ export const PERMISSION_ROUTES: Record<Permission, string> = {
   [PERMISSIONS.INVOICES]: '/payments',
   [PERMISSIONS.KNOWLEDGE]: '/knowledge',
   [PERMISSIONS.ANNOUNCEMENTS]: '/announcements',
+  [PERMISSIONS.SUGGESTIONS]: '/suggestions',
   [PERMISSIONS.SYSTEM]: '/admin',
 };
 
