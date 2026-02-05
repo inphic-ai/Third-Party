@@ -100,6 +100,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       tags: Array.isArray(ann.tags) ? ann.tags : [],
       targetIdentity: Array.isArray(ann.targetIdentity) ? ann.targetIdentity : [],
       targetRegion: ann.targetRegion || undefined,
+      imageUrl: ann.imageUrl,
     }));
     
     return json({ announcements: announcementsWithMapping });
