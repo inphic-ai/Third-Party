@@ -578,6 +578,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     
     const contacts = await db.select().from(contactWindows).where(eq(contactWindows.vendorId, params.id!));
     const transactionsList = await db.select().from(transactions).where(eq(transactions.vendorId, params.id!));
+    const contactLogsList = await db.select().from(contactLogs).where(eq(contactLogs.vendorId, params.id!));
+    const socialGroupsList = await db.select().from(socialGroups).where(eq(socialGroups.vendorId, params.id!));
     
     const vendorWithMapping = {
       ...vendor,
@@ -589,10 +591,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       mainPhone: vendor.mainPhone || '',
       priceRange: vendor.priceRange || '$$',
       contacts: contacts,
-      contactLogs: vendor.contactLogs || [],
+      contactLogs: contactLogsList || [],
       transactions: transactionsList || [],
-      laborForms: vendor.laborForms || [],
-      socialGroups: vendor.socialGroups || [],
+      laborForms: [],
+      socialGroups: socialGroupsList || [],
     };
     
     return json({ vendor: vendorWithMapping });
