@@ -1718,7 +1718,7 @@ export default function VendorDetail() {
             </div>
           )}
 
-          {/* 匯款資訊 Tab */
+          {/* 匯款資訊 Tab */}
           {activeTab === 'bankInfo' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
