@@ -60,6 +60,7 @@ export const vendors = pgTable('vendors', {
   
   // 聯絡資訊
   mainPhone: varchar('main_phone', { length: 20 }),
+  secondaryPhone: varchar('secondary_phone', { length: 20 }),
   address: text('address'),
   companyAddress: text('company_address'),
   website: text('website'),
