@@ -60,11 +60,17 @@ export const vendors = pgTable('vendors', {
   
   // 聯絡資訊
   mainPhone: varchar('main_phone', { length: 20 }),
+  secondaryPhone: varchar('secondary_phone', { length: 20 }),
   address: text('address'),
   companyAddress: text('company_address'),
   website: text('website'),
   lineId: varchar('line_id', { length: 100 }),
   wechatId: varchar('wechat_id', { length: 100 }),
+  
+  // 匙款資訊
+  bankName: varchar('bank_name', { length: 100 }),
+  bankAccount: varchar('bank_account', { length: 50 }),
+  accountHolder: varchar('account_holder', { length: 100 }),
   
   // 業務資訊
   priceRange: priceRangeEnum('price_range').notNull(),

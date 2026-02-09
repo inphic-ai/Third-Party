@@ -1,0 +1,4 @@
+-- 為 vendors 表新增匯款相關欄位
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100);
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS bank_account VARCHAR(50);
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_holder VARCHAR(100);

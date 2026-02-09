@@ -38,6 +38,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const region = formData.get("region") as string;
     const taxId = formData.get("taxId") as string;
     const mainPhone = formData.get("mainPhone") as string;
+    const secondaryPhone = formData.get("secondaryPhone") as string;
+    const bankName = formData.get("bankName") as string;
+    const bankAccount = formData.get("bankAccount") as string;
+    const accountHolder = formData.get("accountHolder") as string;
     const priceRange = formData.get("priceRange") as string;
     const serviceArea = formData.get("serviceArea") as string;
     const companyAddress = formData.get("companyAddress") as string;
@@ -53,6 +57,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
           region: dbRegion as any,
           taxId: taxId || null,
           mainPhone: mainPhone || null,
+          secondaryPhone: secondaryPhone || null,
+          bankName: bankName || null,
+          bankAccount: bankAccount || null,
+          accountHolder: accountHolder || null,
           priceRange: priceRange || '$$',
           serviceArea: serviceArea?.trim() || null,
           companyAddress: companyAddress?.trim() || null,
@@ -967,6 +975,7 @@ export default function VendorDetail() {
             { id: 'logs', label: '聯繫紀錄', icon: MessageSquare },
             { id: 'transactions', label: '合作/驗收', icon: Briefcase },
             { id: 'docs', label: '勞報/請款', icon: FileText },
+            { id: 'bankInfo', label: '匯款資訊', icon: FileText },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1708,6 +1717,56 @@ export default function VendorDetail() {
               )}
             </div>
           )}
+
+          {/* 匯款資訊 Tab */}
+          {activeTab === 'bankInfo' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800">匯款資訊</h3>
+              </div>
+
+              {(vendor.bankName || vendor.bankAccount || vendor.accountHolder) ? (
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-8 border border-slate-200">
+                  <div className="space-y-6">
+                    <div>
+                      <div className="text-sm text-slate-500 mb-2">匯款銀行</div>
+                      <div className="text-2xl font-bold text-slate-800">{vendor.bankName || '-'}</div>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <div className="text-sm text-slate-500 mb-2">匯款帳號</div>
+                      <div className="text-2xl font-mono font-bold text-slate-800">{vendor.bankAccount || '-'}</div>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <div className="text-sm text-slate-500 mb-2">戶名</div>
+                      <div className="text-2xl font-bold text-slate-800">{vendor.accountHolder || '-'}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="text-amber-600 mt-0.5">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-bold text-amber-800 mb-1">用人注意事項</div>
+                        <p className="text-sm text-amber-700">後台兩支電話 0935223511 匯款資訊 華南銀行 102迪化分行 帳號：0261000304188 戶名：林子鎮</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
+                  <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <p>尚無匯款資訊</p>
+                  <p className="text-sm mt-2">請點擊「編輯廠商資料」新增匯款資訊</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Tag Insight Modal */}
@@ -2182,6 +2241,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
+                {/* 1. 基本識別資訊 */}
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">廠商名稱</label>
                   <input 
@@ -2210,14 +2270,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
-                  <input 
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
-                    name="mainPhone"
-                    defaultValue={vendor.mainPhone || ''} 
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
@@ -2227,6 +2279,44 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     <option value="台灣">台灣</option>
                     <option value="大陸">大陸</option>
                   </select>
+                </div>
+                
+                {/* 2. 聯絡資訊 */}
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="mainPhone"
+                    defaultValue={vendor.mainPhone || ''} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">次要電話</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="secondaryPhone"
+                    defaultValue={vendor.secondaryPhone || ''} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">公司/聯絡地址</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="companyAddress"
+                    defaultValue={vendor.companyAddress || vendor.address || ''}
+                    placeholder="例如：台北市○○區○○路○○號"
+                  />
+                </div>
+                
+                {/* 3. 服務資訊 */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">服務範圍 (Service Area)</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="serviceArea"
+                    defaultValue={vendor.serviceArea || ''}
+                    placeholder="例如：北部、雙北、桃園"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
@@ -2241,22 +2331,31 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     <option value="$$$$">$$$$ (昂貴)</option>
                   </select>
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">服務範圍 (Service Area)</label>
-                  <textarea
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
-                    name="serviceArea"
-                    defaultValue={vendor.serviceArea || ''}
-                    placeholder="例如：北部、雙北、桃園"
+                <div></div>
+                
+                {/* 4. 財務資訊 */}
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">匯款銀行</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="bankName"
+                    defaultValue={vendor.bankName || ''} 
                   />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">公司/聯絡地址</label>
-                  <textarea
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
-                    name="companyAddress"
-                    defaultValue={vendor.companyAddress || vendor.address || ''}
-                    placeholder="例如：台北市○○區○○路○○號"
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">匯款帳號</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="bankAccount"
+                    defaultValue={vendor.bankAccount || ''} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">戶名</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="accountHolder"
+                    defaultValue={vendor.accountHolder || ''} 
                   />
                 </div>
               </div>
