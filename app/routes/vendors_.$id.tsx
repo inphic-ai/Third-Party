@@ -2042,7 +2042,7 @@ const ContactLogModal: React.FC<{
   const fetcher = useFetcher();
 
   // 關閉模態框當提交成功
-  React.useEffect(() => {
+  useEffect(() => {
     if (fetcher.data?.success) {
       onClose();
     }
