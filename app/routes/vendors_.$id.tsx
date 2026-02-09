@@ -2241,6 +2241,7 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
+                {/* 1. 基本識別資訊 */}
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">廠商名稱</label>
                   <input 
@@ -2269,6 +2270,19 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
+                  <select 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
+                    name="region"
+                    defaultValue={vendor.region}
+                  >
+                    <option value="台灣">台灣</option>
+                    <option value="大陸">大陸</option>
+                  </select>
+                </div>
+                
+                {/* 2. 聯絡資訊 */}
+                <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">主要電話</label>
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
@@ -2284,17 +2298,42 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     defaultValue={vendor.secondaryPhone || ''} 
                   />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">公司/聯絡地址</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="companyAddress"
+                    defaultValue={vendor.companyAddress || vendor.address || ''}
+                    placeholder="例如：台北市○○區○○路○○號"
+                  />
+                </div>
+                
+                {/* 3. 服務資訊 */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-1">服務範圍 (Service Area)</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
+                    name="serviceArea"
+                    defaultValue={vendor.serviceArea || ''}
+                    placeholder="例如：北部、雙北、桃園"
+                  />
+                </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
                   <select 
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
-                    name="region"
-                    defaultValue={vendor.region}
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
+                    name="priceRange"
+                    defaultValue={vendor.priceRange || '$$'}
                   >
-                    <option value="台灣">台灣</option>
-                    <option value="大陸">大陸</option>
+                    <option value="$">$ (平價)</option>
+                    <option value="$$">$$ (中等)</option>
+                    <option value="$$$">$$$ (中高)</option>
+                    <option value="$$$$">$$$$ (昂貴)</option>
                   </select>
                 </div>
+                <div></div>
+                
+                {/* 4. 財務資訊 */}
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">匯款銀行</label>
                   <input 
@@ -2317,37 +2356,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="accountHolder"
                     defaultValue={vendor.accountHolder || ''} 
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">價格區間</label>
-                  <select 
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white font-mono" 
-                    name="priceRange"
-                    defaultValue={vendor.priceRange || '$$'}
-                  >
-                    <option value="$">$ (平價)</option>
-                    <option value="$$">$$ (中等)</option>
-                    <option value="$$$">$$$ (中高)</option>
-                    <option value="$$$$">$$$$ (昂貴)</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">服務範圍 (Service Area)</label>
-                  <textarea
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
-                    name="serviceArea"
-                    defaultValue={vendor.serviceArea || ''}
-                    placeholder="例如：北部、雙北、桃園"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">公司/聯絡地址</label>
-                  <textarea
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm resize-none min-h-[96px]"
-                    name="companyAddress"
-                    defaultValue={vendor.companyAddress || vendor.address || ''}
-                    placeholder="例如：台北市○○區○○路○○號"
                   />
                 </div>
               </div>
