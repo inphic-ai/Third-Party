@@ -191,6 +191,7 @@ export interface Vendor {
   serviceScopes?: string[];
   isBlacklisted: boolean;
   mainPhone?: string;
+  secondaryPhone?: string;
   address?: string;
   companyAddress?: string;
   website?: string;

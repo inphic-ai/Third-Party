@@ -38,6 +38,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const region = formData.get("region") as string;
     const taxId = formData.get("taxId") as string;
     const mainPhone = formData.get("mainPhone") as string;
+    const secondaryPhone = formData.get("secondaryPhone") as string;
     const priceRange = formData.get("priceRange") as string;
     const serviceArea = formData.get("serviceArea") as string;
     const companyAddress = formData.get("companyAddress") as string;
@@ -53,6 +54,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           region: dbRegion as any,
           taxId: taxId || null,
           mainPhone: mainPhone || null,
+          secondaryPhone: secondaryPhone || null,
           priceRange: priceRange || '$$',
           serviceArea: serviceArea?.trim() || null,
           companyAddress: companyAddress?.trim() || null,
@@ -2215,6 +2217,14 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="mainPhone"
                     defaultValue={vendor.mainPhone || ''} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">次要電話</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="secondaryPhone"
+                    defaultValue={vendor.secondaryPhone || ''} 
                   />
                 </div>
                 <div>
