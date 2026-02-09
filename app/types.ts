@@ -191,8 +191,11 @@ export interface Vendor {
   serviceScopes?: string[];
   isBlacklisted: boolean;
   mainPhone?: string;
+  secondaryPhone?: string;
+  bankName?: string;
+  bankAccount?: string;
+  accountHolder?: string;
   address?: string;
-  companyAddress?: string;
   website?: string;
   lineId?: string;
   wechatId?: string;
