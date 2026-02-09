@@ -2277,6 +2277,14 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">次要電話</label>
+                  <input 
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
+                    name="secondaryPhone"
+                    defaultValue={vendor.secondaryPhone || ''} 
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">地區</label>
                   <select 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white" 
