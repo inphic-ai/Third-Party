@@ -975,7 +975,7 @@ export default function VendorDetail() {
             { id: 'logs', label: '聯繫紀錄', icon: MessageSquare },
             { id: 'transactions', label: '合作/驗收', icon: Briefcase },
             { id: 'docs', label: '勞報/請款', icon: FileText },
-            { id: 'bankInfo', label: '匙款資訊', icon: FileText },
+            { id: 'bankInfo', label: '匯款資訊', icon: FileText },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1718,22 +1718,22 @@ export default function VendorDetail() {
             </div>
           )}
 
-          {/* 匙款資訊 Tab */}
+          {/* 匯款資訊 Tab */
           {activeTab === 'bankInfo' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800">匙款資訊</h3>
+                <h3 className="text-lg font-bold text-slate-800">匯款資訊</h3>
               </div>
 
               {(vendor.bankName || vendor.bankAccount || vendor.accountHolder) ? (
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-8 border border-slate-200">
                   <div className="space-y-6">
                     <div>
-                      <div className="text-sm text-slate-500 mb-2">匙款銀行</div>
+                      <div className="text-sm text-slate-500 mb-2">匯款銀行</div>
                       <div className="text-2xl font-bold text-slate-800">{vendor.bankName || '-'}</div>
                     </div>
                     <div className="border-t border-slate-200 pt-6">
-                      <div className="text-sm text-slate-500 mb-2">匙款帳號</div>
+                      <div className="text-sm text-slate-500 mb-2">匯款帳號</div>
                       <div className="text-2xl font-mono font-bold text-slate-800">{vendor.bankAccount || '-'}</div>
                     </div>
                     <div className="border-t border-slate-200 pt-6">
@@ -1751,7 +1751,7 @@ export default function VendorDetail() {
                       </div>
                       <div>
                         <div className="font-bold text-amber-800 mb-1">用人注意事項</div>
-                        <p className="text-sm text-amber-700">後台兩支電話 0935223511 匙款資訊 華南銀行 102迪化分行 帳號：0261000304188 戶名：林子鎮</p>
+                        <p className="text-sm text-amber-700">後台兩支電話 0935223511 匯款資訊 華南銀行 102迪化分行 帳號：0261000304188 戶名：林子鎮</p>
                       </div>
                     </div>
                   </div>
@@ -1761,8 +1761,8 @@ export default function VendorDetail() {
                   <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                   </svg>
-                  <p>尚無匙款資訊</p>
-                  <p className="text-sm mt-2">請點擊「編輯廠商資料」新增匙款資訊</p>
+                  <p>尚無匯款資訊</p>
+                  <p className="text-sm mt-2">請點擊「編輯廠商資料」新增匯款資訊</p>
                 </div>
               )}
             </div>
@@ -2288,21 +2288,19 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">匙款銀行</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">匯款銀行</label>
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="bankName"
                     defaultValue={vendor.bankName || ''} 
-                    placeholder="例如：華南銀行"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">匙款帳號</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">匯款帳號</label>
                   <input 
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="bankAccount"
                     defaultValue={vendor.bankAccount || ''} 
-                    placeholder="例如：1234567890"
                   />
                 </div>
                 <div>
@@ -2311,7 +2309,6 @@ const EditVendorModal: React.FC<{ vendor: any; onClose: () => void; isSubmitting
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm" 
                     name="accountHolder"
                     defaultValue={vendor.accountHolder || ''} 
-                    placeholder="例如：林子鎮"
                   />
                 </div>
                 <div>
