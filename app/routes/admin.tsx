@@ -11,6 +11,7 @@ import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { suggestions } from '../../db/schema/suggestions';
 import { requireAdmin } from '~/services/auth.server';
+import { logSystemAction, extractRequestInfo } from '../services/systemLog.server';
 import { eq, desc, sql } from 'drizzle-orm';
 // 郵件服務暫時停用
 // import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
@@ -198,6 +199,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const adminUser = await requireAdmin(request);
   const formData = await request.formData();
   const intent = formData.get('intent');
+  const { ip, userAgent } = extractRequestInfo(request);
 
   try {
     switch (intent) {
@@ -235,6 +237,14 @@ export async function action({ request }: ActionFunctionArgs) {
         // 發送批准郵件（暫時停用）
         // await sendApprovalEmail(user.email, user.name, dept.name);
 
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '更新權限',
+          target: `使用者：${user.name} (${user.email})`,
+          details: `管理員 ${adminUser.name} 批准了使用者 ${user.name} 的帳號申請，分配至部門「${dept.name}」`,
+          ip, userAgent, status: 'success'
+        });
+
         return json({ success: true, message: '用戶已批准' });
       }
 
@@ -263,6 +273,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
         // 發送拒絕郵件（暫時停用）
         // await sendRejectionEmail(user.email, user.name, reason);
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '更新權限',
+          target: `使用者：${user.name} (${user.email})`,
+          details: `管理員 ${adminUser.name} 拒絕了使用者 ${user.name} 的帳號申請，原因：${reason}`,
+          ip, userAgent, status: 'success'
+        });
 
         return json({ success: true, message: '用戶已拒絕' });
       }
@@ -305,6 +323,14 @@ export async function action({ request }: ActionFunctionArgs) {
             updatedAt: new Date()
           })
           .where(eq(users.id, userId));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '更新權限',
+          target: `使用者：${user.name} (${user.email})`,
+          details: `管理員 ${adminUser.name} 停用了使用者 ${user.name} 的帳號`,
+          ip, userAgent, status: 'success'
+        });
 
         return json({ success: true, message: '用戶已刪除' });
       }
@@ -395,6 +421,14 @@ export async function action({ request }: ActionFunctionArgs) {
           name: name.trim(),
           displayOrder: String(Date.now()) // 使用時間戳作為預設排序
         });
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '新增類別',
+          target: `類別：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 新增了廠商類別「${name.trim()}」`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '類別已新增' });
       }
@@ -421,6 +455,14 @@ export async function action({ request }: ActionFunctionArgs) {
             updatedAt: new Date()
           })
           .where(eq(vendorCategories.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '編輯類別',
+          target: `類別：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 更新了廠商類別名稱為「${name.trim()}」`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '類別已更新' });
       }
@@ -433,6 +475,14 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         
         await db.delete(vendorCategories).where(eq(vendorCategories.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '刪除類別',
+          target: `類別 ID：${id}`,
+          details: `管理員 ${adminUser.name} 刪除了一個廠商類別`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '類別已刪除' });
       }
@@ -461,6 +511,14 @@ export async function action({ request }: ActionFunctionArgs) {
           color: color,
           displayOrder: String(Date.now())
         });
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '新增標籤',
+          target: `標籤：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 新增了標籤「${name.trim()}」（分類：${category}）`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '標籤已新增' });
       }
@@ -487,6 +545,14 @@ export async function action({ request }: ActionFunctionArgs) {
             updatedAt: new Date()
           })
           .where(eq(vendorTags.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '編輯標籤',
+          target: `標籤：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 更新了標籤名稱為「${name.trim()}」`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '標籤已更新' });
       }
@@ -499,6 +565,14 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         
         await db.delete(vendorTags).where(eq(vendorTags.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '刪除標籤',
+          target: `標籤 ID：${id}`,
+          details: `管理員 ${adminUser.name} 刪除了一個標籤`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '標籤已刪除' });
       }
@@ -521,6 +595,14 @@ export async function action({ request }: ActionFunctionArgs) {
         await db.insert(departments).values({
           name: name.trim(),
           description: description?.trim() || '',
+        });
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '新增部門',
+          target: `部門：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 新增了部門「${name.trim()}」`,
+          ip, userAgent, status: 'success'
         });
         
         return json({ success: true, message: '部門已新增' });
@@ -549,6 +631,14 @@ export async function action({ request }: ActionFunctionArgs) {
             updatedAt: new Date() 
           })
           .where(eq(departments.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '編輯部門',
+          target: `部門：${name.trim()}`,
+          details: `管理員 ${adminUser.name} 更新了部門「${name.trim()}」的資料`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '部門已更新' });
       }
@@ -561,6 +651,14 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         
         await db.delete(departments).where(eq(departments.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '刪除部門',
+          target: `部門 ID：${id}`,
+          details: `管理員 ${adminUser.name} 刪除了一個部門`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '部門已刪除' });
       }
@@ -585,6 +683,14 @@ export async function action({ request }: ActionFunctionArgs) {
           imageUrl: imageUrl || null,
           createdAt: new Date(),
           updatedAt: new Date()
+        });
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '新增公告',
+          target: `公告：${title.trim()}`,
+          details: `管理員 ${adminUser.name} 發布了新公告「${title.trim()}」`,
+          ip, userAgent, status: 'success'
         });
         
         return json({ success: true, message: '公告已發布' });
@@ -616,6 +722,14 @@ export async function action({ request }: ActionFunctionArgs) {
         await db.update(announcements)
           .set(updateData)
           .where(eq(announcements.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '編輯公告',
+          target: `公告：${title.trim()}`,
+          details: `管理員 ${adminUser.name} 更新了公告「${title.trim()}」`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '公告已更新' });
       }
@@ -628,6 +742,14 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         
         await db.delete(announcements).where(eq(announcements.id, id));
+
+        await logSystemAction({
+          userId: adminUser.id,
+          action: '刪除公告',
+          target: `公告 ID：${id}`,
+          details: `管理員 ${adminUser.name} 刪除了一則公告`,
+          ip, userAgent, status: 'success'
+        });
         
         return json({ success: true, message: '公告已刪除' });
       }

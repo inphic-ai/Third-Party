@@ -7,7 +7,8 @@ import { vendors, contactWindows, socialGroups, vendorRatings } from '../../db/s
 import { contactLogs } from '../../db/schema/operations';
 import { transactions } from '../../db/schema/financial';
 import { eq } from 'drizzle-orm';
-import { requireUser } from '~/services/auth.server';
+import { requireUser, getUser } from '~/services/auth.server';
+import { logSystemAction, extractRequestInfo } from '../services/systemLog.server';
 import { 
   ArrowLeft, MapPin, Star, Phone, Mail, Globe, 
   Building2, Package, User, Edit, Heart, MessageCircle, FileText,
@@ -28,8 +29,12 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => {
 };
 
 export async function action({ request, params }: ActionFunctionArgs) {
+  const currentUser = await getUser(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const { ip, userAgent } = extractRequestInfo(request);
+  const logUserId = currentUser?.id || 'unknown';
+  const logUserName = currentUser?.name || '未知使用者';
 
   if (intent === "updateVendor") {
     const id = params.id;
@@ -79,6 +84,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
         region: updatedVendor.region === 'TAIWAN' ? '台灣' : updatedVendor.region === 'CHINA' ? '大陸' : updatedVendor.region,
         entityType: updatedVendor.entityType === 'COMPANY' ? '公司行號' : updatedVendor.entityType === 'INDIVIDUAL' ? '個人接案' : updatedVendor.entityType,
       };
+
+      await logSystemAction({
+        userId: logUserId,
+        action: '編輯廠商',
+        target: `廠商：${name}`,
+        details: `使用者 ${logUserName} 更新了廠商「${name}」的基本資料`,
+        ip, userAgent, status: 'success'
+      });
 
       return json({ success: true, message: "廠商資料已更新", vendor: vendorWithMapping });
     } catch (error) {
@@ -258,6 +271,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
         isMainContact
       });
 
+      await logSystemAction({
+        userId: logUserId,
+        action: '新增聯繫窗口',
+        target: `聯絡窗口：${name.trim()}`,
+        details: `使用者 ${logUserName} 新增了聯絡窗口「${name.trim()}」（職稱：${role}）`,
+        ip, userAgent, status: 'success'
+      });
+
       return json({ success: true, message: "聯絡窗口已建立" });
     } catch (error) {
       console.error('Failed to create contact:', error);
@@ -305,6 +326,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     try {
       await db.delete(contactWindows).where(eq(contactWindows.id, contactId));
+      await logSystemAction({
+        userId: logUserId,
+        action: '刪除聯繫窗口',
+        target: `聯絡窗口 ID：${contactId}`,
+        details: `使用者 ${logUserName} 刪除了一個聯絡窗口`,
+        ip, userAgent, status: 'success'
+      });
+
       return json({ success: true, message: "聯絡窗口已刪除" });
     } catch (error) {
       console.error('Failed to delete contact:', error);
@@ -331,6 +360,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
           updatedAt: new Date(),
         })
         .where(eq(vendors.id, id!));
+
+      await logSystemAction({
+        userId: logUserId,
+        action: '編輯廠商',
+        target: `廠商：${currentVendor.name}`,
+        details: `使用者 ${logUserName} ${newBlacklistStatus ? '將廠商標記為黑名單' : '移除廠商黑名單標記'}：「${currentVendor.name}」`,
+        ip, userAgent, status: 'success'
+      });
 
       return json({ 
         success: true, 
