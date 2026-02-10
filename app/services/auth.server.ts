@@ -6,6 +6,7 @@ import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import type { User } from "../../db/schema/user";
 import { logLoginSuccessSimple } from "./loginLog.server";
+import { logSystemAction } from "./systemLog.server";
 
 // 建立 Authenticator 實例
 export const authenticator = new Authenticator<User>(sessionStorage);
@@ -47,6 +48,17 @@ const googleStrategy = new GoogleStrategy(
 
         // 記錄登入成功
         await logLoginSuccessSimple(updatedUser.id, updatedUser.email, updatedUser.name);
+        
+        // 記錄系統日誌
+        await logSystemAction({
+          userId: updatedUser.id,
+          action: '登入系統',
+          target: `使用者：${updatedUser.email}`,
+          details: `使用者 ${updatedUser.name} (${updatedUser.email}) 透過 Google OAuth 登入系統`,
+          ip: 'unknown', // OAuth callback 無法取得 IP
+          userAgent: 'unknown',
+          status: 'success',
+        });
 
         return updatedUser;
       } else {
@@ -74,6 +86,17 @@ const googleStrategy = new GoogleStrategy(
 
         // 記錄登入成功（新用戶）
         await logLoginSuccessSimple(newUser.id, newUser.email, newUser.name);
+        
+        // 記錄系統日誌
+        await logSystemAction({
+          userId: newUser.id,
+          action: '登入系統',
+          target: `使用者：${newUser.email}`,
+          details: `新使用者 ${newUser.name} (${newUser.email}) 首次透過 Google OAuth 登入系統`,
+          ip: 'unknown',
+          userAgent: 'unknown',
+          status: 'success',
+        });
 
         return newUser;
       }

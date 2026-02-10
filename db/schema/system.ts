@@ -6,7 +6,7 @@ import { pgTable, uuid, varchar, text, boolean, decimal, timestamp, pgEnum, json
 
 export const priorityEnum = pgEnum('priority', ['HIGH', 'NORMAL']);
 export const userRoleEnum = pgEnum('user_role', ['System Admin', 'Manager', 'Editor', 'Viewer']);
-export const systemLogStatusEnum = pgEnum('system_log_status', ['UPDATE', 'CREATE', 'DELETE', 'SYSTEM']);
+export const systemLogStatusEnum = pgEnum('system_log_status', ['success', 'failed']);
 
 // ============================================
 // 知識庫 (KnowledgeBaseItem)
