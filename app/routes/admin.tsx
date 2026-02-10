@@ -11,7 +11,7 @@ import { users } from '../../db/schema/user';
 import { departments } from '../../db/schema/department';
 import { suggestions } from '../../db/schema/suggestions';
 import { requireAdmin } from '~/services/auth.server';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 // 郵件服務暫時停用
 // import { sendApprovalEmail, sendRejectionEmail } from '~/services/email.server';
 import { 
@@ -49,7 +49,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     // 讀取資料
     const [allSystemLogs, allAdminUsers, allAnnouncements, allUsers, allDepartments, allLoginLogs, allVendorCategories, allVendorTags, allSuggestions] = await Promise.all([
-      db.select().from(systemLogs).limit(100), // 限制日誌數量
+      db.select({
+        id: systemLogs.id,
+        timestamp: systemLogs.timestamp,
+        userId: systemLogs.user,
+        userName: users.name,
+        userEmail: users.email,
+        action: systemLogs.action,
+        target: systemLogs.target,
+        details: systemLogs.details,
+        ip: systemLogs.ip,
+        userAgent: systemLogs.userAgent,
+        status: systemLogs.status
+      })
+      .from(systemLogs)
+      .leftJoin(users, eq(systemLogs.user, users.id))
+      .orderBy(desc(systemLogs.timestamp))
+      .limit(100), // 限制日誌數量
       db.select().from(adminUsers),
       db.select().from(announcements),
       db.select().from(users), // 用戶審核系統
@@ -65,7 +81,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const logsWithMapping = allSystemLogs.map(log => ({
       id: log.id,
       timestamp: log.timestamp.toISOString(),
-      user: log.user,
+      userId: log.userId,
+      user: log.userName || log.userEmail || '未知使用者',
       action: log.action,
       target: log.target,
       details: log.details,
