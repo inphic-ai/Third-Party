@@ -1,5 +1,5 @@
 import { db } from './db.server';
-import { systemLogs } from '~/db/schema/system';
+import { systemLogs } from '../../db/schema/system';
 
 export type SystemLogAction = 
   | '登入系統'
