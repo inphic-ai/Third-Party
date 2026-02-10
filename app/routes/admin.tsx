@@ -919,11 +919,13 @@ const LogCenter = ({ systemLogs, loginLogs }: { systemLogs: any[]; loginLogs: an
                     <td className="px-6 py-5">
                       <span className={clsx(
                         "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider",
-                        l.action.includes('更新') ? "bg-blue-100 text-blue-700" : 
+                        l.action.includes('編輯') || l.action.includes('更新') ? "bg-blue-100 text-blue-700" : 
                         l.action.includes('新增') ? "bg-green-100 text-green-700" :
+                        l.action.includes('刪除') ? "bg-red-100 text-red-700" :
+                        l.action.includes('登入') || l.action.includes('登出') ? "bg-purple-100 text-purple-700" :
                         "bg-slate-100 text-slate-600"
                       )}>
-                        {l.action === '更新資源' ? 'Update' : l.action === '新增資源' ? 'Create' : 'System'}
+                        {l.action}
                       </span>
                     </td>
                     <td className="px-6 py-5 text-slate-600 font-bold">{l.target}</td>
